@@ -39,6 +39,10 @@ export interface AnnotatingRendition {
       styles?: Record<string, string>,
     ): void;
     remove(cfiRange: string, type: 'highlight'): void;
+    /** epub.js internal store, keyed by `encodeURI(cfiRange + type)`. */
+    _annotations?: Record<string, unknown>;
+    /** epub.js internal per-section index of those keys (see pruneDanglingIndex). */
+    _annotationsBySectionIndex?: Record<string, string[]>;
   };
   views?: () => Array<{ pane?: { element?: Element } }> | undefined;
 }
@@ -105,6 +109,7 @@ export class HighlightLayerManager {
     } catch (e) {
       logger.warn(`Failed to remove ${layer} highlight`, e);
     }
+    this.pruneDanglingIndex(cfi);
     entries.delete(cfi);
     if (config.sweepOrphans) {
       this.sweepOrphans(layer);
@@ -154,6 +159,25 @@ export class HighlightLayerManager {
       }
     } catch (e) {
       logger.warn(`Manual DOM cleanup failed (${layer})`, e);
+    }
+  }
+
+  /**
+   * epub.js 0.3.93 `Annotations.remove` prunes its per-section index only
+   * inside a loop over the MOUNTED views. A remove while none are mounted —
+   * a resize tore them down and its re-display has not run (no frames while
+   * the page is hidden) — leaves the key listed after the annotation is
+   * gone, and the section's next render throws in `inject()` before
+   * attaching anything listed after it: the TTS highlight re-added on
+   * unlock never draws. Drop the key epub.js left behind.
+   */
+  private pruneDanglingIndex(cfi: string): void {
+    const { _annotations: live, _annotationsBySectionIndex: bySection } = this.rendition.annotations;
+    if (!live || !bySection) return;
+    const key = encodeURI(cfi + 'highlight');
+    if (key in live) return; // still stored (epub.js skipped or aborted the remove)
+    for (const [section, keys] of Object.entries(bySection)) {
+      if (Array.isArray(keys) && keys.includes(key)) bySection[section] = keys.filter((k) => k !== key);
     }
   }
 

@@ -21,6 +21,7 @@ interface ReaderTTSControllerProps {
  * 1. Highlighting the current sentence (activeCfi)
  * 2. Keyboard navigation during TTS (KeyboardShortcutService registrations)
  * 3. Visibility reconciliation (syncing visual state when returning to foreground)
+ * 4. Resize re-centering (epub.js re-displays a stale page on every resize)
  */
 export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   viewMode
@@ -124,6 +125,39 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [engine, viewMode]);
+
+  // --- Resize Re-centering ---
+  // epub.js answers every rendition resize by tearing its views down and
+  // re-displaying `rendition.location` — the page it last REPORTED, which
+  // trails a display() by a few animation frames and never moves while the
+  // page is hidden. Unlocking an Android phone often resizes the WebView in
+  // the first frames (the system-bar insets settle), so that re-display
+  // queues BEHIND the reconciliation's display() above and drags the page
+  // back to where it was when the screen went off: the highlight sits on the
+  // spoken sentence, pages away, until the next sentence's display() fixes
+  // it. Re-issue the spoken sentence in a microtask — epub.js enqueues its
+  // re-display right after emitting 'resized', so ours lands last. No
+  // highlight work: the views are empty until that re-display renders them,
+  // and epub.js re-injects the stored highlight itself.
+  useEffect(() => {
+    if (!engine) return;
+    let disposed = false;
+    const unsubscribe = engine.subscribe((event) => {
+      if (event.type !== 'resized') return;
+      queueMicrotask(() => {
+        if (disposed || document.visibilityState !== 'visible') return;
+        const { activeCfi: freshCfi, status: freshStatus } = useTTSPlaybackStore.getState();
+        if (!freshCfi || freshStatus === 'stopped') return;
+        // A user who scrolled away keeps the page epub.js restores.
+        if (!useReaderUIStore.getState().followingAudio) return;
+        engine.display(freshCfi).catch((err: unknown) => console.warn("[TTS] Resize re-center failed", err));
+      });
+    });
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [engine]);
 
   // --- Keyboard Navigation (Phase 8 §E) ---
   // The window keydown registry + interim gating predicate died here: the

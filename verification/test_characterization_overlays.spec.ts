@@ -135,6 +135,78 @@ test('Characterization: TTS highlight follows playback with exactly ONE node', a
   await expect.poll(() => highlightNodeCount(page, 'tts-highlight'), { timeout: 10000 }).toBe(1);
 });
 
+/**
+ * Whether the TTS highlight is inside the reader's visible area. epub.js lays
+ * out every page of the section and scrolls its container, so a highlight on
+ * another page still has rects — they are just outside the container.
+ */
+const ttsHighlightOnScreen = (page: Page) =>
+  page.evaluate(() => {
+    const container = document.querySelector('.epub-container');
+    const rects = Array.from(document.querySelectorAll('g.tts-highlight rect'))
+      .map((rect) => rect.getBoundingClientRect())
+      .filter((r) => r.width > 0 && r.height > 0);
+    if (!container || rects.length === 0) return false;
+    const view = container.getBoundingClientRect();
+    return rects.some((r) => r.left < view.right && r.right > view.left && r.top < view.bottom && r.bottom > view.top);
+  });
+
+/** The queue index, or -1 while a jump is still settling (not yet playing). */
+const playingIndex = (page: Page) =>
+  page.evaluate(() => {
+    const { currentIndex, status } = (
+      window as unknown as { useTTSPlaybackStore: { getState(): { currentIndex: number; status: string } } }
+    ).useTTSPlaybackStore.getState();
+    return status === 'playing' ? currentIndex : -1;
+  });
+
+test('Characterization: TTS highlight is on screen after the unlock resizes the reader', async ({ page }) => {
+  // Android: unlocking resumes the page and, often in the same frames,
+  // resizes the WebView as the system-bar insets settle. epub.js answers a
+  // resize by re-displaying the page it last reported — the one from before
+  // the screen went off — which used to land after the resume re-center and
+  // leave the spoken sentence's highlight pages away.
+  await openDemoBook(page);
+  await utils.navigateToChapter(page);
+
+  const playButton = page.getByTestId('compass-pill-active').getByLabel('Play');
+  await expect(playButton).toBeVisible({ timeout: 10000 });
+  await playButton.click();
+  await expect(page.getByTestId('compass-pill-active').getByLabel('Pause')).toBeVisible({ timeout: 10000 });
+  await expect.poll(() => ttsHighlightOnScreen(page), { timeout: 10000 }).toBe(true);
+
+  // Screen off: the reader stops following while TTS reads on past the page.
+  // (Each jump waits for playback to settle: only a PLAYING reader routes
+  // ArrowRight to the sentence jump rather than a page turn.)
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  for (let i = 0; i < 15; i++) {
+    let before = -1;
+    await expect.poll(async () => (before = await playingIndex(page)), { timeout: 5000 }).toBeGreaterThanOrEqual(0);
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => playingIndex(page), { timeout: 5000 }).toBeGreaterThan(before);
+  }
+  // Paused from the lock screen, so no later sentence re-centers the page for
+  // us; still following, so the resume re-center must.
+  await page.getByTestId('compass-pill-active').getByLabel('Pause').click();
+  await expect(page.getByTestId('compass-pill-active').getByLabel('Play')).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('button', { name: 'Re-center on the current sentence' })).toBeHidden();
+
+  // Unlock: visible again, and the WebView shrinks as the system-bar insets settle.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    const viewer = document.querySelector<HTMLElement>('[data-testid="reader-iframe-container"]');
+    if (viewer) viewer.style.height = `${viewer.clientHeight - 48}px`;
+    window.dispatchEvent(new Event('resize'));
+  });
+
+  await expect.poll(() => ttsHighlightOnScreen(page), { timeout: 10000 }).toBe(true);
+  await utils.captureScreenshot(page, 'tts_highlight_after_unlock_resize');
+});
+
 test('Characterization: reading-history highlight marks the last played sentence', async ({ page }, testInfo) => {
   // Whether the gray lastPlayedCfi highlight node is present after a page-turn
   // round-trip is a pixel-pagination concern: it depends on the played CFI

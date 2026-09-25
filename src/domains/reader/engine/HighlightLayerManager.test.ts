@@ -5,6 +5,8 @@
  * characterization pins depend on.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// @ts-expect-error — epubjs ships declarations only for its package barrel
+import EpubAnnotations from 'epubjs/src/annotations';
 import { HighlightLayerManager, type AnnotatingRendition } from './HighlightLayerManager';
 
 const makePaneWithOrphans = (count: number) => {
@@ -144,5 +146,69 @@ describe('HighlightLayerManager', () => {
     manager.detach();
     expect(manager.count('annotation')).toBe(0);
     expect(remove).not.toHaveBeenCalled();
+  });
+});
+
+describe('regression: TTS highlight never draws after a remove with no views mounted (Android unlock)', () => {
+  // The REAL epub.js Annotations store over a stub rendition. `mounted` is
+  // the manager's views; render() fires epub.js' render hook
+  // (Annotations.inject) the way a (re)display does, swallowing a throw the
+  // way epub.js' Hook.trigger does.
+  const BEFORE_SLEEP = 'epubcfi(/6/4!/4/2/1:0)';
+  const ON_UNLOCK = 'epubcfi(/6/4!/4/8/1:0)';
+
+  interface StubView {
+    index: number;
+    pane?: undefined; // no marks pane: the orphan sweep skips the view
+    highlight(cfi: string): void;
+    unhighlight(cfi: string): void;
+  }
+
+  const setup = () => {
+    let mounted: StubView[] = [];
+    const renderHooks: Array<(view: StubView) => void> = [];
+    const drawn: string[] = [];
+    const annotations = new EpubAnnotations({
+      hooks: {
+        render: { register: (hook: (view: StubView) => void) => renderHooks.push(hook) },
+        unloaded: { register: () => {} },
+      },
+      views: () => mounted,
+    });
+    const makeView = (): StubView => ({
+      index: 1, // the spine position both CFIs point into
+      highlight: (cfi) => { drawn.push(cfi); },
+      unhighlight: () => {},
+    });
+    return {
+      manager: new HighlightLayerManager({ annotations, views: () => mounted }),
+      drawn,
+      mount: () => { mounted = [makeView()]; },
+      tearDown: () => { mounted = []; },
+      render: () => {
+        const view = makeView();
+        mounted = [view];
+        for (const hook of renderHooks) {
+          try { hook(view); } catch { /* Hook.trigger logs and moves on */ }
+        }
+      },
+    };
+  };
+
+  it('draws the highlight re-added on unlock when its section renders again', () => {
+    const reader = setup();
+    reader.mount();
+    reader.manager.add('tts', BEFORE_SLEEP);
+
+    // A resize tears the views down; with no frames while the page is
+    // hidden, its re-display cannot mount new ones.
+    reader.tearDown();
+    reader.manager.remove('tts', BEFORE_SLEEP); // TTS advanced while hidden
+    reader.manager.add('tts', ON_UNLOCK); // the unlock reconciliation
+
+    reader.drawn.length = 0;
+    reader.render(); // the queued re-display lands
+
+    expect(reader.drawn).toEqual([ON_UNLOCK]);
   });
 });

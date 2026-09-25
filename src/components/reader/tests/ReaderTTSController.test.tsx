@@ -6,7 +6,7 @@ import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { autoResetStores, makeTTSQueue, seedStore } from '@test/harness';
 import { HighlightLayerManager, type AnnotatingRendition } from '@domains/reader/engine/HighlightLayerManager';
-import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
+import type { ReaderEngine, ReaderEngineEvent } from '@domains/reader/engine/ReaderEngine';
 import { ReaderCommandsProvider, type ReaderCommands } from '@domains/reader/ui/ReaderCommands';
 import { KeyboardShortcutHost } from '@app/shortcuts/KeyboardShortcutHost';
 
@@ -281,6 +281,111 @@ describe('ReaderTTSController', () => {
             const lastAdd = rendition.annotations.add.mock.calls.at(-1);
             expect(lastAdd?.[1]).toBe('cfi-FRESH');
             expect(lastAdd?.[4]).toBe('tts-highlight');
+        });
+    });
+
+    describe('regression: unlock resize drags the page back to the pre-sleep page (Android)', () => {
+        // Just enough epub.js (0.3.93) to reproduce the race: display() only
+        // ENQUEUES, and the rendition queue advances on animation frames —
+        // none run while the page is hidden. `location` is where the last
+        // display that actually RAN landed. A resize mirrors
+        // Rendition.onResized: emit 'resized', THEN enqueue display(location).
+        const makeQueuedReader = () => {
+            const queue: string[] = [];
+            const listeners = new Set<(e: ReaderEngineEvent) => void>();
+            const rendition = {
+                location: null as string | null,
+                display: vi.fn((target: string) => {
+                    queue.push(target);
+                    return Promise.resolve();
+                }),
+                annotations: { add: vi.fn(), remove: vi.fn() },
+                views: () => [],
+            };
+            const engine = {
+                display: rendition.display,
+                highlights: new HighlightLayerManager(rendition),
+                getContentViews: () => [],
+                subscribe: (listener: (e: ReaderEngineEvent) => void) => {
+                    listeners.add(listener);
+                    return () => { listeners.delete(listener); };
+                },
+            } as unknown as ReaderEngine;
+            return {
+                engine,
+                rendition,
+                /** Run animation frames until the display queue drains. */
+                flushFrames: () => {
+                    while (queue.length) rendition.location = queue.shift()!;
+                },
+                resize: () => {
+                    listeners.forEach((listener) => listener({ type: 'resized' }));
+                    if (rendition.location) rendition.display(rendition.location);
+                },
+            };
+        };
+
+        const setVisibility = (state: DocumentVisibilityState) => {
+            Object.defineProperty(document, 'visibilityState', { value: state, writable: true, configurable: true });
+            fireEvent(document, new Event('visibilitychange'));
+        };
+
+        afterEach(() => {
+            Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true, configurable: true });
+        });
+
+        const renderPlaying = (engine: ReaderEngine, status: 'playing' | 'stopped' = 'playing') => {
+            seedStore(useTTSPlaybackStore, {
+                activeCfi: 'cfi-A',
+                currentIndex: 0,
+                status,
+                isPlaying: status === 'playing',
+                queue: makeTTSQueue(3),
+            });
+            return render(withEngine(engine, <ReaderTTSController viewMode="paginated" />));
+        };
+
+        it('lands on the spoken sentence when the WebView resizes as the phone is unlocked', async () => {
+            const reader = makeQueuedReader();
+            renderPlaying(reader.engine);
+            reader.flushFrames();
+            expect(reader.rendition.location).toBe('cfi-A');
+
+            // Screen off: no frames, and TTS keeps advancing.
+            setVisibility('hidden');
+            act(() => { useTTSPlaybackStore.setState({ activeCfi: 'cfi-B' }); });
+            act(() => { useTTSPlaybackStore.setState({ activeCfi: 'cfi-C' }); });
+
+            // Unlock: the reconciliation queues display(cfi-C) and re-highlights,
+            // then the insets settle and the WebView resizes before a frame runs.
+            setVisibility('visible');
+            await act(async () => { reader.resize(); });
+            reader.flushFrames();
+
+            expect(reader.engine.highlights.has('tts', 'cfi-C')).toBe(true);
+            // The highlight is only visible if the page is on it.
+            expect(reader.rendition.location).toBe('cfi-C');
+        });
+
+        it('leaves the page epub.js restores alone when the user has scrolled away', async () => {
+            const reader = makeQueuedReader();
+            renderPlaying(reader.engine);
+            reader.flushFrames();
+            act(() => { useReaderUIStore.setState({ followingAudio: false }); });
+
+            await act(async () => { reader.resize(); });
+
+            // Only the initial follow display and epub.js' own re-display.
+            expect(reader.rendition.display.mock.calls.map(([cfi]) => cfi)).toEqual(['cfi-A', 'cfi-A']);
+        });
+
+        it('does not re-center on a resize once playback is stopped', async () => {
+            const reader = makeQueuedReader();
+            renderPlaying(reader.engine, 'stopped');
+
+            await act(async () => { reader.resize(); });
+
+            expect(reader.rendition.display).not.toHaveBeenCalled();
         });
     });
 
