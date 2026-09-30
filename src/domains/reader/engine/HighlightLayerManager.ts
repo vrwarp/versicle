@@ -66,6 +66,8 @@ export interface AddHighlightOptions {
 
 interface HighlightHandle {
   className: string;
+  /** What the layer drew with, so {@link HighlightLayerManager.redrawSharers} repeats it exactly. */
+  opts: AddHighlightOptions;
 }
 
 export class HighlightLayerManager {
@@ -94,7 +96,7 @@ export class HighlightLayerManager {
       } else {
         this.rendition.annotations.add('highlight', cfi, opts.data ?? {}, opts.onClick, className);
       }
-      entries.set(cfi, { className });
+      entries.set(cfi, { className, opts });
     } catch (e) {
       logger.warn(`Failed to add ${layer} highlight`, e);
     }
@@ -113,6 +115,23 @@ export class HighlightLayerManager {
     entries.delete(cfi);
     if (config.sweepOrphans) {
       this.sweepOrphans(layer);
+    }
+    this.redrawSharers(cfi);
+  }
+
+  /**
+   * epub.js keys an annotation by `cfi + 'highlight'` alone, so layers on the
+   * SAME range share one entry (the last add owns it) and the remove above
+   * also erased the mark of any other layer still tracking this range — e.g.
+   * the reading-history highlight a pause draws on the sentence the TTS
+   * highlight leaves when playback then stops. Redraw those layers' marks.
+   */
+  private redrawSharers(cfi: string): void {
+    for (const [layer, entries] of this.layers) {
+      const handle = entries.get(cfi);
+      if (!handle) continue;
+      entries.delete(cfi);
+      this.add(layer, cfi, handle.opts);
     }
   }
 
