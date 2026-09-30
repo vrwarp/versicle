@@ -269,7 +269,7 @@ deleted long ago):
 ```bash
 ./run_verification.sh                                       # desktop + mobile (the default when no --project given)
 ./run_verification.sh verification/test_journey_library.spec.ts
-./run_verification.sh --project=webkit                      # auto-serialized (--workers=1)
+./run_verification.sh --project=webkit                      # one test at a time (project workers: 1)
 ./run_verification.sh --logs <spec>                         # verbose page/console logs
 ./run_verification.sh --probe <spec>                        # IndexedDB/event-loop hang probe
 ```
@@ -277,6 +277,51 @@ deleted long ago):
 `./jules_run_verification.sh` is a one-line `sudo` wrapper for environments
 where Docker needs root. Timeouts in this suite are usually bugs/flakiness,
 not performance — raising a timeout is a last resort.
+
+### Parallelism and deterministic waits
+
+The suite runs **in parallel**: 3 workers in CI and in every
+`./run_verification.sh` run (the script sets `CI=1`, which
+`playwright.config.ts` maps to 3 workers). The `webkit` project caps itself
+at one worker (`workers: 1` on the project), so a mixed run keeps WebKit
+serial while the Chromium projects go wide; the nightly CI lane splits
+WebKit across three runners instead. `--workers=N` overrides (`--workers=1`
+for debugging).
+
+Parallel is safe because tests share nothing: every test gets a fresh
+browser context (its own IndexedDB, localStorage, Cache Storage and service
+worker), the preview server only serves static files, and the multi-device
+sync journeys carry state between their own contexts. Keep it that way — a
+spec must never depend on what another spec left behind.
+
+Parallel load also removes the slack an idle machine used to give, so wait
+on the state you need, never on a fixed sleep. `verification/utils.ts` has
+the deterministic waits:
+
+| Helper | Waits for |
+|---|---|
+| `resetApp(page)` | a first boot on empty storage (a fresh page takes one navigation; a used page gets the full wipe-and-reload) |
+| `waitForReaderReady(page)` | the reader engine rendered its first display (strict) |
+| `currentCfi` + `waitForCfiChange` | a page turn / relocation landed |
+| `currentSectionHref` + `waitForSectionChange` | a chapter jump rendered (`navigateToChapter` uses it) |
+| `waitForTtsQueueOnCurrentSection` | the TTS queue reloaded for the displayed chapter (`navigateToChapter` uses it; press Play only after it) |
+| `ttsState` + `waitForTtsState` | a TTS command landed (play, pause, skip, jump) |
+| `waitForPersistedWrites(page)` | debounced IndexedDB writes committed — before any reload (or page unload) that must keep state |
+
+The location/TTS waits are tolerant (they resolve `false` rather than
+throw) and bounded at 10 s, longer than the sleeps they replaced, so the
+spec's own assertions stay the judge. A fixed `waitForTimeout` is still
+right where elapsed time IS the scenario — a dwell the app requires (the
+reading-history threshold, the 5 s bookmark window), a "nothing happens"
+window before a negative assertion, audio that must play for a while — and
+the line should say so.
+
+Measured on a 4-core machine like the `ubuntu-latest` runners (same image,
+before → after, 2026-09-30): desktop 17.9 → 5.8 min and mobile 17.6 → 5.8
+min per project (after-runs capped at 2.6 CPUs to approximate the runners'
+SMT cores); a default desktop + mobile run 35.5 → 10.9 min; WebKit 31 → 24
+min serial, which CI splits into three shards of at most 8.5 min. CI jobs
+add ~2.5 min of image build on top.
 
 **Honest caveats (know what a green run proves):** every page gets
 `verification/tts-polyfill.js` (a mock Web Speech engine — no real TTS
@@ -297,7 +342,8 @@ were never built; an honest open item in the program close-out).
 Two specs in the suite are **measurements, not pass/fail journeys** — they
 print a report and write JSON to `verification/perf-results/` (gitignored)
 so runs can be diffed before/after a change. Run them one project at a
-time (`--workers=1`); parallel load skews every number they collect.
+time (`--workers=1`); parallel load skews every number they collect, so the
+figures a default (parallel) run prints are not comparable.
 
 | Spec | Measures |
 | --- | --- |
@@ -311,11 +357,12 @@ SEPARATE fixture from `test_chinese.epub`, which stays byte-identical
 because the Chinese journeys pin against it.
 
 **In CI** the Docker E2E lane runs via
-`.github/workflows/e2e-verification.yml`, one job per project, screenshots
-uploaded as artifacts. The **desktop and mobile** projects run on every PR
-(informational checks — no branch protection requires them); **webkit**
-stays nightly + `workflow_dispatch` only (serial, timing-sensitive TTS
-journeys — see `run_verification.sh`).
+`.github/workflows/e2e-verification.yml`, one job per project (3 workers
+each), screenshots uploaded as artifacts. The **desktop and mobile** projects
+run on every PR (informational checks — no branch protection requires
+them); **webkit** stays nightly + `workflow_dispatch` only (one test at a
+time, timing-sensitive TTS journeys), split into three `--shard` jobs on
+separate runners.
 
 ## Accessibility scans (three layers)
 

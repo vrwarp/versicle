@@ -710,7 +710,7 @@ in Docker; arguments pass through to \`npx playwright test\`:
 # Otherwise:
 ./run_verification.sh                                      # desktop + mobile projects
 ./run_verification.sh verification/test_journey_library.spec.ts
-./run_verification.sh --project=webkit                     # auto-serialized
+./run_verification.sh --project=webkit                     # one test at a time
 \`\`\`
 
 Rules for E2E work:
@@ -720,9 +720,14 @@ Rules for E2E work:
    focused, not marathon-length.
 2. Record a screenshot in \`verification/screenshots/\` for key steps (use
    the \`captureScreenshot\` helper in \`verification/utils.ts\`).
-3. Use the deterministic waits from \`verification/utils.ts\`
-   (\`window.__versicleTest.flushPersistence()\` / \`resetApp\`) — never add
-   \`waitForTimeout\` sleeps for persistence.
+3. The suite runs in parallel (3 workers; WebKit one test at a time), so a
+   test may not depend on another test's leftovers or on an idle machine's
+   timing slack. Wait on state with the deterministic helpers in
+   \`verification/utils.ts\` (\`waitForPersistedWrites\`,
+   \`waitForReaderReady\`, \`waitForCfiChange\`, \`waitForSectionChange\`,
+   \`waitForTtsState\`, \`resetApp\`) — never add a \`waitForTimeout\` sleep
+   unless elapsed time IS the scenario (a required dwell, a "nothing
+   happens" window), and say so in a comment.
 4. Timeouts are almost always caused by bugs or flakiness in code or test,
    rarely by genuine slowness. Increasing a timeout is a last resort.
 
