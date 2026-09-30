@@ -40,13 +40,18 @@ async function openAppPage(context: BrowserContext, pause?: PausePoint): Promise
       (pause ? `window.__VERSICLE_SWAP_PAUSE__ = ${JSON.stringify(pause)};` : "")
   );
   await page.goto("/");
-  // Bypass the intro dialog if it appears.
-  try {
-    await page.getByRole("button", { name: "Continue" }).click({ timeout: 2000 });
-  } catch {
-    // Ignore
-  }
+  await dismissIntroDialog(page);
   return page;
+}
+
+// Bypass an intro dialog if one is up. The app no longer shows one at boot
+// (its only "Continue" buttons are action confirms), so probe without the old
+// 2s click timeout that every call burned.
+async function dismissIntroDialog(page: Page): Promise<void> {
+  const intro = page.getByRole("button", { name: "Continue" });
+  if (await intro.isVisible()) {
+    await intro.click();
+  }
 }
 
 async function openSyncSettings(page: Page): Promise<void> {
@@ -70,11 +75,7 @@ test("journey kill-mid-switch: every crash window resumes; rollback restores the
   // ── Setup: mock sync, a non-empty library, and a second workspace ───────
   await page.addInitScript("window.__VERSICLE_MOCK_FIRESTORE__ = true; window.__VERSICLE_FIRESTORE_DEBOUNCE_MS__ = 50;");
   await page.goto("/");
-  try {
-    await page.getByRole("button", { name: "Continue" }).click({ timeout: 2000 });
-  } catch {
-    // Ignore
-  }
+  await dismissIntroDialog(page);
 
   // Library non-empty: the demo book is the journey's data canary.
   const loadBtn = page.getByRole("button", { name: "Load Demo Book" });
@@ -92,8 +93,9 @@ test("journey kill-mid-switch: every crash window resumes; rollback restores the
   await page.getByPlaceholder("New workspace name").fill("Target");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByText("Active: Target")).toBeVisible({ timeout: 20000 });
-  // Let the mock provider flush the workspace snapshot to "cloud" storage.
-  await page.waitForTimeout(500);
+  // No wait for the mock "cloud" here: creating Target detached the "My Library"
+  // provider, whose destroy() saved that workspace's snapshot (what the switch
+  // below downloads) synchronously. Flush the local writes before the kill.
   await page.evaluate(() => window.__versicleTest?.flushPersistence());
 
   // ── Kill 1: at 'swap:staged' (STAGED committed, before the reload) ──────

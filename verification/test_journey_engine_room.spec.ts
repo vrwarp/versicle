@@ -50,7 +50,7 @@ test('Engine Room Journey Test', async ({ page }) => {
   await utils.ensureLibraryWithBook(page);
   await page.locator("[data-testid^='book-card-']").first().click();
   await expect(page).toHaveURL(/.*\/read\/.*/);
-  await page.waitForTimeout(2000);
+  await utils.waitForReaderLocated(page);
 
   // Click Settings (Gear) — nests Settings under /read/:id/settings (overlay
   // over the live reader, which stays mounted behind it).

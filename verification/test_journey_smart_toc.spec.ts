@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook } from "./utils";
+import { resetApp, ensureLibraryWithBook, waitForPersistedWrites } from "./utils";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
@@ -30,7 +30,10 @@ test("smart toc success", async ({ page }) => {
     );
   });
 
-  // Reload to pick up store changes
+  // Reload to pick up store changes. Flush first: the demo import's library
+  // write is debounced, and a reload that beats it loses the book (the
+  // fallback below then burned its full 10s wait and re-imported).
+  await waitForPersistedWrites(page);
   await page.reload();
 
   // Wait for library to load
@@ -130,6 +133,8 @@ test("smart toc failure", async ({ page }) => {
       })
     );
   });
+  // Flush the demo import's debounced library write so the book survives.
+  await waitForPersistedWrites(page);
   await page.reload();
 
   // Ensure book is present (reload might have cleared state or DB latency)

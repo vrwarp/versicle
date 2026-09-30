@@ -14,7 +14,7 @@ test('Iframe Height Verification', async ({ page }) => {
   await expect(page).toHaveURL(/.*\/read\/.*/);
 
   // Wait for reader to be ready
-  await page.waitForTimeout(3000);
+  await utils.waitForReaderLocated(page);
 
   // Get the container element
   const container = page.locator('[data-testid="reader-iframe-container"]');

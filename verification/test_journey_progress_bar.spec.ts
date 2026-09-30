@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { resetApp, captureScreenshot, ensureLibraryWithBook, navigateToChapter } from "./utils";
+import { resetApp, captureScreenshot, ensureLibraryWithBook, navigateToChapter, currentCfi, waitForCfiChange, waitForPersistedWrites } from "./utils";
 
 test("verify progress bar", async ({ page }) => {
   // 1. Reset app to ensure clean state
@@ -21,19 +21,25 @@ test("verify progress bar", async ({ page }) => {
     "(window.__versicleTest?.reader?.locationsTotal() ?? 0) > 0",
     { timeout: 30000 }
   ).catch(() => {});
-  await page.waitForTimeout(1000);
 
   // Navigate a few more pages to ensure non-zero progress percentage
   const viewport = page.viewportSize();
   for (let i = 0; i < 3; i++) {
+    const cfiBeforeTurn = await currentCfi(page);
     await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(800);
+    await waitForCfiChange(page, cfiBeforeTurn);
     if (viewport) {
+      // Misses the page-turn rails (the outer 40/56px strips) in every
+      // project, so there is no page turn to wait for.
       await page.mouse.click(viewport.width * 0.85, viewport.height * 0.5);
-      await page.waitForTimeout(800);
     }
   }
-  await page.waitForTimeout(1000);
+
+  // Commit the progress before leaving the reader: it sits in the reading
+  // session's 5s commit window, and the page.goto fallback below unloads the
+  // page instead of unmounting the reader (the pauses this journey used to
+  // take between turns outlasted that window).
+  await waitForPersistedWrites(page);
 
   // Go back to library
   let backBtn = page.locator('button[aria-label="Back to Library"]');
@@ -51,7 +57,9 @@ test("verify progress bar", async ({ page }) => {
   // 4. Check for progress bar
   await page.waitForSelector('[data-testid^="book-card-"]', { timeout: 15000 });
 
-  // Force reload to ensure library fetches latest book data if state wasn't updated
+  // Force reload to ensure library fetches latest book data if state wasn't updated.
+  // Flush first: the progress saved on close is a debounced IndexedDB write.
+  await waitForPersistedWrites(page);
   await page.reload();
   // WebKit library re-hydration after reload can lag under full-suite parallel load.
   await page.waitForSelector('[data-testid^="book-card-"]', { timeout: 25000 });

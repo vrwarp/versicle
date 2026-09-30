@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { closeSettings, resetApp } from "./utils";
+import { closeSettings, resetApp, waitForPersistedWrites } from "./utils";
 
 test("lexicon reorder", async ({ page }) => {
   await resetApp(page);
@@ -47,7 +47,7 @@ test("lexicon reorder", async ({ page }) => {
   await expect(items.nth(1)).toContainText("Apple");
 
   // Wait for persistence (IndexedDB async write)
-  await page.waitForTimeout(1000);
+  await waitForPersistedWrites(page);
 
   // Close Dialog
   await page.getByTestId("lexicon-close-btn").click();

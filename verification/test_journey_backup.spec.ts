@@ -12,7 +12,6 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   await utils.resetApp(page);
 
   // 1. Import Book
-  await page.waitForTimeout(1000);
   await page.setInputFiles("data-testid=hidden-file-input", path.resolve(__dirname, "alice.epub"));
 
   const bookCard = page.locator("[data-testid^='book-card-']").first();
@@ -28,7 +27,8 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   // The reader gear (reader-settings-button) nests Settings under
   // /read/:id/settings, so the reader stays mounted behind the overlay and the
   // Dictionary tab's "Manage Rules" reaches the book-aware Lexicon Manager.
-  await page.waitForTimeout(1000);
+  // Let the book display first (was a fixed 1s sleep).
+  await utils.waitForReaderLocated(page);
 
   await page.getByTestId("reader-settings-button").click({ force: true });
   await expect(page.getByRole("tablist", { name: "Settings sections" })).toBeVisible({ timeout: 10000 });
@@ -54,7 +54,6 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 40000 });
 
   // 3. Export Backup
-  await page.waitForTimeout(500);
   await page.getByTestId("header-settings-button").click({ force: true });
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
   await expect(page.getByRole("tablist", { name: "Settings sections" })).toBeVisible({ timeout: 10000 });
@@ -94,7 +93,10 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   await expect(bookCard).not.toBeVisible({ timeout: 5000 });
 
   // 5. Restore Backup
-  await page.waitForTimeout(500);
+  // The card leaves before the delete dialog closes (it closes once removeBook
+  // resolves); let it go so its backdrop can't eat the force-click (was a fixed
+  // 500ms sleep).
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 5000 }).catch(() => {});
   await page.getByTestId("header-settings-button").click({ force: true });
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
   await expect(page.getByRole("tablist", { name: "Settings sections" })).toBeVisible({ timeout: 10000 });
@@ -135,14 +137,12 @@ test('Journey Full Backup & Restore (ZIP)', async ({ page }) => {
   await utils.resetApp(page);
 
   // 1. Import Book
-  await page.waitForTimeout(1000);
   await page.setInputFiles("data-testid=hidden-file-input", path.resolve(__dirname, "alice.epub"));
 
   const bookCard = page.locator("[data-testid^='book-card-']").first();
   await expect(bookCard).toBeVisible({ timeout: 20000 });
 
   // 2. Export Full Backup
-  await page.waitForTimeout(500);
   await page.getByTestId("header-settings-button").click({ force: true });
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
   await expect(page.getByRole("tablist", { name: "Settings sections" })).toBeVisible({ timeout: 10000 });
@@ -180,7 +180,8 @@ test('Journey Full Backup & Restore (ZIP)', async ({ page }) => {
   await expect(bookCard).not.toBeVisible({ timeout: 5000 });
 
   // 4. Restore Backup
-  await page.waitForTimeout(500);
+  // Let the delete dialog close first (was a fixed 500ms sleep; see test above).
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 5000 }).catch(() => {});
   await page.getByTestId("header-settings-button").click({ force: true });
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
   await expect(page.getByRole("tablist", { name: "Settings sections" })).toBeVisible({ timeout: 10000 });

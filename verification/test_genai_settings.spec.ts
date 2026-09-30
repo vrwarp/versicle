@@ -4,8 +4,8 @@ test('Generative AI Settings Tab Test', async ({ page }) => {
   // 1. Open App
   await page.goto('/');
 
-  // 2. Wait for Load
-  await page.waitForTimeout(5000);
+  // 2. Wait for Load (the library header's Settings button is up)
+  await expect(page.getByTestId('header-settings-button')).toBeVisible({ timeout: 10000 }).catch(() => {});
 
   // 3. Open Settings
   await page.getByLabel('Settings').first().click();

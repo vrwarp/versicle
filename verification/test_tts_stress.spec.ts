@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter } from "./utils";
+import { captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter, waitForTtsState } from "./utils";
 
 test("tts rapid play pause", async ({ page }) => {
   console.log("Starting Rapid Play/Pause Stress Test...");
@@ -223,7 +223,7 @@ test("tts panel close during playback", async ({ page }) => {
   // Start playback
   console.log("Starting playback...");
   await page.getByTestId("tts-play-pause-button").click();
-  await page.waitForTimeout(500);
+  await waitForTtsState(page, (s) => s.status === "playing");
 
   // Close panel while playing
   console.log("Closing panel during playback...");

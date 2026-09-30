@@ -10,14 +10,20 @@ test('Spacer Bug Test', async ({ page }) => {
   console.log('Opening book to set Scrolled Mode...');
   await page.locator("[data-testid^='book-card-']").first().click();
   await expect(page.getByTestId('reader-back-button')).toBeVisible();
-  await page.waitForTimeout(2000);
+  await utils.waitForReaderLocated(page);
 
   // Enable Scrolled Mode
   const visualBtn = page.getByTestId('reader-visual-settings-button');
   await visualBtn.click();
   const scrolledTab = page.getByRole('tab', { name: 'Scrolled' });
   await scrolledTab.click();
-  await page.waitForTimeout(1000);
+  // Wait for the scrolled re-render (it injects the bottom spacer)
+  await page
+    .locator('[data-testid="reader-iframe-container"] iframe')
+    .contentFrame()
+    .locator('#reader-bottom-spacer')
+    .waitFor({ state: 'attached', timeout: 5000 })
+    .catch(() => {});
 
   // Close settings (click outside)
   await page.mouse.click(10, 10);
@@ -31,14 +37,14 @@ test('Spacer Bug Test', async ({ page }) => {
   await page.locator("[data-testid^='book-card-']").first().click();
   await expect(page.getByTestId('reader-back-button')).toBeVisible();
 
-  // Wait for content to render
-  await page.waitForTimeout(3000);
-
   // Locate the iframe
   const readerFrame = page.locator('[data-testid="reader-iframe-container"] iframe').contentFrame();
 
   // Check for spacer
   const spacer = readerFrame.locator('#reader-bottom-spacer');
+
+  // Wait for content to render (scrolled mode injects the spacer on load)
+  await spacer.waitFor({ state: 'attached', timeout: 5000 }).catch(() => {});
 
   if ((await spacer.count()) > 0) {
     console.log('Spacer found!');

@@ -18,8 +18,17 @@ for (const vp of viewports) {
     await ensureLibraryWithBook(page);
 
     await page.setViewportSize({ width: vp.width, height: vp.height });
-    // Wait for layout shift
-    await page.waitForTimeout(1000);
+    // Wait for layout shift: the library is CSS-only, so the resize has landed
+    // once the page sees the new width and breakpoint transitions have finished.
+    await page
+      .waitForFunction(
+        (w) =>
+          window.innerWidth === w &&
+          document.getAnimations().every((a) => a.playState !== "running" || a.effect?.getComputedTiming().endTime === Infinity),
+        vp.width,
+        { timeout: 5000 }
+      )
+      .catch(() => {});
 
     await expect(page.getByTestId("library-view")).toBeVisible();
     await captureScreenshot(page, `responsive_library_${vp.name}`);

@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook, captureScreenshot, openAudioSettings } from "./utils";
+import { resetApp, ensureLibraryWithBook, captureScreenshot, openAudioSettings, waitForReaderLocated } from "./utils";
 
 test("lexicon trace", async ({ page }) => {
   console.log("Starting Lexicon Trace Test...");
@@ -12,7 +12,7 @@ test("lexicon trace", async ({ page }) => {
   await expect(page).toHaveURL(/.*\/read\/.*/);
 
   // Wait for book to load
-  await page.waitForTimeout(2000);
+  await waitForReaderLocated(page);
 
   // Open Audio Deck -> Settings -> Lexicon.
   // The audio deck is a right-side Radix Sheet; its "Settings" footer tab

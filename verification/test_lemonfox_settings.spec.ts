@@ -3,10 +3,7 @@ import { resetApp, captureScreenshot } from "./utils";
 
 test("lemonfox settings", async ({ page }) => {
   console.log("Starting LemonFox Settings Verification...");
-  await resetApp(page);
-
-  // Wait for library to load
-  await page.waitForTimeout(1000);
+  await resetApp(page); // returns once the library has loaded
 
   // Open Global Settings
   console.log("Opening Global Settings...");

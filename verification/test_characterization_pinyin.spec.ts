@@ -53,7 +53,7 @@ async function uploadBook(page: Page, filename: string) {
     },
     { base64Data: fileBase64, name: filename },
   );
-  await page.waitForTimeout(2000);
+  // No fixed sleep: the one caller (openChineseBook) waits for the book card.
 }
 
 async function openChineseBook(page: Page, fixture: string, cardText: string) {
@@ -63,7 +63,8 @@ async function openChineseBook(page: Page, fixture: string, cardText: string) {
   await expect(bookCard).toBeVisible({ timeout: 15000 });
   await bookCard.click();
   await expect(page.getByTestId('reader-view')).toBeVisible({ timeout: 10000 });
-  await page.waitForTimeout(2000);
+  // Every caller needs the rendered reader (frame lookup / in-frame geometry).
+  await utils.waitForReaderReady(page);
 }
 
 async function enablePinyin(page: Page) {
@@ -73,15 +74,24 @@ async function enablePinyin(page: Page) {
   if ((await langSelect.innerText()).includes('en')) {
     await langSelect.click();
     await page.getByRole('option', { name: 'Chinese (zh)' }).click();
-    await page.waitForTimeout(1000);
   }
   const pinyinSwitch = page.getByTestId('show-pinyin-switch');
   await expect(pinyinSwitch).toBeVisible();
   if ((await pinyinSwitch.getAttribute('data-state')) !== 'checked') {
     await pinyinSwitch.click();
   }
-  await page.mouse.click(10, 10); // close the popover
-  await page.waitForTimeout(2000);
+  // Close the popover with its own close button. A "click outside" at (10,10)
+  // dismisses this non-modal popover AND lands on whatever is underneath — on
+  // the 375px mobile header, the back button — leaving the reader.
+  await page.getByTestId('visual-settings-close-button').click();
+  await expect(pinyinSwitch).toHaveCount(0, { timeout: 5000 }).catch(() => {});
+  // Wait for the pinyin pass to land: its overlay spans (what the callers
+  // measure) appear once ChineseContentProcessor has emitted the positions.
+  await page
+    .locator('[data-testid="reader-iframe-container"] .font-pinyin')
+    .first()
+    .waitFor({ state: 'attached', timeout: 10000 })
+    .catch(() => {});
 }
 
 interface CharRect {
@@ -236,7 +246,6 @@ test('Characterization: Traditional toggle round-trips the iframe text (_origina
   if ((await langSelect.innerText()).includes('en')) {
     await langSelect.click();
     await page.getByRole('option', { name: 'Chinese (zh)' }).click();
-    await page.waitForTimeout(1000);
   }
 
   const tradSwitch = page.getByTestId('force-traditional-switch');

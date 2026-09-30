@@ -28,9 +28,7 @@ async function uploadBook(page: Page, filename: string) {
     const dropEvent = new DragEvent('drop', { dataTransfer: dataTransfer, bubbles: true });
     document.querySelector('[data-testid="library-view"]')!.dispatchEvent(dropEvent);
   }, { base64Data: fileBase64, filename });
-
-  // Small wait for ingestion to start
-  await page.waitForTimeout(2000);
+  // No fixed sleep: imports queue up in order, and the test waits for each card.
 }
 
 test('Language Scoped Font Profiles Test', async ({ page }) => {
@@ -64,7 +62,6 @@ test('Language Scoped Font Profiles Test', async ({ page }) => {
 
   await utils.captureScreenshot(page, 'font_profile_1_en_set_80');
   await page.getByTestId('visual-settings-close-button').click();
-  await page.waitForTimeout(500);
 
   // 3. Return to Library and open Chinese Book
   console.log('--- Phase 2: Setting Chinese Profile ---');
@@ -83,7 +80,8 @@ test('Language Scoped Font Profiles Test', async ({ page }) => {
     console.log('Manually switching book language to Chinese...');
     await langSelect.click();
     await page.getByRole('option', { name: 'Chinese (zh)' }).click();
-    await page.waitForTimeout(1000);
+    // The size readout re-renders with the language (same popover render).
+    await expect(langSelect).toContainText('Chinese', { timeout: 5000 }).catch(() => {});
   }
 
   // 5. Verify Chinese font size is decoupled from English
@@ -99,7 +97,6 @@ test('Language Scoped Font Profiles Test', async ({ page }) => {
 
   await utils.captureScreenshot(page, 'font_profile_2_zh_set_150');
   await page.getByTestId('visual-settings-close-button').click();
-  await page.waitForTimeout(500);
 
   // 7. Final Persistence Verification
   console.log('--- Phase 3: Verifying Persistence ---');

@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./utils";
-import { captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter, waitForPersistedWrites } from "./utils";
+import { captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter, waitForPersistedWrites, waitForTtsState } from "./utils";
 
 /** Read the live TTS playback status out of the ephemeral playback store. */
 function ttsStatus(page: Page): Promise<string> {
@@ -36,11 +36,12 @@ test("tts resume after leaving book", async ({ page, baseURL }) => {
   // Start playback and advance position
   console.log("Starting playback and advancing...");
   await page.getByTestId("tts-play-pause-button").click();
-  await page.waitForTimeout(300);
+  // Live playback (not just 'loading'), so the next click is a clean pause
+  await waitForTtsState(page, (s) => s.status === "playing");
 
   // Pause first to stop auto-advance while we skip
   await page.getByTestId("tts-play-pause-button").click();
-  await page.waitForTimeout(500);
+  await waitForTtsState(page, (s) => !s.isPlaying);
 
   // Skip forward with explicit wait for each item to become current
   await page.getByTestId("tts-forward-button").click();
@@ -63,11 +64,10 @@ test("tts resume after leaving book", async ({ page, baseURL }) => {
 
   // Pause playback
   await page.getByTestId("tts-play-pause-button").click();
-  await page.waitForTimeout(500);
 
   // Close TTS panel
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(500);
+  await expect(page.getByTestId("tts-panel")).toBeHidden({ timeout: 5000 }).catch(() => {});
 
   // Navigate back to library
   console.log("Going back to library...");
@@ -168,9 +168,6 @@ test("tts position persists across reload", async ({ page }) => {
   // Open TTS Panel
   await page.getByTestId("reader-audio-button").click();
   await expect(page.getByTestId("tts-panel")).toBeVisible({ timeout: 5000 });
-
-  // Wait for queue restoration
-  await page.waitForTimeout(2000);
 
   // Check that item 5 is still current after reload. Assert the restored position via the
   // TTS store (the source of truth) with a generous timeout — on WebKit under full-suite

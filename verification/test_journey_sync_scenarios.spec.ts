@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { test, expect, openSettings, gotoSettingsTab, closeSettings, waitForReaderReady } from "./utils";
+import { test, expect, openSettings, gotoSettingsTab, closeSettings, waitForReaderReady, currentCfi, waitForCfiChange, currentSectionHref, waitForSectionChange } from "./utils";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
@@ -80,6 +80,31 @@ async function pollForPersistence(page: Page, expectedKeyPattern: string, retrie
   return null;
 }
 
+/**
+ * Wait until the mock cloud holds a workspace-doc push newer than `since`
+ * (page clock). MockFireProvider re-saves the whole Y.Doc, stamped with
+ * `lastModified`, one injected debounce (20ms) after any Yjs update — so a
+ * push newer than an action carries that action's writes. Tolerant like the
+ * fixed sleeps it replaces: on timeout it just returns.
+ */
+async function waitForWorkspacePushAfter(page: Page, testUid: string, since: number, timeout = 5000): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(({ uid, after }) => {
+          const raw = localStorage.getItem('versicle_mock_firestore_snapshot');
+          if (!raw) return false;
+          const all = JSON.parse(raw) as Record<string, { lastModified?: number }>;
+          return Object.keys(all).some(
+            (key) => key.includes(`users/${uid}/versicle/ws_`) && (all[key].lastModified ?? 0) > after
+          );
+        }, { uid: testUid, after: since }),
+      { timeout, intervals: [50, 100, 250] }
+    )
+    .toBe(true)
+    .catch(() => {});
+}
+
 function getReaderFrame(page: Page): Frame | null {
   for (const frame of page.frames()) {
     if (frame !== page.mainFrame() && (frame.name().includes('epubjs') || frame.url().includes('blob:'))) {
@@ -130,6 +155,7 @@ test("seamless handoff", async ({ browser, baseURL }) => {
 
   // Force create progress
   let progressConfirmed = false;
+  let backClickedAt = 0;
 
   for (let attempt = 0; attempt < 3; attempt++) {
     console.log(`[A] Progress Generation Attempt ${attempt + 1}`);
@@ -148,22 +174,27 @@ test("seamless handoff", async ({ browser, baseURL }) => {
     // a no-op on WebKit when rendition.manager is briefly undefined; a TOC jump to
     // a mid-book chapter relocates deterministically and persists non-zero progress.
     console.log("[A] Jumping to a mid-book chapter via TOC...");
+    const cfiBeforeJump = await currentCfi(pageA);
     await pageA.getByTestId("reader-toc-button").click({ noWaitAfter: true });
     await pageA.waitForSelector('[data-testid="reader-toc-sidebar"]', { state: "visible", timeout: 8000 }).catch(() => {});
     await pageA.waitForSelector('[data-testid^="toc-item-"]', { state: "visible", timeout: 8000 }).catch(() => {});
     await pageA.getByTestId("toc-item-6").scrollIntoViewIfNeeded().catch(() => {});
     await pageA.getByTestId("toc-item-6").click({ force: true });
     await expect(pageA.getByTestId("reader-toc-sidebar")).not.toBeVisible();
-    await pageA.waitForTimeout(2000);
+    // Let the jump's display land (was a fixed 2s sleep).
+    await waitForCfiChange(pageA, cfiBeforeJump);
 
     // A few extra page turns for additional progress (best-effort)
     const turns = attempt > 0 ? 6 : 3;
     for (let t = 0; t < turns; t++) {
+      const cfiBeforeTurn = await currentCfi(pageA);
       await pageA.keyboard.press("ArrowRight");
-      await pageA.waitForTimeout(400);
+      // Let the turn land before the next one (was a fixed 400ms sleep).
+      await waitForCfiChange(pageA, cfiBeforeTurn, 5000);
     }
 
-    // Go back to library
+    // Go back to library (the reader's unmount flush writes the progress)
+    backClickedAt = await pageA.evaluate(() => Date.now());
     await pageA.getByTestId("reader-back-button").click();
     await expect(pageA.getByTestId("library-view")).toBeVisible();
 
@@ -183,8 +214,9 @@ test("seamless handoff", async ({ browser, baseURL }) => {
     console.log("[A] WARNING: Failed to generate visible progress on Device A.");
   }
 
-  // Wait a bit for final store debounce
-  await pageA.waitForTimeout(2000);
+  // Wait for the final progress write to reach the mock cloud: a workspace
+  // push newer than the back-navigation (was a fixed 2s sleep).
+  await waitForWorkspacePushAfter(pageA, testUid, backClickedAt);
 
   // Capture Sync State (Trigger push)
   await pageA.evaluate("window.dispatchEvent(new Event('beforeunload'))");
@@ -273,7 +305,9 @@ test("seamless handoff", async ({ browser, baseURL }) => {
 
   // Supply the file
   await pageB.setInputFiles("data-testid=restore-file-input", alicePath);
-  await pageB.waitForTimeout(2000);
+  // Let the restore land before the Escape / navigation below: the dialog (and
+  // this input) unmounts once the re-ingest completes (was a fixed 2s sleep).
+  await pageB.locator("[data-testid='restore-file-input']").waitFor({ state: "detached", timeout: 15000 }).catch(() => {});
 
   // Wait for restoration to complete. The Content Missing dialog closes once the re-supplied
   // epub finishes re-ingesting, which is slow on WebKit under full-suite load.
@@ -361,18 +395,20 @@ test("note marker affordance", async ({ browser, baseURL }) => {
 
   // Wait for rendition to be ready
   await waitForReaderReady(page);
-  await page.waitForTimeout(1000);
 
   // Jump straight to a content chapter via the TOC. Turning pages with
   // rendition.next() is unreliable on WebKit (leaves the reader on front-matter
   // with no <p>), whereas a TOC jump lands directly on rendered prose.
+  const hrefBeforeJump = await currentSectionHref(page);
   await page.getByTestId("reader-toc-button").click({ noWaitAfter: true });
   await page.waitForSelector('[data-testid="reader-toc-sidebar"]', { state: "visible", timeout: 8000 }).catch(() => {});
   await page.waitForSelector('[data-testid^="toc-item-"]', { state: "visible", timeout: 8000 }).catch(() => {});
   await page.getByTestId("toc-item-6").scrollIntoViewIfNeeded().catch(() => {});
   await page.getByTestId("toc-item-6").click({ force: true });
   await expect(page.getByTestId("reader-toc-sidebar")).not.toBeVisible();
-  await page.waitForTimeout(1500);
+  // Let the chapter's display land, so the frame resolved below is the new
+  // section's (was a fixed 1.5s sleep).
+  await waitForSectionChange(page, hrefBeforeJump);
 
   // Resolve the rendered content frame and confirm prose is present
   let frame = await waitForReaderFrame(page);
@@ -380,7 +416,6 @@ test("note marker affordance", async ({ browser, baseURL }) => {
   frame = await waitForReaderFrame(page);
 
   const pLocator = frame.locator("p").first();
-  await page.waitForTimeout(1000); // Wait for layout stability
 
   await pLocator.evaluate((element) => {
     const range = document.createRange();
@@ -460,10 +495,13 @@ test("offline resilience", async ({ browser, baseURL }) => {
   await pageA.getByTestId("lexicon-add-rule-btn").click();
   await pageA.fill("data-testid=lexicon-input-original", "Offline");
   await pageA.fill("data-testid=lexicon-input-replacement", "Online");
+  const ruleSavedAt = await pageA.evaluate(() => Date.now());
   await pageA.click("data-testid=lexicon-save-rule-btn");
 
-  // Allow Yjs/Store to propagate changes
-  await pageA.waitForTimeout(1000);
+  // Allow Yjs/Store to propagate changes and the mock cloud to push them: a
+  // workspace push newer than the save (was a fixed 1s sleep here plus 2s
+  // before the final snapshot read below).
+  await waitForWorkspacePushAfter(pageA, testUid, ruleSavedAt);
 
   // Flush sync
   await pageA.evaluate("window.dispatchEvent(new Event('beforeunload'))");
@@ -473,7 +511,6 @@ test("offline resilience", async ({ browser, baseURL }) => {
   if (!snapshotA) {
     throw new Error("Device A failed to persist data to mock cloud");
   }
-  await pageA.waitForTimeout(2000);
   const finalSnapshot = await pageA.evaluate(() => localStorage.getItem('versicle_mock_firestore_snapshot'));
   const parsedSnapshot = JSON.parse(finalSnapshot!);
 
@@ -523,8 +560,12 @@ test("offline resilience", async ({ browser, baseURL }) => {
 
   await expect(pageB.getByTestId("library-view")).toBeVisible({ timeout: 10000 });
 
-  // Give sync manager time to process
-  await pageB.waitForTimeout(5000);
+  // Give sync manager time to process: "Yes, Finalize" reloads the page (App.tsx
+  // onResolved) and sync starts on the new boot. Only the reloaded document drops
+  // the confirmation modal; wait for it and its library (was a fixed 5s sleep —
+  // the retry loop below then waits for the synced rule itself).
+  await expect(pageB.getByText("Finalize Workspace Switch?")).toBeHidden({ timeout: 15000 }).catch(() => {});
+  await expect(pageB.getByTestId("library-view")).toBeVisible({ timeout: 15000 }).catch(() => {});
 
   // Check Settings. Ensure no leftover settings/migration overlay is still mounted
   // (its Radix backdrop would intercept the header-settings-button click — §0), then

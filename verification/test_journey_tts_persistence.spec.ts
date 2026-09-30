@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook } from "./utils";
+import { resetApp, ensureLibraryWithBook, waitForTtsState, waitForPersistedWrites } from "./utils";
 
 test("journey tts persistence", async ({ page }) => {
   console.log("STARTING TEST V3");
@@ -16,7 +16,9 @@ test("journey tts persistence", async ({ page }) => {
   // Click 3rd item (Chapter II)
   await page.getByRole("button", { name: "Chapter II." }).first().click();
 
-  await page.waitForTimeout(3000);
+  // Wait for Chapter II's TTS queue: real sentences carry a CFI, unlike the
+  // cover's one-item "no text" filler
+  await waitForTtsState(page, (s) => !!(s.queue[0] as { cfi?: string | null } | undefined)?.cfi);
 
   // 4. Open tts panel
   await page.getByTestId("reader-audio-button").click();
@@ -25,8 +27,8 @@ test("journey tts persistence", async ({ page }) => {
   // 5. Play
   await page.getByTestId("tts-play-pause-button").click();
 
-  // 6. Wait
-  await page.waitForTimeout(3000);
+  // 6. Wait until playback is live (not just 'loading'), so the pause below is clean
+  await waitForTtsState(page, (s) => s.status === "playing");
 
   // Check pause state by aria-label
   const btn = page.getByTestId("tts-play-pause-button");
@@ -35,6 +37,11 @@ test("journey tts persistence", async ({ page }) => {
   // 7. Pause
   await btn.click();
   await expect(btn).toHaveAttribute("aria-label", "Play");
+
+  // The fixed waits this journey used to take also let the debounced writes
+  // (reading position window, TTS session cache, y-idb) land before the reload;
+  // flush them deterministically instead.
+  await waitForPersistedWrites(page);
 
   // 8. Refresh
   console.log("REFRESHING");

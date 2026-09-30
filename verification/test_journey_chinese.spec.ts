@@ -28,8 +28,7 @@ async function uploadBook(page: Page, filename: string) {
     const dropEvent = new DragEvent('drop', { dataTransfer: dataTransfer, bubbles: true });
     document.querySelector('[data-testid="library-view"]')!.dispatchEvent(dropEvent);
   }, { base64Data: fileBase64, filename });
-
-  await page.waitForTimeout(2000);
+  // No fixed sleep: every caller uploads one book and then waits for its card.
 }
 
 test('Chinese Book Journey', async ({ page }) => {
@@ -47,7 +46,8 @@ test('Chinese Book Journey', async ({ page }) => {
   console.log('Opening book...');
   await bookCard.click();
   await expect(page.getByTestId('reader-view')).toBeVisible({ timeout: 10000 });
-  await page.waitForTimeout(2000);
+  // Let the first display land before grabbing the frame (tolerant wait).
+  await utils.waitForReaderLocated(page);
 
   // Ensure text is rendered in iframe
   const frameLoc = utils.getReaderFrame(page);
@@ -65,7 +65,6 @@ test('Chinese Book Journey', async ({ page }) => {
   if ((await langSelect.innerText()).includes('en')) {
     await langSelect.click();
     await page.getByRole('option', { name: 'Chinese (zh)' }).click();
-    await page.waitForTimeout(1000);
   }
 
   // Verify Pinyin toggle
@@ -80,14 +79,16 @@ test('Chinese Book Journey', async ({ page }) => {
   await tradSwitch.click();
   await utils.captureScreenshot(page, 'chinese_journey_02_traditional');
 
-  // Wait for re-render inside iframe
-  await page.waitForTimeout(2000);
+  // Wait for re-render inside iframe (the Traditional pass rewrites the text)
+  if (frameLoc) {
+    await expect(frameLoc.locator('body')).toContainText('測試用的中文書', { timeout: 10000 }).catch(() => {});
+  }
 
   // 4. Global TTS Settings
   console.log('Checking Global Settings > TTS...');
   // Close visual settings popover by clicking outside
   await page.mouse.click(10, 10);
-  await page.waitForTimeout(500);
+  await expect(page.getByTestId('show-pinyin-switch')).toHaveCount(0, { timeout: 5000 }).catch(() => {});
 
   await page.locator('body').click({ position: { x: 100, y: 100 } });
   await page.waitForTimeout(500);
@@ -100,7 +101,6 @@ test('Chinese Book Journey', async ({ page }) => {
   }
   if (await backBtn.isVisible()) {
     await backBtn.click();
-    await page.waitForTimeout(1000);
   }
 
   // Settings is now a Radix-Tabs SettingsShell at /settings/:tab (Phase-10 overhaul);
@@ -118,12 +118,10 @@ test('Chinese Book Journey', async ({ page }) => {
   if (currentLang.includes('English')) {
     await languageSelect.click();
     await page.getByRole('option', { name: 'Chinese' }).click();
-    await page.waitForTimeout(1000);
   }
 
   await expect(languageSelect).toContainText('Chinese', { ignoreCase: true, timeout: 5000 });
 
-  await page.waitForTimeout(1000);
   const warningLocator = page.getByTestId('mandarin-voice-warning');
   if ((await warningLocator.count()) > 0) {
     await expect(warningLocator).toBeVisible();
@@ -148,7 +146,6 @@ test('Journey Smart Pinyin', async ({ page }) => {
   console.log('Opening book...');
   await bookCard.click();
   await expect(page.getByTestId('reader-view')).toBeVisible({ timeout: 10000 });
-  await page.waitForTimeout(2000);
 
   // Ensure text is rendered in iframe AND the reader engine has finished
   // wiring its per-section selection bridge before we drive a selection.
@@ -172,7 +169,6 @@ test('Journey Smart Pinyin', async ({ page }) => {
   if ((await langSelect.innerText()).includes('en')) {
     await langSelect.click();
     await page.getByRole('option', { name: 'Chinese (zh)' }).click();
-    await page.waitForTimeout(1000);
   }
 
   const pinyinSwitch = page.getByTestId('show-pinyin-switch');
@@ -188,10 +184,16 @@ test('Journey Smart Pinyin', async ({ page }) => {
   // lingering popover steals the next pointer interaction. Then let the Chinese
   // reading pass settle (ChineseContentProcessor.refresh runs the pinyin geometry
   // on the showPinyin change; under load it can outlast 2s and re-render the
-  // section, which would clear a just-made selection before the bridge re-reads).
+  // section, which would clear a just-made selection before the bridge re-reads):
+  // wait for the pass's pinyin overlay spans, which land once it has run (this
+  // small fixture emits in one go).
   await page.getByTestId('visual-settings-close-button').click().catch(() => {});
   await expect(page.getByTestId('show-pinyin-switch')).toHaveCount(0, { timeout: 5000 }).catch(() => {});
-  await page.waitForTimeout(3000);
+  await page
+    .locator('[data-testid="reader-iframe-container"] .font-pinyin')
+    .first()
+    .waitFor({ state: 'attached', timeout: 10000 })
+    .catch(() => {});
 
   // 4. Trigger text selection of Chinese characters inside the iframe.
   //
@@ -285,7 +287,7 @@ test('Journey Smart Pinyin', async ({ page }) => {
 
   // Toggle it
   await tileBtn.click();
-  await page.waitForTimeout(500);
+  await expect(tileBtn).toHaveAttribute('aria-pressed', 'true', { timeout: 5000 }).catch(() => {});
   await utils.captureScreenshot(page, 'smart_pinyin_03_toggled');
 
   // 8. Complete triage

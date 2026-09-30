@@ -4,10 +4,8 @@ import * as utils from './utils';
 test('Compass Pill Journey', async ({ page }) => {
   console.log('Starting Compass Pill Journey...');
 
-  // Clear local storage to ensure TTS queue is empty
-  await page.goto('/');
-  await page.evaluate(() => localStorage.clear());
-
+  // A fresh context starts with empty storage (so an empty TTS queue); visiting
+  // the app first only pushed resetApp onto its slower wipe-and-reload path.
   await utils.resetApp(page);
   await utils.ensureLibraryWithBook(page);
 
@@ -27,16 +25,16 @@ test('Compass Pill Journey', async ({ page }) => {
   await page.waitForTimeout(4000);
 
   // Move page slightly to trigger onLocationChange again
+  const cfiBeforeTurn = await utils.currentCfi(page);
   await page.keyboard.press('ArrowRight');
-  await page.waitForTimeout(2000);
+  // Wait for the page turn to land; leaving the reader (below) flushes the
+  // recorder's pending save synchronously on unmount.
+  await utils.waitForCfiChange(page, cfiBeforeTurn);
 
   // 3. Go back to Library
   console.log('Going back to library...');
   await page.getByTestId('reader-back-button').click();
   await expect(page).toHaveURL(/.*\/$/);
-
-  // Wait for library to load and update
-  await page.waitForTimeout(2000);
 
   // 4. Check for Compass Pill
   console.log('Checking for Compass Pill...');

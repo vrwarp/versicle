@@ -1,4 +1,4 @@
-import { test } from './utils';
+import { test, waitForReaderLocated } from './utils';
 
 test('verify event history', async ({ page }) => {
   console.log('Navigating to app...');
@@ -22,8 +22,9 @@ test('verify event history', async ({ page }) => {
   await page.waitForSelector("[data-testid='reader-view']", { timeout: 15000 });
   console.log('Reader loaded.');
 
-  // Allow epub.js/iframe to stabilize before freezing time
-  await page.waitForTimeout(2000);
+  // Allow epub.js/iframe to stabilize before freezing time: the first display
+  // has landed (was a fixed 2s sleep)
+  await waitForReaderLocated(page);
 
   // Install Clock
   console.log('Installing clock...');
