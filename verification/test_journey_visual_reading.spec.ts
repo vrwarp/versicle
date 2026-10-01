@@ -1,6 +1,14 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from "./utils";
-import { resetApp, getReaderFrame, captureScreenshot } from "./utils";
+import {
+  resetApp,
+  getReaderFrame,
+  captureScreenshot,
+  waitForReaderReady,
+  currentSectionHref,
+  waitForSectionChange,
+  waitForCfiChange,
+} from "./utils";
 import type { Frame } from "@playwright/test";
 
 async function waitForReaderFrame(page: Page): Promise<Frame> {
@@ -26,10 +34,11 @@ test("journey visual reading", async ({ page }) => {
   await expect(page.locator("div[data-testid='reader-iframe-container']")).toBeVisible({ timeout: 5000 });
 
   // Wait for content
-  await page.waitForTimeout(3000);
+  await waitForReaderReady(page);
 
   // Navigate to Chapter 1 (Down the Rabbit-Hole) which is long and ensures multiple pages
   console.log("Navigating to Chapter I...");
+  const hrefBeforeToc = await currentSectionHref(page);
   await page.getByTestId("reader-toc-button").click();
   await expect(page.getByTestId("reader-toc-sidebar")).toBeVisible();
 
@@ -43,7 +52,7 @@ test("journey visual reading", async ({ page }) => {
   }
 
   // Wait for content after navigation (TOC closes automatically)
-  await page.waitForTimeout(3000);
+  await waitForSectionChange(page, hrefBeforeToc);
 
   // Get Reader Frame
   let frame = await waitForReaderFrame(page);
@@ -123,13 +132,12 @@ test("journey visual reading", async ({ page }) => {
   // (its arrows skip TTS chapters and are disabled while idle); page
   // turning lives on the PageTurnRails at the reading column edges.
   console.log("Clicking the right page-turn rail (Immersive)...");
-  await page.waitForTimeout(1000); // Wait for UI to settle
 
   // Verify Compass Pill in compact mode is visible
   await expect(page.getByTestId("compass-pill-compact")).toBeVisible();
 
   await page.getByTestId("page-turn-rail-right").click();
-  await page.waitForTimeout(3000); // Wait for page turn animation/render
+  await waitForCfiChange(page, cfiBefore as string | null); // Wait for page turn animation/render
 
   let cfiAfter = await page.evaluate(
     "window.__versicleTest?.reader?.currentCfi() ?? 'null'"
@@ -163,10 +171,9 @@ test("journey visual reading", async ({ page }) => {
 
   // --- Test Prev Page (PageTurnRails) in Immersive Mode ---
   console.log("Clicking the left page-turn rail (Immersive)...");
-  await page.waitForTimeout(1000);
 
   await page.getByTestId("page-turn-rail-left").click();
-  await page.waitForTimeout(3000);
+  await waitForCfiChange(page, cfiAfter as string | null);
 
   let cfiPrev = await page.evaluate(
     "window.__versicleTest?.reader?.currentCfi() ?? 'null'"

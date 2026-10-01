@@ -7,7 +7,7 @@
  * show the frozen global book percentage instead of the live TTS chapter position.
  */
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook, navigateToChapter, captureScreenshot } from "./utils";
+import { resetApp, ensureLibraryWithBook, navigateToChapter, captureScreenshot, waitForTtsState, waitForReaderReady } from "./utils";
 
 /** Read the current scrubber width as a float (0–100). */
 async function getScrubberWidth(page: Parameters<typeof resetApp>[0]): Promise<number> {
@@ -73,11 +73,12 @@ test("scrubber tracks TTS chapter position during playback", async ({ page }) =>
   await expect(page.getByTestId("tts-panel")).toBeVisible();
   await expect(page.getByTestId("tts-queue-item-0")).toBeVisible({ timeout: 5000 });
 
-  // Start and immediately pause to safely skip forward
+  // Start and immediately pause to safely skip forward (each click once the
+  // previous command has landed, so the second click is a clean pause)
   await page.getByTestId("tts-play-pause-button").click();
-  await page.waitForTimeout(300);
+  await waitForTtsState(page, (s) => s.status === "playing");
   await page.getByTestId("tts-play-pause-button").click();
-  await page.waitForTimeout(300);
+  await waitForTtsState(page, (s) => !s.isPlaying);
 
   // Skip forward to index 3 (deterministically, one step at a time)
   console.log("Advancing TTS to index 3...");
@@ -129,16 +130,27 @@ test("scrubber shows book reading progress when TTS queue is empty", async ({ pa
   await page.locator("[data-testid^='book-card-']").first().click();
   await expect(page.getByTestId("reader-back-button")).toBeVisible();
 
+  // The progress recorded for the jump below is a percentage of the locations
+  // index. Under load a jump that lands before the index exists records 0% and
+  // nothing re-records it, so the poll further down ran out and the final
+  // assertion passed vacuously (0 ≈ 0). Let the index finish first.
+  await waitForReaderReady(page, { locations: true });
+
   // Navigate to chapter 2 (toc-item-2) so there is some non-zero book reading progress
   await navigateToChapter(page, "toc-item-2");
   await expect(page.getByTestId("compass-pill-active")).toBeVisible({ timeout: 10000 });
 
-  // Dwell long enough for the reading session to record > 0% progress.
+  // Dwell until the section's TTS queue has landed — real sentences carry a CFI,
+  // unlike the cover's one-item "no text" filler (the poll below clears it to
+  // reach the queue-empty branch; a load arriving after the poll would flip the
+  // scrubber back). The poll then waits for the reading session to record > 0%
+  // progress (committed in a time window); its timeout covers the fixed 3s
+  // dwell that used to sit here.
   // We do NOT press ArrowRight here: some epub.js paginated builds emit a
   // `relocated` event with percentage=0 on the first render of the new page,
   // which overwrites the valid chapter percentage before the real value is
   // committed — leaving the current-device progress stuck at 0%.
-  await page.waitForTimeout(3000);
+  await waitForTtsState(page, (s) => !!(s.queue[0] as { cfi?: string | null } | undefined)?.cfi);
 
   // Opening/navigating a section auto-populates the TTS queue with that
   // section's sentences (prepared for instant play), so the queue is NOT empty
@@ -173,7 +185,7 @@ test("scrubber shows book reading progress when TTS queue is empty", async ({ pa
       return pct > 0 && el !== null && parseFloat((el as HTMLElement).style.width) > 0;
     },
     undefined,
-    { timeout: 12000 }
+    { timeout: 15000 }
   ).catch(() => { /* fall through to assertion so the failure message is readable */ });
 
   const { total: queueLength } = await getTTSProgress(page);
@@ -239,9 +251,8 @@ test("scrubber advances as TTS plays through sentences", async ({ page }) => {
   const { index: liveIndex } = await getTTSProgress(page);
   const expectedWidth = (liveIndex / queueLength) * 100;
 
-  // Allow the CSS transition to settle
-  await page.waitForTimeout(400);
-
+  // No settle needed for the CSS transition: getScrubberWidth reads the inline
+  // style, which React writes in the same render as the index read above.
   const widthAfterPlay = await getScrubberWidth(page);
   console.log(`Scrubber during play at index ${liveIndex}/${queueLength}: ${widthAfterPlay.toFixed(1)}% (expected ~${expectedWidth.toFixed(1)}%)`);
 

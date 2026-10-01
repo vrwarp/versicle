@@ -87,8 +87,11 @@ test("search journey", async ({ page }) => {
   await firstResult.scrollIntoViewIfNeeded();
   await firstResult.dispatchEvent("click");
 
-  // Close search (using Back Button which transforms to Close)
-  await page.waitForTimeout(500);
+  // Close search (using Back Button which transforms to Close) once the
+  // navigation has landed on the match (it flashes a search highlight).
+  await page
+    .waitForFunction(() => (window.__versicleTest?.reader?.highlightCount("search") ?? 0) > 0, null, { timeout: 5000 })
+    .catch(() => {});
   await page.getByTestId("reader-back-button").dispatchEvent("click");
 
   await captureScreenshot(page, "search_after_nav");

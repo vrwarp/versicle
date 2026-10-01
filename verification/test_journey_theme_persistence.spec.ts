@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook, captureScreenshot } from "./utils";
+import { resetApp, ensureLibraryWithBook, captureScreenshot, waitForReaderLocated, waitForPersistedWrites } from "./utils";
 
 test("theme persistence", async ({ page }) => {
   console.log("Starting Theme Persistence Journey...");
@@ -9,7 +9,7 @@ test("theme persistence", async ({ page }) => {
   // Open Book
   await page.locator("[data-testid^='book-card-']").first().click();
   await expect(page).toHaveURL(/.*\/read\/.*/);
-  await page.waitForTimeout(2000);
+  await waitForReaderLocated(page);
 
   // 1. Open Visual Settings
   console.log("Opening Visual Settings...");
@@ -19,7 +19,6 @@ test("theme persistence", async ({ page }) => {
   console.log("Selecting Dark Theme...");
   const darkBtn = page.locator('button[aria-label="Select Dark theme"]');
   await darkBtn.click();
-  await page.waitForTimeout(1000);
 
   // Verify Dark Theme applied (html class)
   await expect(page.locator("html")).toHaveClass(/.*dark.*/);
@@ -30,10 +29,11 @@ test("theme persistence", async ({ page }) => {
 
   await captureScreenshot(page, "theme_persistence_1_dark");
 
-  // 3. Reload Page
+  // 3. Reload Page (flush the debounced theme write first)
   console.log("Reloading...");
+  await waitForPersistedWrites(page);
   await page.reload();
-  await page.waitForTimeout(2000);
+  await waitForReaderLocated(page);
 
   // 4. Verify Theme Persisted
   console.log("Verifying Theme Persistence...");

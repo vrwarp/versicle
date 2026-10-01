@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter } from "./utils";
+import { captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter, waitForTtsState } from "./utils";
 
 test("tts queue click to jump", async ({ page }) => {
   console.log("Starting Queue Click Jump Test...");
@@ -140,9 +140,9 @@ test("tts queue highlight follows playback", async ({ page }) => {
   console.log("Starting playback...");
   await page.getByTestId("tts-play-pause-button").click();
 
-  // Wait for the Mock TTS to progress
+  // Wait for the Mock TTS to progress (the highlight moves off item 0)
   console.log("Waiting for playback to progress...");
-  await page.waitForTimeout(5000);
+  await waitForTtsState(page, (s) => s.currentIndex >= 1);
 
   // Verify we've progressed
   try {

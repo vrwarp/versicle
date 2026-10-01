@@ -18,7 +18,7 @@ test('TTS Queue Verification', async ({ page }) => {
   // Wait for reader to load
   console.log('Waiting for reader...');
   await expect(page.getByTestId('reader-iframe-container')).toBeVisible({ timeout: 10000 });
-  await page.waitForTimeout(2000);
+  await utils.waitForReaderLocated(page);
 
   // Ensure audio button is visible before clicking (especially on mobile)
   const audioBtn = page.getByTestId('reader-audio-button');

@@ -12,7 +12,7 @@ test('Journey Lexicon Test', async ({ page }) => {
   await expect(page).toHaveURL(/.*\/read\/.*/);
 
   // Wait for book to load
-  await page.waitForTimeout(2000);
+  await utils.waitForReaderLocated(page);
 
   // Open Audio Deck and switch to its Settings view.
   // The deck is a right-side Radix Sheet; its "Settings" footer tab

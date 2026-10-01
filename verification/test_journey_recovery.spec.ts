@@ -5,8 +5,8 @@ test("recovery flow", async ({ page }) => {
   console.log("Opening App...");
   await page.goto("http://localhost:5173");
 
-  // Wait for app to load
-  await page.waitForTimeout(3000);
+  // Wait for app to load: the library (whose header holds Settings) renders (was a fixed 3s sleep)
+  await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 15000 }).catch(() => {});
 
   // 2. Open Settings
   console.log("Opening Settings...");
@@ -33,9 +33,6 @@ test("recovery flow", async ({ page }) => {
   const createBtn = page.getByRole("button", { name: "Create Snapshot" });
   await expect(createBtn).toBeVisible();
   await createBtn.click();
-
-  // Wait for toast or list update
-  await page.waitForTimeout(2000);
 
   // 5. Verify Snapshot in List
   console.log("Verifying Snapshot...");

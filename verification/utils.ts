@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/rules-of-hooks */
 import { test as base, expect } from '@playwright/test';
-import type { Page, Frame } from '@playwright/test';
+import type { Page, Frame, Locator } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -78,11 +78,25 @@ interface VersicleTestApi {
   };
 }
 
+/** The fields of the TTS playback store (src/store/useTTSPlaybackStore.ts) specs read. */
+export interface TtsPlaybackView {
+  status: string;
+  isPlaying: boolean;
+  activeCfi: string | null;
+  currentIndex: number;
+  queue: readonly unknown[];
+}
+
 declare global {
   interface Window {
     __versicleTest?: VersicleTestApi;
+    /** The real store, exposed by src/main.tsx for verification reads. */
+    useTTSPlaybackStore?: { getState(): TtsPlaybackView };
   }
 }
+
+/** Fixture pages that have committed a main-frame navigation (see resetApp). */
+const navigatedPages = new WeakSet<Page>();
 
 export const test = base.extend<{ sanitizationDisabled: boolean }, { _suppressLogs: void }>({
   // Sanitization kill-switch injected before app boot. Historically forced ON
@@ -122,6 +136,11 @@ export const test = base.extend<{ sanitizationDisabled: boolean }, { _suppressLo
   page: async ({ page, sanitizationDisabled }, use, testInfo) => {
     page.setDefaultTimeout(10000);
     page.setDefaultNavigationTimeout(10000);
+    // resetApp's fast path needs "has this page ever navigated?" — the URL
+    // alone can't tell a fresh page from one sent back to about:blank.
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) navigatedPages.add(page);
+    });
 
     if (process.env.DEBUG_PAGE_LOGS) {
       page.on('console', (msg) => console.log(`PAGE LOG: ${msg.text()}`));
@@ -160,8 +179,138 @@ export const test = base.extend<{ sanitizationDisabled: boolean }, { _suppressLo
 
 export { expect };
 
+// ---------------------------------------------------------------------------
+// Reader-location waits: the deterministic replacements for "sleep, then hope
+// the reader has moved". epub.js updates the location only after a display
+// lands, so a changed CFI/section means the new content has rendered.
+//
+// Tolerant by design (they resolve false instead of throwing): each stands in
+// for a fixed sleep that never failed on its own, so the spec's subsequent
+// assertions stay the judge. The default 10s bound is longer than any sleep
+// they replace, so a slow run waits longer rather than racing ahead.
+// ---------------------------------------------------------------------------
+
+/** The reader's current start CFI (null before the first display). */
+export function currentCfi(page: Page): Promise<string | null> {
+  return page.evaluate(() => window.__versicleTest?.reader?.currentCfi?.() ?? null);
+}
+
+/** The section href the reader currently displays (null before the first display). */
+export function currentSectionHref(page: Page): Promise<string | null> {
+  return page.evaluate(() => window.__versicleTest?.reader?.currentHref?.() ?? null);
+}
+
+function settle(wait: Promise<unknown>): Promise<boolean> {
+  return wait.then(
+    () => true,
+    () => false,
+  );
+}
+
+/** Wait until the reader has displayed something (it reports a location). */
+export function waitForReaderLocated(page: Page, timeout = 10000): Promise<boolean> {
+  return settle(
+    page.waitForFunction(() => (window.__versicleTest?.reader?.currentCfi?.() ?? null) !== null, null, {
+      timeout,
+    }),
+  );
+}
+
+/** Wait until the reader location moved off `cfiBefore` (a page turn / display landed). */
+export function waitForCfiChange(page: Page, cfiBefore: string | null, timeout = 10000): Promise<boolean> {
+  return settle(
+    page.waitForFunction(
+      (before) => {
+        const cfi = window.__versicleTest?.reader?.currentCfi?.() ?? null;
+        return cfi !== null && cfi !== before;
+      },
+      cfiBefore,
+      { timeout },
+    ),
+  );
+}
+
+/** Wait until the reader displays a section other than `hrefBefore` (a chapter jump rendered). */
+export function waitForSectionChange(page: Page, hrefBefore: string | null, timeout = 10000): Promise<boolean> {
+  return settle(
+    page.waitForFunction(
+      (before) => {
+        const href = window.__versicleTest?.reader?.currentHref?.() ?? null;
+        return href !== null && href !== before;
+      },
+      hrefBefore,
+      { timeout },
+    ),
+  );
+}
+
+/**
+ * Wait until the TTS playback store satisfies `predicate` — e.g. a command
+ * issued through the UI has landed. Tolerant like the reader waits above.
+ * `predicate` is inlined into the page, so it must be self-contained; pass
+ * values it needs (JSON-serializable) as `arg`.
+ */
+export function waitForTtsState<A = null>(
+  page: Page,
+  predicate: (state: TtsPlaybackView, arg: A) => boolean,
+  arg?: A,
+  timeout = 10000,
+): Promise<boolean> {
+  const call = `(${predicate.toString()})(s, ${JSON.stringify(arg ?? null)})`;
+  return settle(
+    page.waitForFunction(
+      `(() => { const s = window.useTTSPlaybackStore?.getState?.(); return !!s && ${call}; })()`,
+      null,
+      { timeout },
+    ),
+  );
+}
+
+/**
+ * Wait until the TTS queue belongs to the section the reader displays. While
+ * TTS is idle, a chapter change reloads the queue asynchronously (useTTS →
+ * loadSectionBySectionId, in the TTS worker), so Play pressed before it lands
+ * plays the PREVIOUS section — from the cover, a one-item "no text" filler
+ * with no CFI, which never records a lastPlayedCfi. While TTS is playing the
+ * queue deliberately stays put, so there is nothing to wait for. Compares the
+ * spine step of the reader CFI with the first queue item that has a CFI
+ * (preroll and empty-section items carry none). Tolerant.
+ */
+export function waitForTtsQueueOnCurrentSection(page: Page, timeout = 10000): Promise<boolean> {
+  return settle(
+    page.waitForFunction(
+      () => {
+        const tts = window.useTTSPlaybackStore?.getState?.();
+        if (!tts) return false;
+        if (tts.isPlaying) return true;
+        const readerCfi = window.__versicleTest?.reader?.currentCfi?.() ?? null;
+        const head = (tts.queue as ReadonlyArray<{ cfi?: string | null }>).find((item) => item.cfi)?.cfi;
+        if (!readerCfi || !head) return false;
+        const spineStep = (cfi: string) => cfi.slice(0, cfi.indexOf('!'));
+        return spineStep(readerCfi) === spineStep(head);
+      },
+      null,
+      { timeout },
+    ),
+  );
+}
+
+/** A snapshot of the TTS playback store (null before the app exposes it). */
+export function ttsState(page: Page): Promise<TtsPlaybackView | null> {
+  return page.evaluate(() => {
+    const s = window.useTTSPlaybackStore?.getState?.();
+    return s
+      ? { status: s.status, isPlaying: s.isPlaying, activeCfi: s.activeCfi, currentIndex: s.currentIndex, queue: s.queue }
+      : null;
+  });
+}
+
 export async function navigateToChapter(page: Page, chapterId: string = 'toc-item-6') {
   console.log(`Navigating to chapter: ${chapterId}...`);
+  // Callers often navigate straight after opening a book: let the first
+  // display land so the section it reports is a real "before" to compare.
+  await waitForReaderLocated(page);
+  const hrefBefore = await currentSectionHref(page);
   await page.getByTestId('reader-toc-button').click({ noWaitAfter: true });
   // Wait for sidebar and items to be ready before clicking (WebKit animations can be slower)
   await page.waitForSelector('[data-testid="reader-toc-sidebar"]', { state: 'visible', timeout: 8000 }).catch(() => {});
@@ -175,10 +324,37 @@ export async function navigateToChapter(page: Page, chapterId: string = 'toc-ite
   await page.locator('body').click({ position: { x: 100, y: 100 } });
 
   await expect(page.getByTestId('compass-pill-active')).toBeVisible();
-  await page.waitForTimeout(1000);
+  // Was a fixed 1s sleep, which covered two things: the chapter's display
+  // and the TTS queue reload that follows it (callers often press Play next).
+  // (A TOC entry inside the current section never changes the href; the
+  // tolerant wait just runs out and moves on.)
+  await waitForSectionChange(page, hrefBefore);
+  await waitForTtsQueueOnCurrentSection(page);
+}
+
+/**
+ * True when `page` has never navigated and is alone in its browser context.
+ * Playwright hands every test a brand-new context, and a new context's
+ * storage — IndexedDB, localStorage, Cache Storage, service-worker
+ * registrations — starts empty, so such a page has no app state to wipe.
+ */
+function isPristinePage(page: Page): boolean {
+  return (
+    !navigatedPages.has(page) && page.url() === 'about:blank' && page.context().pages().length === 1
+  );
 }
 
 export async function resetApp(page: Page) {
+  if (isPristinePage(page)) {
+    // Fast path (almost every call: specs reset first thing in the test). A
+    // first navigation in an empty context IS the post-wipe first boot the
+    // path below works to reach, so skip its two extra page loads and the
+    // service-worker unregistration (a 2s race on WebKit).
+    await page.goto('/', { timeout: 10000 });
+    await waitForLibraryLoaded(page);
+    return;
+  }
+
   await page.goto('/', { timeout: 10000 });
   await page.reload();
 
@@ -241,7 +417,11 @@ export async function resetApp(page: Page) {
   });
 
   await page.reload();
+  await waitForLibraryLoaded(page);
+}
 
+/** Wait until the library view has settled into a usable state after a (re)load. */
+async function waitForLibraryLoaded(page: Page) {
   try {
     try {
       await page.waitForSelector('text=Updating Library', { state: 'detached', timeout: 10000 });
@@ -414,6 +594,7 @@ export async function openAudioSettings(page: Page) {
   await expect(page.getByTestId('tts-panel')).toBeVisible();
   const btn = page.getByTestId('tts-settings-tab-btn');
   await btn.scrollIntoViewIfNeeded();
+  await waitForSheetSettled(btn);
   // On the mobile (375px) Sheet the scrollable tts-queue body overlaps the
   // footer tab's centerpoint, so Playwright's actionability check reports
   // "tts-queue intercepts pointer events" on the (visible, enabled, stable)
@@ -431,8 +612,19 @@ export async function switchAudioPanelView(page: Page, view: 'queue' | 'settings
   const btn = page.getByTestId(testId);
   await btn.waitFor({ state: 'visible' });
   await btn.scrollIntoViewIfNeeded();
+  await waitForSheetSettled(btn);
   // Force past the mobile Sheet's tts-queue centerpoint interception (see openAudioSettings).
   await btn.click({ force: true });
+}
+
+/**
+ * A forced click skips Playwright's actionability waits, so before one on the
+ * audio deck's footer let the Sheet finish sliding in: until it does, the
+ * button can sit (stably) outside the viewport and the click fails with
+ * "Element is outside of the viewport" (seen under parallel load). Tolerant.
+ */
+async function waitForSheetSettled(btn: Locator) {
+  await expect(btn).toBeInViewport({ ratio: 1, timeout: 5000 }).catch(() => {});
 }
 
 /**

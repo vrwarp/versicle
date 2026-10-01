@@ -23,17 +23,20 @@ test('Journey Long Reading Test', async ({ page }) => {
 
   // 2. Navigate to Chapter 1
   console.log('Navigating to Chapter 1...');
+  await utils.waitForReaderLocated(page);
+  const hrefBeforeToc = await utils.currentSectionHref(page);
   await page.getByTestId('reader-toc-button').click();
   await page.getByTestId('toc-item-2').click();
   await expect(page.getByTestId('reader-toc-sidebar')).not.toBeVisible();
 
   // Wait for content
-  await page.waitForTimeout(2000);
+  await utils.waitForSectionChange(page, hrefBeforeToc);
 
   // 3. Read (Next Page)
   console.log('Reading (Next Page)...');
+  const cfiBeforeTurn = await utils.currentCfi(page);
   await page.keyboard.press('ArrowRight');
-  await page.waitForTimeout(2000);
+  await utils.waitForCfiChange(page, cfiBeforeTurn);
 
   // 4. Highlight text
   console.log('Creating Highlight...');
@@ -79,7 +82,10 @@ test('Journey Long Reading Test', async ({ page }) => {
     await expect(page.getByTestId('compass-pill-annotation')).toBeVisible({ timeout: 5000 });
     await page.getByTestId('popover-color-yellow').click();
     await expect(page.getByTestId('compass-pill-annotation')).not.toBeVisible();
-    await page.waitForTimeout(1000);
+    // Let the highlight draw before the screenshot.
+    await page
+      .waitForFunction(() => (window.__versicleTest?.reader?.highlightCount('annotation') ?? 0) > 0, null, { timeout: 5000 })
+      .catch(() => {});
   }
 
   await utils.captureScreenshot(page, 'long_journey_02_session1_highlight');
@@ -103,15 +109,17 @@ test('Journey Long Reading Test', async ({ page }) => {
   await expect(page.getByTestId('reader-back-button')).toBeVisible({ timeout: 10000 });
 
   // Wait for load
-  await page.waitForTimeout(3000);
+  await utils.waitForReaderLocated(page);
   await utils.captureScreenshot(page, 'long_journey_04_session2_resumed');
 
   // 2. Navigate to Chapter 3 (toc-item-4)
   console.log('Navigating to Chapter 3...');
+  const hrefBeforeCh3 = await utils.currentSectionHref(page);
   await page.getByTestId('reader-toc-button').click();
   await page.getByTestId('toc-item-4').click();
   await expect(page.getByTestId('reader-toc-sidebar')).not.toBeVisible();
-  await page.waitForTimeout(3000); // Wait for render + dwell
+  // Wait for render (paginated history records a turn without any dwell)
+  await utils.waitForSectionChange(page, hrefBeforeCh3);
 
   // 3. Check History
   console.log('Checking History...');
@@ -151,7 +159,10 @@ test('Journey Long Reading Test', async ({ page }) => {
   console.log('Reloading page...');
   await page.reload();
   await expect(page.getByTestId('reader-back-button')).toBeVisible({ timeout: 10000 });
-  await page.waitForTimeout(3000);
+  await utils.waitForReaderLocated(page);
+  await page
+    .waitForFunction(() => (window.__versicleTest?.reader?.highlightCount('annotation') ?? 0) > 0, null, { timeout: 5000 })
+    .catch(() => {});
 
   // 2. Verify Highlight is present
   // Engine-port test handle (Phase 6): the raw __reader_added_annotations_count

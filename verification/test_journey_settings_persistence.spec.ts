@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook, captureScreenshot, openAudioSettings } from "./utils";
+import { resetApp, ensureLibraryWithBook, captureScreenshot, openAudioSettings, waitForReaderLocated } from "./utils";
 
 test("settings persistence", async ({ page }) => {
   console.log("Starting Settings Persistence Journey...");
@@ -9,7 +9,7 @@ test("settings persistence", async ({ page }) => {
   // Open Book
   await page.locator("[data-testid^='book-card-']").first().click();
   await expect(page).toHaveURL(/.*\/read\/.*/);
-  await page.waitForTimeout(2000);
+  await waitForReaderLocated(page);
 
   // 1. Open Audio Panel and switch to its Settings view.
   // The audio deck is a right-side Radix Sheet; its "Settings" footer tab
@@ -29,9 +29,8 @@ test("settings persistence", async ({ page }) => {
   // Get current state
   const isChecked = (await switchLocator.getAttribute("aria-checked")) === "true";
 
-  // Toggle it
+  // Toggle it (tts-settings persists synchronously to localStorage)
   await switchLocator.click();
-  await page.waitForTimeout(500);
 
   // Verify it flipped
   const expectedState = isChecked ? "false" : "true";
@@ -42,7 +41,7 @@ test("settings persistence", async ({ page }) => {
   // 3. Reload
   console.log("Reloading...");
   await page.reload();
-  await page.waitForTimeout(2000);
+  await waitForReaderLocated(page);
 
   // 4. Verify Persistence
   console.log("Verifying Persistence...");

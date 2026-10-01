@@ -88,7 +88,6 @@ test('Selection Popover Reappearance Test', async ({ page }) => {
 
   // 2. Second Selection (Different text) — verifies the popover reappears after a highlight
   console.log('Step 2: Second Selection');
-  await page.waitForTimeout(500);
 
   const ok2 = await selectTextInFrame(frame, 2);
   expect(ok2).toBeTruthy();

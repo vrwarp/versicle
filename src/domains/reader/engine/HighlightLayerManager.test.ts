@@ -149,51 +149,51 @@ describe('HighlightLayerManager', () => {
   });
 });
 
+// The REAL epub.js Annotations store over a stub rendition, for the
+// regressions below. `mounted` is the manager's views; render() fires epub.js'
+// render hook (Annotations.inject) the way a (re)display does, swallowing a
+// throw the way epub.js' Hook.trigger does.
+interface StubView {
+  index: number;
+  pane?: undefined; // no marks pane: the orphan sweep skips the view
+  highlight(cfi: string): void;
+  unhighlight(cfi: string): void;
+}
+
+const setup = () => {
+  let mounted: StubView[] = [];
+  const renderHooks: Array<(view: StubView) => void> = [];
+  const drawn: string[] = [];
+  const annotations = new EpubAnnotations({
+    hooks: {
+      render: { register: (hook: (view: StubView) => void) => renderHooks.push(hook) },
+      unloaded: { register: () => {} },
+    },
+    views: () => mounted,
+  });
+  const makeView = (): StubView => ({
+    index: 1, // the spine position every CFI below points into (/6/4)
+    highlight: (cfi) => { drawn.push(cfi); },
+    unhighlight: () => {},
+  });
+  return {
+    manager: new HighlightLayerManager({ annotations, views: () => mounted }),
+    drawn,
+    mount: () => { mounted = [makeView()]; },
+    tearDown: () => { mounted = []; },
+    render: () => {
+      const view = makeView();
+      mounted = [view];
+      for (const hook of renderHooks) {
+        try { hook(view); } catch { /* Hook.trigger logs and moves on */ }
+      }
+    },
+  };
+};
+
 describe('regression: TTS highlight never draws after a remove with no views mounted (Android unlock)', () => {
-  // The REAL epub.js Annotations store over a stub rendition. `mounted` is
-  // the manager's views; render() fires epub.js' render hook
-  // (Annotations.inject) the way a (re)display does, swallowing a throw the
-  // way epub.js' Hook.trigger does.
   const BEFORE_SLEEP = 'epubcfi(/6/4!/4/2/1:0)';
   const ON_UNLOCK = 'epubcfi(/6/4!/4/8/1:0)';
-
-  interface StubView {
-    index: number;
-    pane?: undefined; // no marks pane: the orphan sweep skips the view
-    highlight(cfi: string): void;
-    unhighlight(cfi: string): void;
-  }
-
-  const setup = () => {
-    let mounted: StubView[] = [];
-    const renderHooks: Array<(view: StubView) => void> = [];
-    const drawn: string[] = [];
-    const annotations = new EpubAnnotations({
-      hooks: {
-        render: { register: (hook: (view: StubView) => void) => renderHooks.push(hook) },
-        unloaded: { register: () => {} },
-      },
-      views: () => mounted,
-    });
-    const makeView = (): StubView => ({
-      index: 1, // the spine position both CFIs point into
-      highlight: (cfi) => { drawn.push(cfi); },
-      unhighlight: () => {},
-    });
-    return {
-      manager: new HighlightLayerManager({ annotations, views: () => mounted }),
-      drawn,
-      mount: () => { mounted = [makeView()]; },
-      tearDown: () => { mounted = []; },
-      render: () => {
-        const view = makeView();
-        mounted = [view];
-        for (const hook of renderHooks) {
-          try { hook(view); } catch { /* Hook.trigger logs and moves on */ }
-        }
-      },
-    };
-  };
 
   it('draws the highlight re-added on unlock when its section renders again', () => {
     const reader = setup();
@@ -210,5 +210,29 @@ describe('regression: TTS highlight never draws after a remove with no views mou
     reader.render(); // the queued re-display lands
 
     expect(reader.drawn).toEqual([ON_UNLOCK]);
+  });
+});
+
+describe('regression: stopping TTS erased the reading-history highlight on the sentence it left', () => {
+  // A pause records the spoken sentence as lastPlayedCfi and the history layer
+  // draws it while the TTS highlight still sits on that same sentence. epub.js
+  // keys both by `cfi + 'highlight'`, so the stop's TTS remove used to delete
+  // the history mark too, while the history layer still believed it was drawn
+  // (surfaced by the E2E suite under parallel load).
+  const SPOKEN = 'epubcfi(/6/4!/4/2/1:0)';
+
+  it('keeps drawing the history mark after the TTS mark on the same range is removed', () => {
+    const reader = setup();
+    reader.mount();
+    reader.manager.add('tts', SPOKEN); // the sentence being read
+    reader.manager.add('history', SPOKEN, { onClick: null }); // the pause records it
+    reader.manager.remove('tts', SPOKEN); // stop clears the TTS highlight
+
+    reader.drawn.length = 0;
+    reader.render(); // the section's next display (e.g. turning back to the page)
+
+    expect(reader.drawn).toEqual([SPOKEN]);
+    expect(reader.manager.count('history')).toBe(1);
+    expect(reader.manager.count('tts')).toBe(0);
   });
 });

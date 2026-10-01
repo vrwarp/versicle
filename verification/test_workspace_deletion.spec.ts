@@ -54,8 +54,9 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
   await expect(page.getByText(wsName).first()).toBeVisible();
   console.log(`Created workspace: ${wsName}`);
 
-  // Wait for the workspaces block to refresh and become stable
-  await page.waitForTimeout(1000);
+  // Wait for the workspaces block to refresh and become stable: the list re-fetch
+  // after creation renders the new workspace's row (was a fixed 1s sleep)
+  await expect(page.locator("div.text-sm.bg-muted\\/50").filter({ hasText: wsName }).first()).toBeVisible({ timeout: 5000 }).catch(() => {});
 
   // Get the workspace ID
   const wsId = await page.evaluate(() => JSON.parse(localStorage.getItem('sync-storage') || '{}').state.activeWorkspaceId);
@@ -83,7 +84,8 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
   await page.getByRole("button", { name: "Create" }).click();
   await expect(page.getByText('Safe Workspace').first()).toBeVisible();
 
-  await page.waitForTimeout(2000);
+  // Let the list re-fetch render the new row before the screenshot (was a fixed 2s sleep)
+  await expect(page.locator("div.text-sm.bg-muted\\/50").filter({ hasText: 'Safe Workspace' }).first()).toBeVisible({ timeout: 5000 }).catch(() => {});
   await page.screenshot({ path: path.join(__dirname, "screenshots", "deletion_list.png") });
   console.log("Screenshot saved: deletion_list.png");
 
@@ -106,7 +108,6 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
   // overlap positioning (a force-click at a covered centerpoint silently no-ops).
   await deleteBtn.dispatchEvent("click");
   await acceptConfirm(page);
-  await page.waitForTimeout(1000);
 
   try {
     await expect(page.getByText(`Workspace "${wsName}" deleted.`)).toBeVisible({ timeout: 5000 });

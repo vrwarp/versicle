@@ -36,7 +36,9 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
     const queue = (window as any /* eslint-disable-line @typescript-eslint/no-explicit-any */).useTTSPlaybackStore.getState().queue;
     return queue.length > 0;
   }, undefined, { timeout: 15000 });
-  await page.waitForTimeout(500); // Allow state to fully settle
+  // Settle on the chapter's own queue: the cover leaves a one-item "no text"
+  // filler (no CFI) that already satisfies the check above.
+  await utils.waitForTtsState(page, (s) => !!(s.queue[0] as { cfi?: string | null } | undefined)?.cfi);
 
   // --- PART 1: Simulate Gesture ---
   console.log('Simulating Pause/Play gesture...');
@@ -45,9 +47,6 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   await page.getByTestId('compass-pill-active').getByLabel('Play').click();
   await waitPlaying();
   await expect(page.getByTestId('compass-pill-active').getByLabel('Pause')).toBeVisible({ timeout: 10000 });
-
-  // Wait for a sentence to be spoken to advance index
-  await page.waitForTimeout(1000);
 
   // Pause
   await page.getByTestId('compass-pill-active').getByLabel('Pause').click();
@@ -116,7 +115,6 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   // Pause then Play within the Dragnet window (≤5s) to capture the second bookmark.
   await page.evaluate(() => window.__versicleTest?.tts.pause());
   await waitPaused();
-  await page.waitForTimeout(300);
   await page.evaluate(() => window.__versicleTest?.tts.play());
   await waitPlaying();
 

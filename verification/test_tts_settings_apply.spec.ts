@@ -1,4 +1,4 @@
-import { test, expect, captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter, openAudioSettings, switchAudioPanelView } from "./utils";
+import { test, expect, captureScreenshot, resetApp, ensureLibraryWithBook, navigateToChapter, openAudioSettings, switchAudioPanelView, waitForTtsState } from "./utils";
 
 test("tts speed setting applies", async ({ page }) => {
   console.log("Starting Speed Setting Test...");
@@ -49,8 +49,8 @@ test("tts speed setting applies", async ({ page }) => {
   console.log("Starting playback to verify speed...");
   await page.getByTestId("tts-play-pause-button").click();
 
-  // Check the debug element for rate
-  await page.waitForTimeout(2000);
+  // Check the debug element for rate (set by speak(), which precedes 'playing')
+  await waitForTtsState(page, (s) => s.status === "playing");
   const debugEl = page.locator("#tts-debug");
   if (await debugEl.isVisible()) {
     const rateAttr = await debugEl.getAttribute("data-rate");

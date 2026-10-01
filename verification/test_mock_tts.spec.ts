@@ -3,8 +3,6 @@ import { test, expect } from "./utils";
 
 async function setupMockTts(page: Page) {
   await page.goto("/");
-  // Wait for initial load
-  await page.waitForTimeout(1000);
 
   // Wait for voices to load (signifies polyfill is active)
   try {

@@ -16,7 +16,8 @@ test("verify bible toggle settings tab", async ({ page }) => {
   // Go to Dictionary tab
   await page.getByRole("tab", { name: "Dictionary" }).scrollIntoViewIfNeeded().catch(() => {});
   await page.getByRole("tab", { name: "Dictionary" }).click();
-  await page.waitForTimeout(1000);
+  // The lazy Dictionary panel has rendered once its Bible toggle is up.
+  await page.locator("#bible-lexicon-toggle").waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
 
   // Screenshot the Dictionary tab showing the new toggle
   await captureScreenshot(page, "bible_toggle");

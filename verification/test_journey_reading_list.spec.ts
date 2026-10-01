@@ -1,5 +1,5 @@
 import { test, expect } from "./utils";
-import { resetApp, captureScreenshot } from "./utils";
+import { resetApp, captureScreenshot, waitForReaderLocated, currentCfi, waitForCfiChange } from "./utils";
 
 test("reading list journey", async ({ page }) => {
   console.log("Starting Reading List Journey...");
@@ -19,10 +19,12 @@ test("reading list journey", async ({ page }) => {
 
   // Advance a page to record progress
   console.log("Reading...");
-  await page.waitForTimeout(2000);
+  await waitForReaderLocated(page);
+  const cfiBefore = await currentCfi(page);
   await page.keyboard.press("ArrowRight");
-  // Wait for debounce save (1s) + margin
-  await page.waitForTimeout(2000);
+  // Wait for the page turn to land; leaving the reader (below) flushes the
+  // recorder's pending save synchronously on unmount.
+  await waitForCfiChange(page, cfiBefore);
 
   // 3. Go back to Library
   await page.getByTestId("reader-back-button").click();

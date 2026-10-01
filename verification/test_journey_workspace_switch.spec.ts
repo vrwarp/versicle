@@ -10,11 +10,12 @@ test("journey workspace switch", async ({ page }) => {
   await page.addInitScript("window.__VERSICLE_FIRESTORE_DEBOUNCE_MS__ = 20;");
   await page.goto("/");
 
-  // Bypass the intro dialog if it appears
-  try {
-    await page.getByRole("button", { name: "Continue" }).click({ timeout: 2000 });
-  } catch {
-    // Ignore
+  // Bypass an intro dialog if one is up. The app no longer shows one at boot
+  // (its only "Continue" buttons are action confirms), so probe without the
+  // old 2s click timeout that every run burned.
+  const intro = page.getByRole("button", { name: "Continue" });
+  if (await intro.isVisible()) {
+    await intro.click();
   }
 
   // Open Global Settings. Settings is now the Radix-Tabs SettingsShell at /settings/:tab

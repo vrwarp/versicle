@@ -56,11 +56,9 @@ flowchart TD
     B --> C{"Parse flags"}
     C -->|"--logs"| D["DEBUG_PAGE_LOGS=1"]
     C -->|"--probe"| E["TTS_IDB_PROBE=1"]
-    C -->|"--project=webkit"| F["Auto-add --workers=1"]
     C -->|"No --project"| G["Append --project=desktop --project=mobile"]
     D --> H["docker build -t versicle-verify -f Dockerfile.verification ."]
     E --> H
-    F --> H
     G --> H
     H --> I["docker run --rm --ipc=host -v screenshots:/app/verification/screenshots -e CI=1"]
     I --> J["docker_entrypoint.sh"]
@@ -87,7 +85,6 @@ handing the remainder to `docker run … versicle-verify`:
 | `--help` | Print LLM.txt-format usage and exit (no Docker build) |
 | `--logs` | Set `-e DEBUG_PAGE_LOGS=1` in the container; enables `page.on('console')` forwarding in the `utils.ts` page fixture |
 | `--probe` | Set `-e TTS_IDB_PROBE=1`; causes `utils.ts` to inject `_idb_probe.js` into every page and dump its summary after each test |
-| `--project=webkit` | Detected by `*webkit*` pattern; auto-appends `--workers=1` unless the caller already set `--workers` |
 | *(no `--project`)* | Appends `--project=desktop --project=mobile` (webkit excluded from the default run) |
 
 All other arguments pass through to `npx playwright test` unchanged, including
@@ -258,27 +255,33 @@ that retries absorb:
    These failures are environmental, not deterministic — the tests themselves
    pass in isolation.
 
-2. **CPU/IO contention.** Full-suite WebKit runs keep the project parallel for
-   runtime efficiency, so multiple WebKit worker processes contend for the same
-   CPU/IO resources. This intermittently lags a reader or library load enough
-   to miss a timing-sensitive assertion.
+2. **CPU/IO contention.** WebKit runs one test at a time, but a run that mixes
+   projects shares the machine with the parallel Chromium workers. That load
+   intermittently lags a reader or library load enough to miss a
+   timing-sensitive assertion.
 
-### CI=1 serial mode
+### Workers: parallel Chromium, one-at-a-time WebKit
 
-`playwright.config.ts` sets `workers: process.env.CI ? 1 : undefined`. The
-`run_verification.sh` script passes `-e CI=1` to the container. Combined with
-WebKit's auto-serialization from the `--workers=1` flag added by the script,
-this means:
+`run_verification.sh` passes `-e CI=1` to the container, and
+`playwright.config.ts` maps `CI` to **3 workers** (`workers: process.env.CI ?
+3 : undefined`; without `CI` Playwright's own default of half the cores
+applies). The `webkit` project carries its own `workers: 1`, so:
 
-- **Desktop and mobile**: serial within the container (one Playwright worker
-  process), which is safe because `--ipc=host` ensures no shared-memory
-  starvation.
-- **WebKit** (when explicitly targeted): forced to one worker regardless of CI
-  by the script, then again by CI=1 — doubly serial, which is the intended
-  behavior.
+- **Desktop and mobile**: 3 tests at a time, across both projects when a run
+  includes both. Safe because tests share nothing — each gets a fresh browser
+  context with its own storage and service worker, the preview server only
+  serves static files, and the multi-device sync journeys hand state between
+  their own contexts.
+- **WebKit**: one test at a time even inside a mixed run (parallel WebKit
+  instances contend for CPU/IO and flake the timing-sensitive TTS journeys).
+  This used to be a `--workers=1` the script appended whenever an argument
+  mentioned webkit — which also serialized any Chromium project in the same
+  run.
 
-Parallelism is the local-dev default (no `CI` env set, no `--workers` override)
-to keep local iteration fast.
+`--workers=N` on the command line overrides both (`--workers=1` for
+debugging). Until 2026-09 the whole suite ran serially under `CI=1`; the
+before/after timings are in [TESTING.md](../../TESTING.md) §"Parallelism and
+deterministic waits".
 
 ---
 
@@ -433,11 +436,11 @@ Every page receives:
 
 | Function | Purpose |
 |----------|---------|
-| `resetApp(page)` | Full data wipe + reload. Prefers `window.__versicleTest.resetApp()` + service worker unregister; falls back to manual IDB deletion. |
+| `resetApp(page)` | Lands on a first boot with empty storage. A page that has never navigated (the usual case: a test's own fresh context, whose storage starts empty) needs just one navigation; otherwise it does the full wipe + reload, preferring `window.__versicleTest.resetApp()` + service worker unregister and falling back to manual IDB deletion. |
 | `waitForPersistedWrites(page)` | Calls `window.__versicleTest.flushPersistence()`; falls back to 1500ms sleep if API unavailable. |
 | `ensureLibraryWithBook(page)` | Idempotent: if Alice in Wonderland is already present, returns immediately. Otherwise clicks "Load Demo Book" and waits for the card. |
 | `captureScreenshot(page, name, hideTtsStatus?)` | Saves to `verification/screenshots/${name}_{mobile,desktop}.png`. Optionally hides the TTS debug overlay (`#tts-debug`) to avoid it appearing in screenshots. |
-| `navigateToChapter(page, chapterId?)` | Opens the TOC, scrolls the target item into view (needed for off-screen items), clicks it, waits for the TOC to close, and waits for the CompassPill to appear. |
+| `navigateToChapter(page, chapterId?)` | Opens the TOC, scrolls the target item into view (needed for off-screen items), clicks it, waits for the TOC to close and the CompassPill to appear, then for the reader to report the new section (`waitForSectionChange`). |
 | `getReaderFrame(page)` | Returns the epubjs iframe Frame (matching by name `epubjs` or blob URL), or null. |
 | `acceptConfirm(page)` | Clicks the Radix `ConfirmDialog` confirm button (replaces legacy `page.on('dialog')` for the `window.confirm`-removed flows). |
 | `openSettings(page)` | Clicks the settings button and waits for the settings tablist. |
@@ -445,7 +448,11 @@ Every page receives:
 | `openAudioSettings(page)` | Opens audio deck, scrolls the settings tab into view, force-clicks it (overcomes the mobile Sheet's tts-queue centerpoint interception). |
 | `switchAudioPanelView(page, view)` | Switches audio deck between "Up Next" and "Settings" views; same force-click pattern. |
 | `closeSettings(page)` | Force-clicks the close button and waits for the tablist to detach. |
-| `waitForReaderReady(page, opts?)` | Polls `window.__versicleTest.reader.isReady()`. Optional `{locations: true}` also waits for `locationsTotal() > 0`. |
+| `waitForReaderReady(page, opts?)` | Polls `window.__versicleTest.reader.isReady()`, then for a first rendered location. Optional `{locations: true}` also waits for `locationsTotal() > 0`. Strict (throws after 30s). |
+| `waitForReaderLocated(page)` | Tolerant: the reader reports any location (its first display landed). |
+| `currentCfi(page)` / `waitForCfiChange(page, before)` | Tolerant: the reader's CFI moved off `before` — a page turn or relocation landed. |
+| `currentSectionHref(page)` / `waitForSectionChange(page, before)` | Tolerant: the reader displays a section other than `before` — a chapter jump rendered. |
+| `ttsState(page)` / `waitForTtsState(page, predicate, arg?)` | Snapshot of the TTS playback store; tolerant wait until it satisfies a (self-contained) predicate — a play/pause/skip/jump landed. |
 
 ---
 
@@ -892,41 +899,45 @@ A11Y_ENFORCE=1 ./run_verification.sh --project=desktop --grep @a11y
 
 ## 13. CI integration
 
-The Docker E2E lane is deliberately **not a PR gate**. Per [TESTING.md](../../TESTING.md):
-
-> In CI the Docker E2E lane is deliberately not a PR gate: it runs nightly +
-> on `workflow_dispatch` via `.github/workflows/e2e-verification.yml`
-> (experimental until proven stable on hosted runners).
+The Docker E2E lane is an **informational** lane, not a required check. Per
+[TESTING.md](../../TESTING.md), the desktop and mobile projects run on every
+PR (no branch protection requires them) and WebKit runs nightly + on
+`workflow_dispatch`.
 
 [.github/workflows/e2e-verification.yml](../../.github/workflows/e2e-verification.yml)
-runs three parallel jobs, one per project, via a matrix strategy:
+runs one job per project via a matrix of `include` entries; the nightly
+matrix splits WebKit — which runs one test at a time — into three
+`--shard` jobs on separate runners:
 
 ```yaml
 strategy:
   fail-fast: false
   matrix:
-    project: [desktop, mobile, webkit]
+    # PR: desktop + mobile. Nightly/manual: + webkit shards 1/3, 2/3, 3/3.
+    include: ${{ fromJSON(github.event_name == 'pull_request' && '[...]' || '[...]') }}
 steps:
   - uses: actions/checkout@v4
   - name: Run verification suite (Docker)
-    run: ./run_verification.sh --project=${{ matrix.project }}
+    run: ./run_verification.sh --project=${{ matrix.project }} ${{ matrix.shard && format('--shard={0}', matrix.shard) || '' }}
   - name: Upload screenshots
     if: always()
     uses: actions/upload-artifact@v4
     with:
-      name: verification-screenshots-${{ matrix.project }}
+      name: verification-screenshots-${{ matrix.slug || matrix.project }}
       path: verification/screenshots/
       retention-days: 14
 ```
 
 `fail-fast: false` ensures that a WebKit failure does not cancel the desktop
 and mobile runs. Screenshots are uploaded unconditionally (`if: always()`) as
-14-day artifacts, providing visual evidence even from failing runs. The per-job
+14-day artifacts, providing visual evidence even from failing runs; each
+WebKit shard uploads its own (`slug` keeps the names unique). The per-job
 `timeout-minutes: 90` covers the worst-case combined Docker build + suite run
 time.
 
 The `run_verification.sh` script passes `-e CI=1` to the container, which:
-- Forces `workers: 1` in `playwright.config.ts` (serial execution)
+- Selects 3 workers in `playwright.config.ts` (the webkit project keeps its
+  own `workers: 1`)
 - Enables retries: 2 (global) and 3 (WebKit)
 - Forbids `test.only` (the `forbidOnly: !!process.env.CI` config flag)
 
@@ -970,9 +981,11 @@ import * as utils from './utils';
 ```
 
 **Reset state before each scenario.** Unless the spec is explicitly testing
-persistence across a reload, call `await utils.resetApp(page)` at the start.
-This calls `window.__versicleTest.resetApp()` (preferred) or the legacy IDB
-deletion fallback, followed by a reload and library-ready wait.
+persistence across a reload, call `await utils.resetApp(page)` at the start —
+before any navigation of your own. On the test's fresh page that is a single
+navigation plus the library-ready wait; after the page has navigated it falls
+back to `window.__versicleTest.resetApp()` (or the legacy IDB deletion) and a
+reload, which costs two extra page loads.
 
 **Use `waitForPersistedWrites` before reloads.** Any spec that asserts "X
 survives a reload" must call `await utils.waitForPersistedWrites(page)` before
@@ -983,12 +996,21 @@ and the 200ms y-idb write debounce deterministically.
 and copy changes. `data-testid` attributes are a first-class authoring surface
 in Versicle components.
 
-**Avoid fixed `page.waitForTimeout()` sleeps.** The existing codebase has some
-residual sleeps, but they represent technical debt. New specs should use:
-- `page.waitForFunction()` for store-state polls
-- `waitForReaderReady()` for the reader engine
-- `waitForPersistedWrites()` for IDB
+**Avoid fixed `page.waitForTimeout()` sleeps.** The suite runs in parallel,
+so a sleep that was "long enough" on an idle machine is a flake under load —
+and on a fast run it is pure dead time (sleeps were ~36% of the suite's
+runtime before the 2026-09 cleanup). Wait on the state you need:
+- `waitForReaderReady()` / `waitForReaderLocated()` for the reader engine
+- `waitForCfiChange()` for a page turn, `waitForSectionChange()` for a
+  chapter jump (capture `currentCfi()` / `currentSectionHref()` first)
+- `waitForTtsState()` for a TTS command landing (play, pause, skip, jump)
+- `waitForPersistedWrites()` for IDB, before any reload that must keep state
+- `page.waitForFunction()` / `expect.poll()` for other store-state polls
 - Playwright's built-in auto-waiting on `expect()` assertions
+
+A sleep is still right where elapsed time is the scenario — a dwell the app
+requires, a "nothing happens" window before a negative assertion, audio that
+must play for a while. Say so in a comment next to it.
 
 **Mock Firestore for sync scenarios.** Set `__VERSICLE_MOCK_FIRESTORE__` via
 `page.addInitScript` before `page.goto()`. The mock provider uses

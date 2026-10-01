@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook, captureScreenshot, navigateToChapter, getReaderFrame } from "./utils";
+import { resetApp, ensureLibraryWithBook, captureScreenshot, navigateToChapter, getReaderFrame, waitForReaderReady } from "./utils";
 import type { Frame } from "@playwright/test";
 
 async function waitForReaderFrame(page: Page): Promise<Frame> {
@@ -23,7 +23,7 @@ test("visual settings journey", async ({ page }) => {
   // Open Book
   await page.locator("[data-testid^='book-card-']").first().click();
   await expect(page).toHaveURL(/.*\/read\/.*/);
-  await page.waitForTimeout(2000);
+  await waitForReaderReady(page);
 
   // Navigate to text page first (Chapter 5)
   console.log("Navigating to text page via TOC...");
@@ -56,7 +56,10 @@ test("visual settings journey", async ({ page }) => {
   console.log("Testing Theme Switching (Sepia)...");
   const sepiaBtn = page.locator('button[aria-label="Select Sepia theme"]');
   await sepiaBtn.click();
-  await page.waitForTimeout(1000);
+  // Wait for the theme to land (the reads below are one-shot): the same
+  // commit rings the button and re-themes the reader iframe.
+  await expect(page.locator("html")).toHaveClass(/sepia/, { timeout: 5000 }).catch(() => {});
+  await expect(sepiaBtn).toHaveClass(/(^|\s)ring-2(\s|$)/, { timeout: 5000 }).catch(() => {});
   await captureScreenshot(page, "visual_settings_02_sepia");
 
   // Verify Outer UI Theme (ThemeSynchronizer)
@@ -73,7 +76,8 @@ test("visual settings journey", async ({ page }) => {
   console.log("Testing Theme Switching (Dark)...");
   const darkBtn = page.locator('button[aria-label="Select Dark theme"]');
   await darkBtn.click();
-  await page.waitForTimeout(1000);
+  await expect(page.locator("html")).toHaveClass(/dark/, { timeout: 5000 }).catch(() => {});
+  await expect(darkBtn).toHaveClass(/(^|\s)ring-2(\s|$)/, { timeout: 5000 }).catch(() => {});
   await captureScreenshot(page, "visual_settings_03_dark");
 
   // Verify Outer UI Theme (Dark)
@@ -91,7 +95,6 @@ test("visual settings journey", async ({ page }) => {
   const increaseFontBtn = page.locator('button[aria-label="Increase font size"]');
   await increaseFontBtn.click();
   await increaseFontBtn.click();
-  await page.waitForTimeout(1000);
 
   // Check font size in iframe
   const frame = await waitForReaderFrame(page);
@@ -107,12 +110,19 @@ test("visual settings journey", async ({ page }) => {
   // Tabs trigger
   const scrolledTab = page.getByRole("tab", { name: "Scrolled" });
   await scrolledTab.click();
-  await page.waitForTimeout(2000);
+  // Wait for the scrolled-mode re-render: the reader injects its bottom
+  // spacer into every section it loads in scrolled mode.
+  await page
+    .locator('[data-testid="reader-iframe-container"] iframe')
+    .contentFrame()
+    .locator("#reader-bottom-spacer")
+    .waitFor({ state: "attached", timeout: 10000 })
+    .catch(() => {});
   await captureScreenshot(page, "visual_settings_04_scrolled");
 
   // Close the popover to see the content clearly
   await page.mouse.click(10, 10);
-  await page.waitForTimeout(500);
+  await expect(page.getByText("Ambience")).toBeHidden({ timeout: 5000 }).catch(() => {});
 
   // Verify Compass Pill is visible (Audio HUD)
   await expect(page.getByTestId("compass-pill-active")).toBeVisible();
@@ -124,7 +134,6 @@ test("visual settings journey", async ({ page }) => {
 
   // Scroll the iframe body to the bottom
   await scrolledFrame.locator("html").evaluate((el) => el.ownerDocument.defaultView?.scrollTo(0, el.ownerDocument.body.scrollHeight));
-  await page.waitForTimeout(1000);
 
   // Verify that the iframe has spacer div applied
   const spacerHeight = await scrolledFrame.locator("#reader-bottom-spacer").evaluate((el) => getComputedStyle(el).height);

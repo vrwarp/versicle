@@ -1,7 +1,9 @@
 # Docker/Playwright E2E lane. Desktop + mobile run on every PR (informational
-# checks — not required by branch protection); webkit remains nightly/manual
-# only — it runs serially (--workers=1) and its TTS journeys are too
-# timing-sensitive for a PR gate (see run_verification.sh).
+# checks — not required by branch protection), 3 tests at a time each
+# (playwright.config.ts `workers`). webkit remains nightly/manual only: it runs
+# one test at a time (the webkit project's own `workers: 1`) and its TTS
+# journeys are too timing-sensitive for a PR gate, so the nightly lane splits
+# it into three shards on separate runners instead of loading one machine.
 #
 # Uses the existing run_verification.sh flow: builds Dockerfile.verification,
 # serves the production build via `vite preview` inside the container, and
@@ -21,7 +23,7 @@ concurrency:
 
 jobs:
   e2e:
-    name: Playwright (${{ matrix.project }})
+    name: Playwright (${{ matrix.slug || matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -29,19 +31,20 @@ jobs:
       matrix:
         # WebKit is nightly/manual only, so PR runs get just desktop+mobile.
         # (jobs.<id>.if cannot see the matrix context, hence the dynamic
-        # matrix instead of a per-leg condition.)
-        project: ${{ fromJSON(github.event_name == 'pull_request' && '["desktop", "mobile"]' || '["desktop", "mobile", "webkit"]') }}
+        # matrix instead of a per-leg condition.) `shard` feeds Playwright's
+        # --shard; `slug` keeps each shard's job and artifact names unique.
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"project":"desktop"},{"project":"mobile"}]' || '[{"project":"desktop"},{"project":"mobile"},{"project":"webkit","shard":"1/3","slug":"webkit-1of3"},{"project":"webkit","shard":"2/3","slug":"webkit-2of3"},{"project":"webkit","shard":"3/3","slug":"webkit-3of3"}]') }}
     steps:
       - uses: actions/checkout@v4
       - name: Run verification suite (Docker)
-        # run_verification.sh builds the versicle-verify image, mounts
-        # verification/screenshots, and serializes WebKit automatically.
-        run: ./run_verification.sh --project=${{ matrix.project }}
+        # run_verification.sh builds the versicle-verify image and mounts
+        # verification/screenshots; playwright.config.ts sets the workers.
+        run: ./run_verification.sh --project=${{ matrix.project }} ${{ matrix.shard && format('--shard={0}', matrix.shard) || '' }}
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: verification-screenshots-${{ matrix.project }}
+          name: verification-screenshots-${{ matrix.slug || matrix.project }}
           path: verification/screenshots/
           retention-days: 14
       - name: Upload Playwright traces
@@ -52,7 +55,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: verification-test-results-${{ matrix.project }}
+          name: verification-test-results-${{ matrix.slug || matrix.project }}
           path: test-results/
           retention-days: 14
           if-no-files-found: warn

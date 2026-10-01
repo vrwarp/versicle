@@ -27,7 +27,8 @@ if [[ "$1" == "--help" ]]; then
   echo "  TypeScript Playwright specs in verification/*.spec.ts (there is no"
   echo "  Python/pytest runner). Projects: desktop, mobile, webkit"
   echo "  (playwright.config.ts). With no --project argument, desktop and"
-  echo "  mobile are run; targeting webkit auto-adds --workers=1."
+  echo "  mobile are run. Tests run in parallel (3 workers; the webkit"
+  echo "  project runs one test at a time) - see playwright.config.ts."
   echo ""
   echo "Common Arguments & Examples:"
   echo "  - Run all tests (desktop + mobile projects):"
@@ -67,8 +68,6 @@ fi
 # Parse flags before passing remainder to playwright
 DEBUG_ENV=""
 PASSTHROUGH_ARGS=()
-TARGETS_WEBKIT=false
-USER_SET_WORKERS=false
 HAS_PROJECT=false
 for arg in "$@"; do
   if [[ "$arg" == "--logs" ]]; then
@@ -79,8 +78,6 @@ for arg in "$@"; do
     DEBUG_ENV="$DEBUG_ENV -e TTS_IDB_PROBE=1"
   else
     PASSTHROUGH_ARGS+=("$arg")
-    [[ "$arg" == *webkit* ]] && TARGETS_WEBKIT=true
-    [[ "$arg" == --workers* ]] && USER_SET_WORKERS=true
     if [[ "$arg" == --project* ]] || [[ "$arg" == -p ]]; then
       HAS_PROJECT=true
     fi
@@ -92,14 +89,10 @@ if [[ "$HAS_PROJECT" == false ]]; then
   PASSTHROUGH_ARGS+=("--project=desktop" "--project=mobile")
 fi
 
-# WebKit is run serially (one worker). Unlike Chromium, parallel WebKit instances
-# in this container contend heavily for CPU/IO, which makes the timing-sensitive TTS
-# journeys flaky. Serial execution trades runtime for reliability. Only applied when
-# the run explicitly targets the webkit project and the caller didn't set --workers.
-if [[ "$TARGETS_WEBKIT" == true && "$USER_SET_WORKERS" == false ]]; then
-  echo "🧵 WebKit target detected — running serially (--workers=1) for reliability."
-  PASSTHROUGH_ARGS+=("--workers=1")
-fi
+# Parallelism is configured in playwright.config.ts: 3 workers, with the webkit
+# project capped per-project (parallel WebKit instances contend for CPU/IO and
+# flake the timing-sensitive TTS journeys). That cap used to be a --workers=1
+# appended here, which also serialized any Chromium project in the same run.
 
 # Build the test image
 docker build -t versicle-verify -f Dockerfile.verification .

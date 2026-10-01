@@ -15,6 +15,9 @@ test("verify audio bookmark inbox", async ({ page, baseURL }) => {
     console.log("IndexedDB hung as expected. Taking best-effort fallback screenshot.");
   }
 
-  await page.waitForTimeout(2000);
+  // Let the library settle into its loaded/empty state before the screenshot.
+  await page
+    .waitForSelector("[data-testid^='book-card-'], button:has-text('Load Demo Book'), :text('Your library is empty')", { timeout: 5000 })
+    .catch(() => {});
   await captureScreenshot(page, "audio_bookmark_inbox");
 });

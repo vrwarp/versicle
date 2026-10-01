@@ -29,6 +29,35 @@ async function uploadBook(page: Page, filename: string) {
   }, { base64Data: fileBase64, filename });
 }
 
+/**
+ * Wait until the mock cloud's workspace doc contains every string in
+ * `needles` (e.g. imported book titles or ids): MockFireProvider saves the
+ * whole Y.Doc as a base64 Yjs update, in which strings are plain UTF-8.
+ * Tolerant like the fixed sleeps it replaces: on timeout it just returns.
+ */
+async function waitForSnapshotToContain(page: Page, needles: string[], timeout = 5000) {
+  await expect
+    .poll(
+      () =>
+        page.evaluate((wanted) => {
+          const raw = localStorage.getItem('versicle_mock_firestore_snapshot');
+          if (!raw) return false;
+          const all = JSON.parse(raw) as Record<string, { snapshotBase64?: string }>;
+          return Object.keys(all).some((key) => {
+            const b64 = key.includes('/versicle/ws_') ? all[key].snapshotBase64 : undefined;
+            if (!b64) return false;
+            const bytes = atob(b64);
+            return wanted.every((s) =>
+              bytes.includes(Array.from(new TextEncoder().encode(s), (b) => String.fromCharCode(b)).join(''))
+            );
+          });
+        }, needles),
+      { timeout, intervals: [50, 100, 250] }
+    )
+    .toBe(true)
+    .catch(() => {});
+}
+
 test('Firestore Book Sync and Restore', async ({ browser }) => {
   test.setTimeout(180_000);
   console.log('========== DEVICE A: Import Book & Sync ==========');
@@ -84,21 +113,20 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
     'pride-and-prejudice.epub'
   ];
 
+  // Drops need no pacing: the import orchestrator queues jobs FIFO.
   for (const filename of booksToUpload) {
     await uploadBook(pageA, filename);
-    await pageA.waitForTimeout(1000);
   }
 
   await expect(pageA.locator("[data-testid^='book-card-']")).toHaveCount(booksToUpload.length, { timeout: 80000 });
-  await pageA.waitForTimeout(1000);
   const bookTitlesA = await pageA.locator("[data-testid='book-title']").allTextContents();
   console.log(`[A] Book titles: ${bookTitlesA}`);
 
-  await pageA.waitForTimeout(2000);
+  // Wait for every imported book to reach the mock cloud (was fixed 2s + 1s sleeps).
+  await waitForSnapshotToContain(pageA, bookTitlesA);
   await pageA.evaluate(() => {
     window.dispatchEvent(new Event('beforeunload'));
   });
-  await pageA.waitForTimeout(1000);
 
   const mockDataStr = await pageA.evaluate(() => localStorage.getItem('versicle_mock_firestore_snapshot'));
   expect(mockDataStr).toBeTruthy();
@@ -172,7 +200,11 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   await pageB.getByRole('button', { name: 'Yes, Finalize' }).dispatchEvent("click");
 
   await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 30000 });
-  await pageB.waitForTimeout(2000); // Wait for page to fully stabilize after potential internal navigation
+  // Wait for page to fully stabilize after potential internal navigation: "Yes,
+  // Finalize" reloads the page (App.tsx onResolved), and only the reloaded document
+  // drops the confirmation modal (was a fixed 2s sleep).
+  await expect(pageB.getByText('Finalize Workspace Switch?')).toBeHidden({ timeout: 15000 }).catch(() => {});
+  await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 15000 }).catch(() => {});
 
   const injected = await pageB.evaluate(() => localStorage.getItem('versicle_mock_firestore_snapshot'));
   expect(injected).toBeTruthy();
@@ -191,7 +223,6 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   console.log(`[B] Found ${cardIds.length} cards: ${cardIds}`);
   expect(cardIds.length).toBeGreaterThanOrEqual(5);
 
-  await pageB.waitForTimeout(1000);
   const syncedTitles = await pageB.locator("[data-testid='book-title']").allTextContents();
   console.log(`[B] Synced titles: ${syncedTitles}`);
   expect(syncedTitles.sort()).toEqual(bookTitlesA.sort());
@@ -214,14 +245,12 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
 
   console.log('========== DEVICE B: Restore Book File ==========');
   await bookCardAlice.dispatchEvent("click");
-  await pageB.waitForTimeout(1000);
 
   const restoreFilePath = path.resolve(__dirname, 'alice.epub');
   // The ContentMissingDialog mounts the hidden restore input lazily; wait for it to
   // attach before supplying the file (deterministic wait, not a fixed sleep).
   await pageB.locator("[data-testid='restore-file-input']").waitFor({ state: 'attached', timeout: 15000 });
   await pageB.setInputFiles('data-testid=restore-file-input', restoreFilePath);
-  await pageB.waitForTimeout(3000);
 
   // The offload overlay clears once the re-supplied epub finishes re-ingesting (slow on
   // WebKit under full-suite load).
@@ -296,9 +325,10 @@ test('Offload Status Hydration', async ({ browser }) => {
   const bookCardA = pageA.locator("[data-testid^='book-card-']").first();
   await expect(bookCardA).toBeVisible({ timeout: 15000 });
 
-  await pageA.waitForTimeout(2000);
+  // Wait for the imported book to reach the mock cloud (was fixed 2s + 1s sleeps).
+  const bookIdA = ((await bookCardA.getAttribute('data-testid').catch(() => null)) ?? '').replace('book-card-', '');
+  await waitForSnapshotToContain(pageA, [bookIdA]);
   await pageA.evaluate(() => window.dispatchEvent(new Event('beforeunload')));
-  await pageA.waitForTimeout(1000);
 
   const mockDataStr = await pageA.evaluate(() => localStorage.getItem('versicle_mock_firestore_snapshot'));
   expect(mockDataStr).toBeTruthy();

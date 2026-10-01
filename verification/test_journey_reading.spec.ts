@@ -1,5 +1,16 @@
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook, captureScreenshot, navigateToChapter, getReaderFrame } from "./utils";
+import {
+  resetApp,
+  ensureLibraryWithBook,
+  captureScreenshot,
+  navigateToChapter,
+  getReaderFrame,
+  waitForReaderLocated,
+  currentCfi,
+  waitForCfiChange,
+  currentSectionHref,
+  waitForSectionChange,
+} from "./utils";
 
 test("reading journey", async ({ page }) => {
   console.log("Starting Reading Journey...");
@@ -13,7 +24,7 @@ test("reading journey", async ({ page }) => {
   await expect(page.getByTestId("reader-back-button")).toBeVisible();
 
   // Wait for content to render
-  await page.waitForTimeout(2000);
+  await waitForReaderLocated(page);
   await captureScreenshot(page, "reading_01_initial_cover");
 
   // Navigate to a middle chapter immediately to ensure we have text
@@ -23,7 +34,6 @@ test("reading journey", async ({ page }) => {
   // Regain focus on the reader content so keyboard events work
   console.log("Clicking reader to ensure focus...");
   await page.locator('[data-testid="reader-iframe-container"]').click();
-  await page.waitForTimeout(500);
 
   await captureScreenshot(page, "reading_01_chapter_start");
 
@@ -46,6 +56,7 @@ test("reading journey", async ({ page }) => {
     const body = frame.locator("body");
 
     const initialText = await getFrameText();
+    const cfiBefore = await currentCfi(page);
 
     console.log(`Navigating with ${action}...`);
     if (action === "ArrowRight") {
@@ -53,6 +64,9 @@ test("reading journey", async ({ page }) => {
     } else if (action === "ArrowLeft") {
       await page.keyboard.press("ArrowLeft");
     }
+    // Let the turn land before anything reads or turns again (same-section
+    // turns keep the body text, so the text check below cannot see them).
+    await waitForCfiChange(page, cfiBefore);
 
     try {
       await expect(body).not.toHaveText(initialText, { timeout: 2000 });
@@ -128,9 +142,11 @@ test("reading journey", async ({ page }) => {
   const tocItem = page.getByTestId("toc-item-1");
   const tocText = await tocItem.innerText();
   console.log(`Clicking TOC item: ${tocText}`);
+  const hrefBeforeToc = await currentSectionHref(page);
   await tocItem.click();
 
   await expect(page.getByTestId("reader-toc-sidebar")).not.toBeVisible();
+  await waitForSectionChange(page, hrefBeforeToc);
 
   const frame = getReaderFrame(page);
   if (frame) {

@@ -24,13 +24,22 @@ test("smart delete journey", async ({ page }) => {
   // Open menu (hover to show button, then click)
   await bookCard.hover();
   await page.getByTestId("book-context-menu-trigger").click();
-  await page.waitForTimeout(1000); // Wait for menu animation
+  // Wait for menu animation: the item stops moving (was a fixed 1s sleep)
+  await page
+    .getByTestId("menu-offload")
+    .elementHandle({ timeout: 5000 })
+    .then((item) => item?.waitForElementState("stable", { timeout: 5000 }))
+    .catch(() => {});
 
   // Click "Offload File"
   await page.getByTestId("menu-offload").click({ force: true });
+  // Let the menu finish closing before the dialog it opened is confirmed. If
+  // the dialog closes while the menu's exit animation still holds its layer,
+  // Radix restores <body> to the menu's `pointer-events: none` and every later
+  // click is swallowed (the old fixed 1s sleep here hid this).
+  await page.getByTestId("menu-offload").waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
 
   // Confirm Offload
-  await page.waitForTimeout(1000);
   const confirmBtn = page.getByTestId("confirm-offload");
   await expect(confirmBtn).toHaveCount(1);
   // Use JS click to bypass potential obstructions
@@ -39,8 +48,9 @@ test("smart delete journey", async ({ page }) => {
   // 3. Verify Offloaded State
   await expect(page.getByTestId("offloaded-overlay")).toBeVisible({ timeout: 5000 });
 
-  // Wait a moment for state update
-  await page.waitForTimeout(1000);
+  // Wait a moment for state update: the offload dialog closes once the offload
+  // resolves, after the overlay shows (was a fixed 1s sleep)
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 5000 }).catch(() => {});
   await captureScreenshot(page, "library_smart_delete_offloaded");
 
   // 5. Restore Book (Success Case)
@@ -64,7 +74,14 @@ test("smart delete journey", async ({ page }) => {
 
   // 6. Verify Book Opens
   console.log("Opening book...");
-  await page.waitForTimeout(3000);
+  // Let the restored cover settle before the img probe below: its <img> renders
+  // once the new cover URL resolves (was a fixed 3s sleep)
+  await page
+    .waitForFunction(() => {
+      const img = document.querySelector("[data-testid^='book-card-'] img") as HTMLImageElement | null;
+      return !!img && img.complete && img.naturalWidth > 0;
+    }, null, { timeout: 5000 })
+    .catch(() => {});
 
   // Verify the book cover image no longer has the grayscale class (skip if no img, e.g. WebKit with no SW)
   const bookCoverImg = page.locator("[data-testid^='book-card-']").first().locator("img").first();

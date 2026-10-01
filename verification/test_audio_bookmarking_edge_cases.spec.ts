@@ -16,7 +16,6 @@ test('Timeout Protection', async ({ page }) => {
   // Start Playback
   await page.getByTestId('compass-pill-active').getByLabel('Play').click();
   await expect(page.getByTestId('compass-pill-active').getByLabel('Pause')).toBeVisible({ timeout: 5000 });
-  await page.waitForTimeout(1000);
 
   // Pause
   await page.getByTestId('compass-pill-active').getByLabel('Pause').click();
@@ -59,12 +58,10 @@ test('Navigation Guard', async ({ page }) => {
   // Start Playback
   await page.getByTestId('compass-pill-active').getByLabel('Play').click();
   await expect(page.getByTestId('compass-pill-active').getByLabel('Pause')).toBeVisible({ timeout: 5000 });
-  await page.waitForTimeout(1000);
 
   // Pause — this sets lastUserPauseTimestamp
   await page.getByTestId('compass-pill-active').getByLabel('Pause').click();
   await expect(page.getByTestId('compass-pill-active').getByLabel('Play')).toBeVisible({ timeout: 5000 });
-  await page.waitForTimeout(1000); // Allow WebKit to settle TTS state before TOC navigation
 
   // Navigate to a DIFFERENT chapter — this should clear lastUserPauseTimestamp
   console.log('Navigating to Chapter 5 during pause...');
@@ -109,7 +106,6 @@ test('Inline HUD Discard', async ({ page }) => {
   console.log('Triggering bookmark gesture...');
   await page.getByTestId('compass-pill-active').getByLabel('Play').click();
   await expect(page.getByTestId('compass-pill-active').getByLabel('Pause')).toBeVisible({ timeout: 5000 });
-  await page.waitForTimeout(1000);
 
   await page.getByTestId('compass-pill-active').getByLabel('Pause').click();
   await expect(page.getByTestId('compass-pill-active').getByLabel('Play')).toBeVisible({ timeout: 5000 });
@@ -172,7 +168,7 @@ test('Section Start Boundary', async ({ page }) => {
   // At index 0: Play briefly -> Pause -> Play
   console.log('Triggering gesture at index 0...');
   await page.getByTestId('compass-pill-active').getByLabel('Play').click();
-  await page.waitForTimeout(200); // Very brief play
+  // Very brief play: the Pause label (and so this click) appears as soon as playback is live
   await page.getByTestId('compass-pill-active').getByLabel('Pause').click();
   await page.getByTestId('compass-pill-active').getByLabel('Play').click();
 

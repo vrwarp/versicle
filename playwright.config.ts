@@ -16,8 +16,14 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
+  /* Parallel on CI too (run_verification.sh sets CI=1, so this covers every
+   * Docker run). Tests share nothing: each gets a fresh browser context — the
+   * multi-device sync journeys carry state between their own contexts — and
+   * the preview server only serves static files. The suite used to run
+   * serially here (1 worker, ~17 min per Chromium project); 3 workers suits
+   * the 4-vCPU ubuntu-latest runners. --workers overrides; WebKit caps
+   * itself per project below. */
+  workers: process.env.CI ? 3 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/reporters */
   reporter: 'dot',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -70,6 +76,10 @@ export default defineConfig({
         // With SWs allowed the SW registers + controls in ~10ms (parity with Chromium).
         serviceWorkers: 'allow',
       },
+      // Parallel WebKit instances contend heavily for CPU/IO in the container,
+      // which makes the timing-sensitive TTS journeys flaky: WebKit runs one
+      // test at a time even when the run's other projects go parallel.
+      workers: 1,
       // Slowest WebKit test under full parallel load is ~58s (the multi-device
       // seamless-handoff journey); 120s leaves ~2x headroom. This used to be 180s
       // to absorb the now-removed per-load 3s service-worker timeout (see above).
@@ -79,8 +89,9 @@ export default defineConfig({
       // which makes render-sensitive panels (e.g. the audio deck settings tab)
       // occasionally fail to paint within the wait. Extra retries absorb this
       // environmental flakiness — the tests themselves are deterministic in isolation.
-      // Full-suite runs keep WebKit parallel (for runtime), so these retries also absorb the
-      // parallel-WebKit CPU/IO contention that intermittently lags a reader/library load.
+      // A run that mixes projects shares the machine with the parallel Chromium workers, so
+      // these retries also absorb the CPU/IO contention that intermittently lags a
+      // reader/library load.
       retries: 3,
     },
   ],

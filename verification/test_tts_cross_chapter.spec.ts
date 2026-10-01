@@ -1,5 +1,14 @@
 import { test, expect } from "./utils";
-import { captureScreenshot, resetApp, ensureLibraryWithBook } from "./utils";
+import {
+  captureScreenshot,
+  resetApp,
+  ensureLibraryWithBook,
+  currentSectionHref,
+  waitForSectionChange,
+  waitForTtsQueueOnCurrentSection,
+  waitForTtsState,
+  ttsState,
+} from "./utils";
 
 test("tts cross chapter transition", async ({ page }) => {
   console.log("Starting Cross-Chapter Transition Test...");
@@ -12,10 +21,12 @@ test("tts cross chapter transition", async ({ page }) => {
 
   // Navigate to a short chapter (Chapter II)
   console.log("Navigating to Chapter II...");
+  const hrefBeforeCh2 = await currentSectionHref(page);
   await page.getByTestId("reader-toc-button").click();
   await expect(page.getByTestId("reader-toc-sidebar")).toBeVisible();
   await page.getByRole("button", { name: "Chapter II." }).first().click();
-  await page.waitForTimeout(2000);
+  await waitForSectionChange(page, hrefBeforeCh2);
+  await waitForTtsQueueOnCurrentSection(page);
 
   // Open TTS Panel
   console.log("Opening TTS panel...");
@@ -37,15 +48,20 @@ test("tts cross chapter transition", async ({ page }) => {
   const lastIndex = initialQueueCount - 1;
   console.log(`Jumping to last item (index ${lastIndex})...`);
   await page.getByTestId(`tts-queue-item-${lastIndex}`).click();
-  await page.waitForTimeout(500);
+  await expect(page.getByTestId(`tts-queue-item-${lastIndex}`))
+    .toHaveAttribute("data-current", "true", { timeout: 5000 })
+    .catch(() => {});
 
   // Start playback
   console.log("Starting playback...");
   await page.getByTestId("tts-play-pause-button").click();
 
-  // Wait for the chapter to end and transition
+  // Wait (within the same 8s window) for the chapter to end and transition
   console.log("Waiting for chapter end and potential transition...");
-  await page.waitForTimeout(8000);
+  await expect
+    .poll(() => page.getByTestId("tts-queue-item-0").innerText().catch(() => firstItemText), { timeout: 8000 })
+    .not.toBe(firstItemText)
+    .catch(() => {});
 
   // Check if the queue has been repopulated
   const newQueueItems = page.locator("[data-testid^='tts-queue-item-']");
@@ -89,10 +105,12 @@ test("tts chapter navigation during playback", async ({ page }) => {
 
   // Navigate to Chapter III
   console.log("Navigating to Chapter III...");
+  const hrefBeforeCh3 = await currentSectionHref(page);
   await page.getByTestId("reader-toc-button").click();
   await expect(page.getByTestId("reader-toc-sidebar")).toBeVisible();
   await page.getByRole("button", { name: "Chapter III." }).first().click();
-  await page.waitForTimeout(3000);
+  await waitForSectionChange(page, hrefBeforeCh3);
+  await waitForTtsQueueOnCurrentSection(page);
 
   // Open TTS Panel and start playback
   console.log("Starting playback in Chapter III...");
@@ -103,39 +121,45 @@ test("tts chapter navigation during playback", async ({ page }) => {
   const chapter3FirstItem = await page.getByTestId("tts-queue-item-0").innerText();
   console.log(`Chapter III first item: ${chapter3FirstItem.substring(0, 50)}...`);
 
-  // Skip forward a few times with explicit waits
+  // Skip forward a few times, each once the previous command has landed
   await page.getByTestId("tts-play-pause-button").click();
-  await page.waitForTimeout(1000);
-  await page.getByTestId("tts-forward-button").click();
-  await page.waitForTimeout(800);
-  await page.getByTestId("tts-forward-button").click();
-  await page.waitForTimeout(800);
+  await waitForTtsState(page, (s) => s.status === "playing");
+  for (let skip = 0; skip < 2; skip++) {
+    const before = (await ttsState(page))?.currentIndex ?? 0;
+    await page.getByTestId("tts-forward-button").click();
+    await waitForTtsState(page, (s, idx) => s.currentIndex > idx, before);
+  }
 
   // Pause playback before navigating
   await page.getByTestId("tts-play-pause-button").click();
-  await page.waitForTimeout(500);
+  await waitForTtsState(page, (s) => !s.isPlaying);
 
   // Close TTS panel
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(500);
+  await expect(page.getByTestId("tts-panel")).toBeHidden({ timeout: 5000 }).catch(() => {});
 
   // Navigate to Chapter V via TOC
   console.log("Navigating to Chapter V...");
   // Wait for any pending epub.js navigation before clicking TOC
   await page.waitForTimeout(1000);
+  const hrefBeforeCh5 = await currentSectionHref(page);
   await page.getByTestId("reader-toc-button").click({ noWaitAfter: true });
   await expect(page.getByTestId("reader-toc-sidebar")).toBeVisible();
   await page.getByRole("button", { name: "Chapter V." }).first().click();
-  await page.waitForTimeout(3000);
+  await waitForSectionChange(page, hrefBeforeCh5);
+  await waitForTtsQueueOnCurrentSection(page);
 
   // Open TTS Panel again
   console.log("Checking TTS state in Chapter V...");
   await page.getByTestId("reader-audio-button").click();
   await expect(page.getByTestId("tts-panel")).toBeVisible();
 
-  // Wait for queue to fully reload
-  await page.waitForTimeout(2000);
+  // Wait for queue to fully reload (the Chapter III queue rolls over)
   await expect(page.getByTestId("tts-queue-item-0")).toBeVisible({ timeout: 10000 });
+  await expect
+    .poll(() => page.getByTestId("tts-queue-item-0").innerText().catch(() => chapter3FirstItem), { timeout: 5000 })
+    .not.toBe(chapter3FirstItem)
+    .catch(() => {});
 
   const chapter5FirstItem = await page.getByTestId("tts-queue-item-0").innerText();
   console.log(`Chapter V first item: ${chapter5FirstItem.substring(0, 50)}...`);

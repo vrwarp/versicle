@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from "./utils";
-import { resetApp, ensureLibraryWithBook, captureScreenshot, navigateToChapter, getReaderFrame, waitForPersistedWrites } from "./utils";
+import { resetApp, ensureLibraryWithBook, captureScreenshot, navigateToChapter, getReaderFrame, waitForPersistedWrites, currentCfi, waitForCfiChange, waitForReaderLocated } from "./utils";
 import type { Frame } from "@playwright/test";
 
 async function waitForReaderFrame(page: Page): Promise<Frame> {
@@ -35,7 +35,6 @@ test("journey reading tools", async ({ page }) => {
 
   await navigateToChapter(page);
   frame = await waitForReaderFrame(page);
-  await page.waitForTimeout(2000);
 
   // Helper script to select text
   // Helper to select text inside the iframe
@@ -108,8 +107,9 @@ test("journey reading tools", async ({ page }) => {
   if (!selectionSuccess) {
     // Fallback: maybe navigate to next page?
     console.log("Could not find second text node, trying next page...");
+    const cfiBeforeTurn = await currentCfi(page);
     await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(1000);
+    await waitForCfiChange(page, cfiBeforeTurn);
     selectionSuccess = await selectText(0);
     if (!selectionSuccess) {
       throw new Error("Could not select text for play.");
@@ -147,7 +147,10 @@ test("journey reading tools", async ({ page }) => {
   // Wait for book to reload (WebKit reader re-init lags under full-suite parallel load)
   await expect(page.getByTestId("reader-back-button")).toBeVisible({ timeout: 25000 });
   frame = await waitForReaderFrame(page);
-  await page.waitForTimeout(2000);
+  await waitForReaderLocated(page);
+  await page
+    .waitForFunction(() => (window.__versicleTest?.reader?.highlightCount("annotation") ?? 0) > 0, null, { timeout: 5000 })
+    .catch(() => {});
 
   // 4. Verify Highlight Persisted
   console.log("Verifying annotations reapplied after reload...");

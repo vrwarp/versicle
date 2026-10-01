@@ -15,14 +15,16 @@ this directory.
 ```bash
 ./run_verification.sh                                      # Docker; desktop + mobile projects
 ./run_verification.sh verification/test_journey_library.spec.ts
-./run_verification.sh --project=webkit                     # auto-serialized (--workers=1)
+./run_verification.sh --project=webkit                     # one test at a time (project workers: 1)
 ./run_verification.sh --help                               # full usage
 ```
 
 `./jules_run_verification.sh` is the `sudo` wrapper. Projects (`desktop`,
-`mobile`, `webkit`) and their timeout/retry rationale are in
+`mobile`, `webkit`) and their worker/timeout/retry rationale are in
 `playwright.config.ts` — read its comments before "fixing" flakiness with
-bigger timeouts.
+bigger timeouts. Specs run in parallel (3 workers; WebKit one test at a
+time), so they must not share state or lean on fixed sleeps — see TESTING.md
+§"Parallelism and deterministic waits".
 
 ## Contents
 
@@ -47,14 +49,16 @@ bigger timeouts.
   import pipeline, `reader:*` from the reader open path) and a
   frame-gap main-thread-stall sampler. Writes JSON to
   `verification/perf-results/<project>.json` (gitignored). Run it one
-  project at a time with `--workers=1` — it is a measurement, and
-  parallel load skews it.
+  project at a time with `--workers=1` — it is a measurement, and the
+  parallel load of a default run skews it.
 
 ### Infrastructure
 
 - `utils.ts` — the shared `test` fixture and helpers (`resetApp`,
   `waitForPersistedWrites`, `ensureLibraryWithBook`, `captureScreenshot`,
-  `getReaderFrame`). It injects `tts-polyfill.js` into every page and
+  `getReaderFrame`) and the deterministic waits that replace fixed sleeps
+  (`waitForReaderReady`/`waitForReaderLocated`, `waitForCfiChange`,
+  `waitForSectionChange`, `waitForTtsState`). It injects `tts-polyfill.js` into every page and
   currently disables content sanitization on every page
   (`__VERSICLE_SANITIZATION_DISABLED__` — a known honesty gap, see
   TESTING.md "Honest caveats"). Deterministic persistence waits go through

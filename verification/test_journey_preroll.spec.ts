@@ -45,9 +45,9 @@ test('Journey Preroll Test', async ({ page }) => {
   await page.getByTestId('reader-audio-button').click();
   await expect(page.getByTestId('tts-panel')).toBeVisible();
 
-  // Wait a brief moment for the bottom sheet animation to finish on mobile
-  await page.waitForTimeout(1000);
-
+  // No fixed wait for the sheet animation: switchAudioPanelView's
+  // scrollIntoViewIfNeeded waits for the footer tab to be stable (slide-in
+  // finished) before its force-click.
   await utils.switchAudioPanelView(page, 'settings');
 
   const prerollSwitchPersisted = page.getByLabel('Announce Chapter Titles');

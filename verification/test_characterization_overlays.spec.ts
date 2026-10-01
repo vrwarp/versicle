@@ -65,7 +65,7 @@ async function openDemoBook(page: Page) {
   await expect(page.getByTestId('reader-back-button')).toBeVisible({ timeout: 10000 });
   const frame = page.locator('[data-testid="reader-iframe-container"] iframe').contentFrame();
   await expect(frame.locator('body')).toBeVisible({ timeout: 10000 });
-  await page.waitForTimeout(2000);
+  await utils.waitForReaderReady(page);
   return frame;
 }
 
@@ -231,12 +231,18 @@ test('Characterization: reading-history highlight marks the last played sentence
   await page.keyboard.press('Escape'); // stop playback (keyboard-gating pin: paused → Escape stops)
   await utils.waitForPersistedWrites(page);
 
-  // Page-turn → the gray lastPlayedCfi highlight is (re)applied.
+  // Page-turn → the gray lastPlayedCfi highlight is (re)applied. Each turn
+  // must land before the next key: an ArrowLeft issued while the ArrowRight
+  // turn is still displaying does not return to the played page.
+  const cfiPlayed = await utils.currentCfi(page);
   await page.keyboard.press('ArrowRight');
+  await utils.waitForCfiChange(page, cfiPlayed); // the forward turn landed
   await expect
     .poll(() => highlightNodeCount(page, 'reading-history-highlight'), { timeout: 10000 })
     .toBeGreaterThanOrEqual(0); // presence depends on same-page visibility…
+  const cfiTurned = await utils.currentCfi(page);
   await page.keyboard.press('ArrowLeft');
+  await utils.waitForCfiChange(page, cfiTurned); // the back turn landed
   await expect
     .poll(() => highlightNodeCount(page, 'reading-history-highlight'), { timeout: 10000 })
     .toBe(1); // …back on the played page it is exactly one node
