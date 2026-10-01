@@ -32,9 +32,12 @@ RUN yes | sdkmanager --licenses && \
 # 5. Setup Project
 WORKDIR /app
 
-# Copy package.json and scripts for npm install
+# Copy package.json, scripts and patches for npm install
 COPY package.json package-lock.json ./
 COPY scripts ./scripts
+# patches/ must exist before npm ci: the postinstall patch-package run finds
+# no patch files without it, prints "No patch files found" and exits 0.
+COPY patches ./patches
 RUN rm -f local.properties
 
 # Production git deps (y-cinder, y-idb, zustand-middleware-yjs, @jofr/capacitor-media-session)

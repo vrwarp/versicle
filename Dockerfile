@@ -6,6 +6,9 @@ WORKDIR /app
 # Copy package.json and package-lock.json first to leverage Docker cache
 COPY package.json package-lock.json ./
 COPY scripts ./scripts
+# patches/ must exist before npm ci: the postinstall patch-package run finds
+# no patch files without it, prints "No patch files found" and exits 0.
+COPY patches ./patches
 
 # Install dependencies
 RUN npm ci
