@@ -20,6 +20,10 @@ import ePub, { type Book, type Contents, type Rendition, type Location } from 'e
 import { createLogger } from '@lib/logger';
 import type { NavigationItem } from '~types/book';
 import { bookInternals, internals } from './epubjsInternals';
+import { PackageIndex } from '@lib/epub/structure/packageIndex';
+import { packageModelFromEpubJs } from '@lib/epub/structure/packageModel';
+import { splitFragment } from '@lib/epub/structure/paths';
+import { resolveToc, resolveTocHref } from '@lib/epub/structure/tocResolver';
 import { HighlightLayerManager, type AnnotatingRendition } from './HighlightLayerManager';
 import { markProgrammaticSelection } from './selectionBridge';
 import type {
@@ -34,6 +38,14 @@ import type {
 } from './ReaderEngine';
 
 const logger = createLogger('EpubJsEngine');
+
+function flattenToc(items: NavigationItem[], out: NavigationItem[] = []): NavigationItem[] {
+  for (const item of items) {
+    out.push(item);
+    if (item.subitems) flattenToc(item.subitems, out);
+  }
+  return out;
+}
 
 /**
  * The ONE runtime entry into epub.js book construction. The reader lifecycle
@@ -63,6 +75,9 @@ export class EpubJsEngine implements ReaderEngine {
   private detachFns: Array<() => void> = [];
   private locationsAreReady = false;
   private destroyed = false;
+  /** Lazily-built manifest/spine index for href resolution (null: book not open). */
+  private packageIndex: PackageIndex | null | undefined;
+  private resolvedToc: { source: NavigationItem[]; toc: NavigationItem[] } | undefined;
 
   constructor(private readonly deps: EpubJsEngineDeps) {
     this.highlights = new HighlightLayerManager(
@@ -130,7 +145,7 @@ export class EpubJsEngine implements ReaderEngine {
   // --- navigation & position -------------------------------------------
 
   display(target: string): Promise<void> {
-    return Promise.resolve(this.deps.rendition.display(target));
+    return Promise.resolve(this.deps.rendition.display(this.resolveTarget(target)));
   }
 
   next(): Promise<void> {
@@ -214,7 +229,68 @@ export class EpubJsEngine implements ReaderEngine {
   getToc(): NavigationItem[] {
     // `navigation` is undefined until book.loaded.navigation resolves —
     // upstream types it non-optional, so the runtime guard keeps the `?.`.
-    return this.deps.book.navigation?.toc || [];
+    const raw: NavigationItem[] = this.deps.book.navigation?.toc || [];
+    if (this.resolvedToc?.source !== raw) {
+      // epub.js keeps nav hrefs as written (relative to the nav document);
+      // map them onto the spine once per navigation object.
+      this.resolvedToc = { source: raw, toc: this.normalizeToc(raw, 'raw') };
+    }
+    return this.resolvedToc.toc;
+  }
+
+  normalizeToc(items: NavigationItem[], order: 'raw' | 'stored' = 'stored'): NavigationItem[] {
+    const index = this.getPackageIndex();
+    if (!index || items.length === 0) return items;
+    const { navPath, ncxPath } = index.model;
+    return resolveToc(items, { index, tocPath: navPath ?? ncxPath, order });
+  }
+
+  /**
+   * The manifest/spine index over epub.js's parsed packaging, built on first
+   * use. `null` until the book has opened (or for a book with no packaging).
+   */
+  private getPackageIndex(): PackageIndex | null {
+    if (this.packageIndex) return this.packageIndex;
+    const book = bookInternals(this.deps.book);
+    const packaging = book.packaging;
+    if (!packaging?.manifest || !book.spine) return null;
+    try {
+      const spineHrefs: string[] = [];
+      book.spine.each((section: { href?: string }) => {
+        if (section.href) spineHrefs.push(section.href);
+      });
+      this.packageIndex = new PackageIndex(
+        packageModelFromEpubJs({
+          opfPath: book.container?.packagePath ?? '',
+          manifest: packaging.manifest,
+          spineHrefs,
+          navPath: packaging.navPath,
+          ncxPath: packaging.ncxPath,
+        }),
+      );
+      return this.packageIndex;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Map an href epub.js cannot find (nav-relative, differently encoded or
+   * cased — see @lib/epub/structure) onto its spine href. CFIs, spine
+   * indices and hrefs epub.js already resolves pass through unchanged.
+   */
+  private resolveTarget(target: string): string {
+    if (!target || typeof target !== 'string' || target.startsWith('epubcfi(')) return target;
+    const book = bookInternals(this.deps.book);
+    try {
+      if (!book.spine || book.spine.get(target)) return target;
+    } catch {
+      /* fall through to resolution */
+    }
+    const index = this.getPackageIndex();
+    if (!index) return target;
+    const { navPath, ncxPath } = index.model;
+    return resolveTocHref(target, { index, tocPath: navPath ?? ncxPath, order: 'stored' }) ?? target;
   }
 
   resolveSection(cfiOrHref: string): ResolvedSection | null {
@@ -248,7 +324,12 @@ export class EpubJsEngine implements ReaderEngine {
     if (!section) return null;
 
     if (section.href) {
-      const navItem = book.navigation?.get(section.href);
+      // The RESOLVED TOC: epub.js's navigation.get() is keyed by the raw nav
+      // hrefs, which miss for a nav document outside the OPF's folder.
+      const sectionFile = splitFragment(section.href)[0];
+      const navItem =
+        flattenToc(this.getToc()).find((i) => !i.unresolved && splitFragment(i.href)[0] === sectionFile) ??
+        book.navigation?.get(section.href);
       if (navItem?.label && navItem.label.trim() !== 'Chapter') {
         return navItem.label.trim();
       }
@@ -286,7 +367,7 @@ export class EpubJsEngine implements ReaderEngine {
    * collectSectionData internals, verbatim; P7 reuses it for indexing).
    */
   async loadSectionText(href: string): Promise<string> {
-    const contentOrDoc: unknown = await this.deps.book.load(href.split('#')[0]);
+    const contentOrDoc: unknown = await this.deps.book.load(this.resolveTarget(href).split('#')[0]);
     let doc: Document | null = null;
 
     if (typeof contentOrDoc === 'string') {

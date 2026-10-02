@@ -1155,3 +1155,86 @@ describe('EpubJsEngine — the content hook', () => {
     expect(() => build({ rendition: { hooks: undefined } })).not.toThrow();
   });
 });
+
+describe('regression: display() with nav-relative href', () => {
+  /**
+   * A nav document in a subfolder (`Text/toc.xhtml`) writes its hrefs
+   * relative to itself (`../Text/CH1.xhtml`); epub.js keys the spine by
+   * OPF-relative hrefs and rejected every TOC click with "No Section Found".
+   */
+  const spineHrefs = ['Text/cover.xhtml', 'Text/CH1.xhtml', 'Text/Ch2.xhtml'];
+  const makeNavBook = (over: Record<string, unknown> = {}) => {
+    const sections = spineHrefs.map((href, index) => ({ href, index }));
+    return {
+      container: { packagePath: 'OEBPS/content.opf' },
+      packaging: {
+        metadata: {},
+        navPath: 'Text/toc.xhtml',
+        ncxPath: 'toc.ncx',
+        manifest: {
+          toc: { href: 'Text/toc.xhtml', type: 'application/xhtml+xml', properties: ['nav'] },
+          ...Object.fromEntries(spineHrefs.map((href, i) => [`s${i}`, { href, type: 'application/xhtml+xml', properties: [] }])),
+        },
+      },
+      spine: {
+        get: (t: unknown) => (typeof t === 'string' ? sections.find((s) => s.href === t.split('#')[0]) : undefined),
+        each: (fn: (s: { href: string }) => void) => sections.forEach(fn),
+        items: sections,
+      },
+      navigation: {
+        toc: [
+          { id: 'c', href: '../Text/cover.xhtml', label: 'Cover' },
+          { id: '1', href: '../Text/CH1.xhtml#p2', label: 'Why I Wrote This Book' },
+          { id: '2', href: '../Text/CH2.xhtml', label: 'Chapter 2 What Is the Difference' },
+          { id: 'x', href: '../Text/gone.xhtml', label: 'Gone' },
+        ],
+        get: () => undefined,
+        forEach: () => undefined,
+      },
+      ...over,
+    };
+  };
+
+  it('getToc() returns spine hrefs and flags entries that cannot display', () => {
+    const toc = build({ book: makeNavBook() }).engine.getToc();
+    expect(toc.map((i) => [i.href, !!i.unresolved])).toEqual([
+      ['Text/cover.xhtml', false],
+      ['Text/CH1.xhtml#p2', false],
+      ['Text/Ch2.xhtml', false],
+      ['../Text/gone.xhtml', true],
+    ]);
+  });
+
+  it('display() maps a raw nav href onto the spine and leaves CFIs alone', async () => {
+    const { engine, rendition } = build({ book: makeNavBook() });
+    await engine.display('../Text/CH1.xhtml#p2');
+    expect(rendition.display).toHaveBeenLastCalledWith('Text/CH1.xhtml#p2');
+    await engine.display('Text/Ch2.xhtml');
+    expect(rendition.display).toHaveBeenLastCalledWith('Text/Ch2.xhtml');
+    await engine.display('epubcfi(/6/4!/4/2/1:0)');
+    expect(rendition.display).toHaveBeenLastCalledWith('epubcfi(/6/4!/4/2/1:0)');
+  });
+
+  it('loadSectionText() loads the resolved spine document (Enhance TOC path)', async () => {
+    const load = vi.fn(async () => '<html><body>text</body></html>');
+    const { engine } = build({ book: makeNavBook({ load }) });
+    await engine.loadSectionText('../Text/CH1.xhtml');
+    expect(load).toHaveBeenCalledWith('Text/CH1.xhtml');
+  });
+
+  it('normalizeToc() heals a stored TOC idempotently', () => {
+    const { engine } = build({ book: makeNavBook() });
+    const stored = [
+      { id: 'a', href: '../Text/CH1.xhtml', label: 'Raw from an old import' },
+      { id: 'b', href: 'Text/Ch2.xhtml', label: 'Already healed' },
+    ];
+    const once = engine.normalizeToc(stored);
+    expect(once.map((i) => i.href)).toEqual(['Text/CH1.xhtml', 'Text/Ch2.xhtml']);
+    expect(engine.normalizeToc(once)).toEqual(once);
+  });
+
+  it('getNavLabel() finds the label through the resolved TOC', () => {
+    const { engine } = build({ book: makeNavBook() });
+    expect(engine.getNavLabel('Text/CH1.xhtml')).toBe('Why I Wrote This Book');
+  });
+});

@@ -21,6 +21,7 @@ import type { PerceptualPalette } from '~types/book';
 import { AppError } from '~types/errors';
 import { TTS_EXTRACTION_VERSION } from '@lib/ingestion/sentence-extraction';
 import { extractPreamble, mapChapters, type BookSearchText, type ChapterMapping } from './extract';
+import { repairTocLabels } from '@lib/epub/structure/tocLabels';
 
 export interface ReprocessResult {
   /** Set when the cover palette was re-extracted — apply to the synced inventory. */
@@ -96,7 +97,7 @@ export async function reprocessBookContent(
     manifest,
     structure: {
       bookId,
-      toc: preamble.toc.length > 0 ? preamble.toc : mapping.syntheticToc,
+      toc: preamble.toc.length > 0 ? repairTocLabels(preamble.toc, [], mapping.chapterTitles) : mapping.syntheticToc,
       spineItems: mapping.sections.map((s) => ({
         id: s.sectionId,
         characterCount: s.characterCount,

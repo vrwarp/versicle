@@ -21,6 +21,10 @@
  * file instead of retrying it forever.
  */
 
+import { readBookStructure, resolveStructureCover, type ArchivePort } from './structure/bookStructure';
+import type { ImageProbe } from './structure/coverResolver';
+import { safeDecode } from './structure/paths';
+
 /** The port the reader pulls bytes through. `end` is INCLUSIVE (HTTP Range). */
 export interface RangeReader {
   /** Total file size in bytes (lets the reader compute tail offsets). */
@@ -59,6 +63,10 @@ export class UnextractableEpubError extends Error {
     this.name = 'UnextractableEpubError';
   }
 }
+
+/** Cover search budget beyond the OPF: content documents opened, images read. */
+const MAX_TEXT_READS = 2;
+const MAX_IMAGE_READS = 3;
 
 // ── ZIP structural constants ────────────────────────────────────────────────
 const SIG_LOCAL = 0x04034b50; // PK\x03\x04
@@ -205,60 +213,15 @@ function firstText(doc: Document | Element, localName: string): string | undefin
   return text ? text : undefined;
 }
 
-/** Resolve a manifest href against the OPF's own directory, normalizing ../ . */
-function resolvePath(opfPath: string, href: string): string {
-  const baseDir = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
-  const parts = (baseDir + href).split('/');
-  const out: string[] = [];
-  for (const part of parts) {
-    if (part === '' || part === '.') continue;
-    if (part === '..') out.pop();
-    else out.push(part);
-  }
-  return out.join('/');
-}
-
-/** Find the cover manifest item's href + media-type across EPUB2/EPUB3/heuristics. */
-function findCoverHref(opf: Document): { href: string; mediaType: string } | undefined {
-  const items = Array.from(opf.getElementsByTagNameNS('*', 'item'));
-  const byId = new Map<string, Element>();
-  for (const item of items) {
-    const id = item.getAttribute('id');
-    if (id) byId.set(id, item);
-  }
-  const toResult = (item: Element | undefined): { href: string; mediaType: string } | undefined => {
-    const href = item?.getAttribute('href');
-    if (!href) return undefined;
-    return { href, mediaType: item?.getAttribute('media-type') || 'image/jpeg' };
-  };
-
-  // EPUB3: properties="cover-image".
-  const byProps = items.find((i) => (i.getAttribute('properties') || '').split(/\s+/).includes('cover-image'));
-  if (byProps) return toResult(byProps);
-
-  // EPUB2: <meta name="cover" content="{itemId}"/>.
-  const metas = Array.from(opf.getElementsByTagNameNS('*', 'meta'));
-  const coverMeta = metas.find((m) => m.getAttribute('name') === 'cover');
-  const coverId = coverMeta?.getAttribute('content');
-  if (coverId && byId.has(coverId)) return toResult(byId.get(coverId));
-
-  // Heuristics: an image item whose id/href mentions "cover".
-  const heuristic = items.find((i) => {
-    const media = i.getAttribute('media-type') || '';
-    if (!media.startsWith('image/')) return false;
-    const id = (i.getAttribute('id') || '').toLowerCase();
-    const href = (i.getAttribute('href') || '').toLowerCase();
-    return id.includes('cover') || href.includes('cover');
-  });
-  return toResult(heuristic);
-}
-
 /**
  * Read an EPUB's metadata + cover through the range port. Fetches: the tail
  * (EOCD + central directory), META-INF/container.xml, the OPF, and the cover
  * entry — typically 3–5 small ranged reads total.
  */
-export async function readRemoteEpubPreview(port: RangeReader): Promise<RemoteEpubPreview> {
+export async function readRemoteEpubPreview(
+  port: RangeReader,
+  options: { probe?: ImageProbe } = {},
+): Promise<RemoteEpubPreview> {
   if (port.size <= 0) throw new UnextractableEpubError('eocd-not-found', 'empty file');
 
   // 1. Tail → EOCD → central directory.
@@ -286,7 +249,9 @@ export async function readRemoteEpubPreview(port: RangeReader): Promise<RemoteEp
   // 3. OPF → metadata + cover reference.
   const opfEntry = entries.get(opfPath);
   if (!opfEntry) throw new UnextractableEpubError('missing-opf', opfPath);
-  const opf = parseXml(await readEntry(port, opfEntry));
+  const opfBytes = await readEntry(port, opfEntry);
+  const opfText = new TextDecoder().decode(opfBytes);
+  const opf = parseXml(opfBytes);
 
   const identifiers = Array.from(opf.getElementsByTagNameNS('*', 'identifier'))
     .map((el) => el.textContent?.trim())
@@ -301,18 +266,41 @@ export async function readRemoteEpubPreview(port: RangeReader): Promise<RemoteEp
   };
 
   // 4. Cover — best effort; a missing/failed cover never fails the preview.
-  const coverRef = findCoverHref(opf);
-  if (coverRef) {
-    const coverPath = resolvePath(opfPath, coverRef.href);
-    const coverEntry = entries.get(coverPath);
-    if (coverEntry) {
-      try {
-        const bytes = await readEntry(port, coverEntry);
-        if (bytes.byteLength > 0) preview.cover = { bytes, mediaType: coverRef.mediaType };
-      } catch {
-        // Cover inflate/read failure is non-fatal: keep the metadata preview.
-      }
+  //    The shared resolver (@lib/epub/structure) handles the malformed
+  //    shapes (cover only in a cover page, meta naming an href, encoded
+  //    names, corrupt declared files). Reads are capped: the OPF is cached,
+  //    at most MAX_TEXT_READS documents and MAX_IMAGE_READS images are
+  //    fetched, so a pathological book costs a bounded number of ranges.
+  try {
+    let textReads = 0;
+    let imageReads = 0;
+    const entryFor = (zipPath: string) => entries.get(zipPath) ?? entries.get(safeDecode(zipPath));
+    const archive: ArchivePort = {
+      async readText(zipPath) {
+        if (zipPath === opfPath) return opfText;
+        const entry = entryFor(zipPath);
+        if (!entry || textReads >= MAX_TEXT_READS) return undefined;
+        textReads++;
+        return new TextDecoder().decode(await readEntry(port, entry));
+      },
+      async readBlob(zipPath, mediaType) {
+        const entry = entryFor(zipPath);
+        if (!entry || imageReads >= MAX_IMAGE_READS) return undefined;
+        imageReads++;
+        const bytes = await readEntry(port, entry);
+        return bytes.byteLength > 0 ? new Blob([bytes], { type: mediaType }) : undefined;
+      },
+    };
+    const structure = await readBookStructure(archive, opfPath, { toc: false });
+    const cover = structure ? await resolveStructureCover(structure, archive, options.probe) : undefined;
+    if (cover?.pick) {
+      preview.cover = {
+        bytes: await cover.pick.blob.arrayBuffer(),
+        mediaType: cover.pick.candidate.mediaType || 'image/jpeg',
+      };
     }
+  } catch {
+    // Cover inflate/read failure is non-fatal: keep the metadata preview.
   }
 
   return preview;

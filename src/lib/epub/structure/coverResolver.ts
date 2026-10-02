@@ -46,6 +46,12 @@ export interface FindCoverOptions {
   landmarks?: Landmark[];
   /** How many leading spine documents to open looking for a cover page (default 3). */
   maxDocuments?: number;
+  /**
+   * Stop after the package's own declarations (cover-image, meta cover,
+   * guide, landmarks) — the cheap first pass for well-formed books, which
+   * opens no spine documents.
+   */
+  declaredOnly?: boolean;
 }
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
@@ -155,6 +161,8 @@ export async function findCoverCandidates(
     const path = model.navPath ? resolveRelative(model.navPath, mark.href) : mark.href;
     await addReference(splitFragment(path)[0], 'landmark', false);
   }
+
+  if (options.declaredOnly) return out;
 
   // 4. Cover-ish spine documents: named like a cover, or declaring
   //    epub:type="cover", within the first few; the first spine document

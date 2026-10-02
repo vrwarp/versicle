@@ -82,11 +82,13 @@ type SpineSection = Section & {
 };
 
 /** Book whose spine.get() returns the label-carrying section. */
-export type BookInternals = Omit<Book, 'spine'> & {
+export type BookInternals = Omit<Book, 'spine' | 'container'> & {
   spine: Omit<Book['spine'], 'get'> & {
     get(target?: string | number): SpineSection;
     items?: SpineSection[];
   };
+  /** Upstream declares Container without its parsed `packagePath` (the OPF's zip path). */
+  container?: { packagePath?: string };
 };
 
 /** The one sanctioned widening from the public epubjs surface. */

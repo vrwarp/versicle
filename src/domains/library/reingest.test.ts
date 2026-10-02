@@ -36,6 +36,7 @@ const mapping = (sentenceCount: number): ChapterMapping => ({
   tableBatches: [],
   searchSections: [],
   totalChars: sentenceCount * 10,
+  chapterTitles: new Map(),
 });
 
 function makeDeps(overrides: Partial<ReingestWaveDeps> = {}): ReingestWaveDeps & {

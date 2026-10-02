@@ -80,22 +80,32 @@ export interface CoverResolution extends CoverChoice {
   candidates: CoverCandidate[];
 }
 
-/** List, read and validate cover candidates; first plausible one wins. */
+/**
+ * List, read and validate cover candidates; first plausible one wins.
+ * Two passes: the package's own declarations first (no spine documents
+ * opened — the common, well-formed case), then the full heuristic list
+ * minus anything the first pass already rejected.
+ */
 export async function resolveStructureCover(
   structure: BookStructure,
   archive: ArchivePort,
   probe: ImageProbe = probeImage,
 ): Promise<CoverResolution> {
   const { index } = structure;
-  const candidates = await findCoverCandidates(
-    index,
-    { readText: (path) => readTextSafe(archive, index.toZipPath(path)) },
-    { landmarks: structure.nav?.landmarks },
-  );
-  const choice = await chooseCover(
-    candidates,
-    (c) => archive.readBlob(index.toZipPath(c.href), c.mediaType),
+  const source = { readText: (path: string) => readTextSafe(archive, index.toZipPath(path)) };
+  const read = (c: CoverCandidate) => archive.readBlob(index.toZipPath(c.href), c.mediaType);
+  const landmarks = structure.nav?.landmarks;
+
+  const declared = await findCoverCandidates(index, source, { landmarks, declaredOnly: true });
+  const first = await chooseCover(declared, read, probe);
+  if (first.pick) return { ...first, candidates: declared };
+
+  const all = await findCoverCandidates(index, source, { landmarks });
+  const tried = new Set(declared.map((c) => c.href));
+  const second = await chooseCover(
+    all.filter((c) => !tried.has(c.href)),
+    read,
     probe,
   );
-  return { ...choice, candidates };
+  return { pick: second.pick, rejected: [...first.rejected, ...second.rejected], candidates: all };
 }

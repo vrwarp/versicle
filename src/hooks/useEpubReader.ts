@@ -46,6 +46,7 @@ import { createLogger } from '@lib/logger';
 import { measureSince } from '@lib/perf';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { findTocItem } from '@lib/reader/titleResolver';
+import { repairTocLabels } from '@lib/epub/structure/tocLabels';
 
 const logger = createLogger('useEpubReader');
 
@@ -279,8 +280,16 @@ export function useEpubReader(
         // Load navigation
         // The runner resumes the generator with the awaited yield value; the
         // navigation shape is asserted where it is received (was `any`).
-        const nav = (yield newBook.loaded.navigation) as { toc: NavigationItem[] };
-        const tocItems = nav.toc;
+        const nav = (yield newBook.loaded.navigation) as { toc?: NavigationItem[] } | undefined;
+        // The engine resolves the publisher TOC's hrefs onto the spine (a nav
+        // document outside the OPF folder otherwise yields dead links), and
+        // junk labels (`*FIX_…`, bare "Chapter N") borrow a real one from the
+        // stored TOC for the same target when it has one (plan §4.2).
+        const storedToc = optionsRef.current.metadata?.syntheticToc;
+        const tocItems = repairTocLabels(
+          newEngine.normalizeToc(nav?.toc ?? [], 'raw'),
+          storedToc?.length ? [newEngine.normalizeToc(storedToc)] : [],
+        );
         setToc(tocItems);
         if (optionsRef.current.onTocLoaded) {
           optionsRef.current.onTocLoaded(tocItems);

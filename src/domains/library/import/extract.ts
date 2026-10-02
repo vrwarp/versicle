@@ -42,6 +42,14 @@ import { measureSince } from '@lib/perf';
 import { cheapHash, computeContentHash, computeLegacyFingerprint } from './identity';
 import { getSanitizedBookMetadata } from './metadata';
 import { validateZipSignature } from './validate';
+import { archiveOfEpubJsBook } from './epubArchive';
+import {
+  readBookStructure,
+  resolveStructureCover,
+  resolveStructureToc,
+  type BookStructure,
+} from '@lib/epub/structure/bookStructure';
+import { repairTocLabels } from '@lib/epub/structure/tocLabels';
 
 const logger = createLogger('Ingestion');
 
@@ -164,36 +172,62 @@ export async function extractPreamble(file: Blob, options: PreambleOptions): Pro
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const metadata = await (book.loaded as any).metadata;
     const language = normalizeLanguageCode(metadata.language || metadata.lang);
-    const coverUrl = await book.coverUrl();
+
+    // The package's own structure (OPF + nav + NCX), read through the zip
+    // epub.js already holds — drives TOC resolution and cover finding for
+    // malformed books (plan/epub-toc-cover-hardening.md). `null` only for a
+    // non-archived book, where epub.js's own answers are used unchanged.
+    const archive = archiveOfEpubJsBook(book);
+    let structure: BookStructure | null = null;
+    if (archive) {
+      try {
+        structure = await readBookStructure(archive.port, archive.opfPath);
+      } catch (error) {
+        logger.warn('Failed to read package structure, using epub.js defaults:', error);
+      }
+    }
 
     let coverBlob: Blob | undefined;
     let thumbnailBlob: Blob | undefined;
     let coverPalette: number[] | undefined;
     let perceptualPalette: PerceptualPalette | undefined;
 
-    if (coverUrl) {
-      try {
-        const response = await localFetch(coverUrl);
-        coverBlob = await response.blob();
-        if (coverBlob && options.cover === 'thumbnail') {
-          try {
-            // Lazy: browser-image-compression (~55KB min) is only needed at
-            // import time; a static import would ride the eager LibraryView
-            // graph into the entry chunk (parsed on every boot).
-            const { default: imageCompression } = await import('browser-image-compression');
-            thumbnailBlob = await imageCompression(coverBlob as File, {
-              maxSizeMB: 0.1,
-              maxWidthOrHeight: 600,
-              useWebWorker: true,
-              fileType: 'image/webp',
-            });
-          } catch (error) {
-            logger.warn('Failed to compress cover image, using original:', error);
-            thumbnailBlob = coverBlob;
-          }
+    if (structure && archive) {
+      const cover = await resolveStructureCover(structure, archive.port);
+      if (cover.pick) {
+        coverBlob = cover.pick.blob;
+        logger.info(`Cover: ${cover.pick.candidate.href} (${cover.pick.candidate.reason})`);
+      }
+      for (const { candidate, why } of cover.rejected) {
+        logger.debug(`Cover candidate skipped: ${candidate.href} (${candidate.reason}) — ${why}`);
+      }
+    } else {
+      const coverUrl = await book.coverUrl();
+      if (coverUrl) {
+        try {
+          const response = await localFetch(coverUrl);
+          coverBlob = await response.blob();
+        } catch (error) {
+          logger.warn('Failed to retrieve cover blob:', error);
         }
+      }
+    }
+
+    if (coverBlob && options.cover === 'thumbnail') {
+      try {
+        // Lazy: browser-image-compression (~55KB min) is only needed at
+        // import time; a static import would ride the eager LibraryView
+        // graph into the entry chunk (parsed on every boot).
+        const { default: imageCompression } = await import('browser-image-compression');
+        thumbnailBlob = await imageCompression(coverBlob as File, {
+          maxSizeMB: 0.1,
+          maxWidthOrHeight: 600,
+          useWebWorker: true,
+          fileType: 'image/webp',
+        });
       } catch (error) {
-        logger.warn('Failed to retrieve cover blob:', error);
+        logger.warn('Failed to compress cover image, using original:', error);
+        thumbnailBlob = coverBlob;
       }
     }
 
@@ -211,9 +245,21 @@ export async function extractPreamble(file: Blob, options: PreambleOptions): Pro
       }
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const navigation = await (book.loaded as any).navigation;
-    const toc: NavigationItem[] = navigation ? navigation.toc : [];
+    let toc: NavigationItem[];
+    const choice = structure ? resolveStructureToc(structure) : null;
+    if (choice) {
+      toc = choice.toc;
+      if (choice.source) {
+        logger.info(
+          `TOC from ${choice.source}: ${choice.score?.resolved}/${choice.score?.total} entries resolve; ` +
+            `junk labels ${Math.round(choice.junkRateBefore * 100)}% → ${Math.round(choice.junkRateAfter * 100)}%`,
+        );
+      }
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const navigation = await (book.loaded as any).navigation;
+      toc = navigation ? navigation.toc : [];
+    }
 
     return {
       rawTitle: metadata.title || 'Untitled',
@@ -240,6 +286,11 @@ export interface ChapterMapping {
   tableBatches: TableImage[];
   searchSections: SearchTextSection[];
   totalChars: number;
+  /**
+   * Heading-derived chapter titles keyed by spine href — the last-resort
+   * source for replacing bare "Chapter N" TOC labels (hardening plan §9.5).
+   */
+  chapterTitles: Map<string, string>;
 }
 
 function toCacheTtsPrep(bookId: string, chapter: ProcessedChapter): CacheTtsPreparation {
@@ -260,10 +311,12 @@ export function mapChapters(bookId: string, chapters: ProcessedChapter[]): Chapt
   const ttsContentBatches: CacheTtsPreparation[] = [];
   const tableBatches: TableImage[] = [];
   const searchSections: SearchTextSection[] = [];
+  const chapterTitles = new Map<string, string>();
   let totalChars = 0;
 
   chapters.forEach((chapter, i) => {
     const title = chapter.title || `Chapter ${i + 1}`;
+    if (chapter.title) chapterTitles.set(chapter.href, chapter.title);
 
     syntheticToc.push({
       id: `syn-toc-${i}`,
@@ -308,7 +361,7 @@ export function mapChapters(bookId: string, chapters: ProcessedChapter[]): Chapt
     });
   });
 
-  return { syntheticToc, sections, ttsContentBatches, tableBatches, searchSections, totalChars };
+  return { syntheticToc, sections, ttsContentBatches, tableBatches, searchSections, totalChars, chapterTitles };
 }
 
 // ── extractBook ────────────────────────────────────────────────────────────
@@ -436,7 +489,7 @@ export async function extractBook(file: File, opts: ExtractBookOptions): Promise
     resource: { bookId, epubBlob: file },
     structure: {
       bookId,
-      toc: shared.toc.length > 0 ? shared.toc : mapping.syntheticToc,
+      toc: shared.toc.length > 0 ? repairTocLabels(shared.toc, [], mapping.chapterTitles) : mapping.syntheticToc,
       spineItems: mapping.sections.map((s) => ({
         id: s.sectionId,
         characterCount: s.characterCount,

@@ -9,6 +9,10 @@ import { cn } from '@lib/utils';
 import { ReadingHistoryPanel } from '../ReadingHistoryPanel';
 import { DeviceIcon } from '../DeviceIcon';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
+import { useToastStore } from '@store/useToastStore';
+
+/** Shown for a TOC entry whose link does not land in the book (greyed out). */
+export const BROKEN_TOC_LINK_MESSAGE = 'This chapter link is broken in the book file.';
 
 export interface DeviceMarker {
     id: string;
@@ -58,12 +62,18 @@ export const TOCPanel: React.FC<TOCPanelProps> = ({
     onHistoryNavigate,
     contentLang
 }) => {
+    const showToast = useToastStore(state => state.showToast);
+
     const renderTOCItem = (item: NavigationItem, index: number, level: number = 0, parentId: string = 'toc-item') => {
         const hasSubitems = item.subitems && item.subitems.length > 0;
         const showSubitems = hasSubitems && level < 2;
 
         const currentId = `${parentId}-${index}`;
         const isActive = item.id === activeTocId;
+        // Kept visible (the book's structure stays readable) but greyed: the
+        // link points at nothing displayable. A click explains instead of
+        // silently closing the sidebar on a failed jump.
+        const isBroken = !!item.unresolved;
 
         const itemHref = item.href.split('#')[0];
         const markers = deviceMarkers[itemHref] || deviceMarkers[item.href];
@@ -73,12 +83,17 @@ export const TOCPanel: React.FC<TOCPanelProps> = ({
                 <Button
                     variant="ghost"
                     data-testid={currentId}
+                    data-unresolved={isBroken ? 'true' : undefined}
+                    aria-disabled={isBroken || undefined}
+                    title={isBroken ? BROKEN_TOC_LINK_MESSAGE : undefined}
                     className={cn(
                         "text-left w-full h-auto text-sm py-1.5 px-2 block truncate transition-colors flex items-center justify-between group font-normal",
-                        isActive ? "text-primary font-medium bg-accent/50" : "text-muted-foreground hover:text-primary hover:bg-accent/30"
+                        isBroken
+                            ? "text-muted-foreground/50 italic cursor-not-allowed hover:bg-transparent hover:text-muted-foreground/50"
+                            : isActive ? "text-primary font-medium bg-accent/50" : "text-muted-foreground hover:text-primary hover:bg-accent/30"
                     )}
                     style={{ paddingLeft: `${level * 1.0 + 0.5}rem` }}
-                    onClick={() => onNavigate(item.href)}
+                    onClick={() => (isBroken ? showToast(BROKEN_TOC_LINK_MESSAGE, 'info') : onNavigate(item.href))}
                 >
                     <span className="truncate" lang={contentLang}>{item.label.trim()}</span>
                     {markers && markers.length > 0 && (

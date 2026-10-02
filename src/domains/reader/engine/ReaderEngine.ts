@@ -112,7 +112,15 @@ export interface ReaderEngine extends CfiRangeResolver {
   readonly highlights: HighlightLayerManager;
 
   // structure
+  /** The publisher TOC with hrefs resolved onto the spine (see normalizeToc). */
   getToc(): NavigationItem[];
+  /**
+   * Resolve a TOC tree's hrefs onto this book's spine (@lib/epub/structure):
+   * nav-relative, differently-encoded or -cased hrefs become spine hrefs and
+   * entries that cannot be displayed get `unresolved: true`. `stored` order
+   * (default) is idempotent — safe on TOCs persisted by any earlier build.
+   */
+  normalizeToc(items: NavigationItem[], order?: 'raw' | 'stored'): NavigationItem[];
   resolveSection(cfiOrHref: string): ResolvedSection | null;
   /** Nav-based human label for a section (ReadingHistoryPanel semantics). */
   getNavLabel(cfiOrHref: string): string | null;

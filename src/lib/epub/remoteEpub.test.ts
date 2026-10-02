@@ -12,6 +12,7 @@ import {
   UnextractableEpubError,
   type RangeReader,
 } from './remoteEpub';
+import { MALFORMED_EPUB_FIXTURES, buildFixtureEpub, probePngHeader } from '@test/harness/epubFixtures';
 
 const CONTAINER_XML = `<?xml version="1.0"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -200,5 +201,38 @@ describe('readRemoteEpubPreview', () => {
     const error = await readRemoteEpubPreview(bufferReader(buf)).catch((e) => e);
     expect(error).toBeInstanceOf(UnextractableEpubError);
     expect(error.reason).toBe('eocd-not-found');
+  });
+});
+
+describe('regression: percent-encoded cover href / cover via XHTML', () => {
+  // The Drive preview used its own cover heuristic (an image whose id/href
+  // says "cover") and looked zip entries up by the raw, percent-encoded
+  // manifest href. Books whose cover lives only in a cover page, or whose
+  // file name needs encoding, previewed with no cover.
+  const fixture = (name: string) => MALFORMED_EPUB_FIXTURES.find((f) => f.name === name)!;
+  const coverBytes = (name: string, zipPath: string) => fixture(name).files[zipPath] as Uint8Array;
+
+  const preview = async (name: string, probe?: Parameters<typeof readRemoteEpubPreview>[1]) => {
+    const bytes = await buildFixtureEpub(fixture(name));
+    const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    return readRemoteEpubPreview(bufferReader(buf), probe);
+  };
+
+  it('C6: decodes the manifest href to find the zip entry', async () => {
+    const result = await preview('href-variants');
+    expect(new Uint8Array(result.cover!.bytes)).toEqual(coverBytes('href-variants', 'OEBPS/Images/cover art.png'));
+  });
+
+  it('C1: finds the cover inside an undeclared cover page', async () => {
+    const result = await preview('nav-subfolder-undeclared-cover');
+    expect(result.cover?.mediaType).toBe('image/png');
+    expect(new Uint8Array(result.cover!.bytes)).toEqual(
+      coverBytes('nav-subfolder-undeclared-cover', 'OEBPS/Images/img-0001.png'),
+    );
+  });
+
+  it('C7: skips a corrupt declared cover and a logo within the read budget', async () => {
+    const result = await preview('cover-meta-href-corrupt', { probe: probePngHeader });
+    expect(new Uint8Array(result.cover!.bytes)).toEqual(coverBytes('cover-meta-href-corrupt', 'OEBPS/Images/front.png'));
   });
 });

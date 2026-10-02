@@ -6,6 +6,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useTocController } from './useTocController';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import type { BookMetadata, NavigationItem } from '~types/book';
+import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 
 /**
  * The Smart TOC seam. The real hook calls the `setSyntheticToc` setter the
@@ -14,11 +15,13 @@ import type { BookMetadata, NavigationItem } from '~types/book';
  * state that did NOT come from metadata — and that is what makes "the metadata
  * sync did not re-run" observable (see the regression block below).
  */
-const { smartToc } = vi.hoisted(() => ({
+const { smartToc, persistStoredToc } = vi.hoisted(() => ({
   smartToc: { setter: null as ((toc: NavigationItem[]) => void) | null },
+  persistStoredToc: vi.fn(async () => undefined),
 }));
 
 vi.mock('@hooks/useSmartTOC', () => ({
+  persistStoredToc,
   useSmartTOC: (
     _engine: unknown,
     _bookId: unknown,
@@ -158,6 +161,46 @@ describe('useTocController', () => {
       await flush();
 
       expect(result.current.syntheticToc).toBe(second);
+    });
+  });
+
+  describe('regression: a stored TOC with nav-relative hrefs is healed and written back', () => {
+    // Books imported before the malformed-EPUB hardening stored their nav's
+    // hrefs verbatim (`../Text/ch1.xhtml`), so the "synthetic" TOC toggle was
+    // as dead as the publisher TOC. The controller resolves the stored TOC
+    // against the live spine and persists the healed copy once.
+    const engine = {
+      normalizeToc: (items: NavigationItem[]) =>
+        items.map((i) => ({ ...i, href: i.href.replace('../', '') })),
+    } as unknown as ReaderEngine;
+
+    beforeEach(() => {
+      persistStoredToc.mockClear();
+      useReaderUIStore.setState({ toc: [{ id: 'p', href: 'Text/ch1.xhtml', label: 'Publisher' }] });
+    });
+
+    it('serves the healed TOC and persists it exactly once', async () => {
+      const stored: NavigationItem[] = [{ id: 's1', href: '../Text/ch1.xhtml', label: 'One' }];
+      const { result, rerender } = renderHook(() =>
+        useTocController({ bookId: 'book-1', engine, bookMetadata: metadata({ syntheticToc: stored }) }),
+      );
+      await waitFor(() => expect(result.current.syntheticToc[0]?.href).toBe('Text/ch1.xhtml'));
+      expect(persistStoredToc).toHaveBeenCalledTimes(1);
+      expect(persistStoredToc).toHaveBeenCalledWith('book-1', [{ id: 's1', href: 'Text/ch1.xhtml', label: 'One' }]);
+
+      rerender();
+      await flush();
+      expect(persistStoredToc).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a healthy stored TOC alone (same identity, no write)', async () => {
+      const stored: NavigationItem[] = [{ id: 's1', href: 'Text/ch1.xhtml', label: 'One' }];
+      const { result } = renderHook(() =>
+        useTocController({ bookId: 'book-1', engine, bookMetadata: metadata({ syntheticToc: stored }) }),
+      );
+      await waitFor(() => expect(result.current.syntheticToc).toBe(stored));
+      await flush();
+      expect(persistStoredToc).not.toHaveBeenCalled();
     });
   });
 });

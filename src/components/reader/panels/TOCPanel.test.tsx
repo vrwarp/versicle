@@ -1,7 +1,8 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { TOCPanel, type TOCPanelProps } from './TOCPanel';
+import { TOCPanel, BROKEN_TOC_LINK_MESSAGE, type TOCPanelProps } from './TOCPanel';
 import type { NavigationItem } from '~types/book';
+import { captureToasts } from '@test/harness';
 
 // Mock the ReadingHistoryPanel since it has complex dependencies
 vi.mock('../ReadingHistoryPanel', () => ({
@@ -138,5 +139,40 @@ describe('TOCPanel', () => {
         render(<TOCPanel {...defaultProps} useSyntheticToc={true} syntheticToc={[]} />);
 
         expect(screen.getByText('No generated titles available.')).toBeInTheDocument();
+    });
+
+    describe('regression: unresolved entries render greyed out and toast on click', () => {
+        // A TOC link that lands nowhere in the book (missing file, or a
+        // document outside the spine) used to look normal and silently do
+        // nothing. It stays visible — the book's structure is still useful —
+        // but greyed, with a tooltip, and a click explains instead of jumping.
+        const brokenToc: NavigationItem[] = [
+            { id: 'ok', href: 'chapter1.xhtml', label: 'Fine Chapter' },
+            { id: 'bad', href: 'missing.xhtml', label: 'Missing Chapter', unresolved: true },
+        ];
+
+        it('marks the broken entry and explains on click without navigating', () => {
+            const toasts = captureToasts();
+            const onNavigate = vi.fn();
+            try {
+                render(<TOCPanel {...defaultProps} toc={brokenToc} onNavigate={onNavigate} />);
+                const broken = screen.getByTestId('toc-item-1');
+                expect(broken).toHaveAttribute('data-unresolved', 'true');
+                expect(broken).toHaveAttribute('aria-disabled', 'true');
+                expect(broken).toHaveAttribute('title', BROKEN_TOC_LINK_MESSAGE);
+                expect(broken.className).toContain('cursor-not-allowed');
+
+                fireEvent.click(broken);
+                expect(onNavigate).not.toHaveBeenCalled();
+                expect(toasts.messages()).toEqual([BROKEN_TOC_LINK_MESSAGE]);
+
+                const fine = screen.getByTestId('toc-item-0');
+                expect(fine).not.toHaveAttribute('data-unresolved');
+                fireEvent.click(fine);
+                expect(onNavigate).toHaveBeenCalledWith('chapter1.xhtml');
+            } finally {
+                toasts.restore();
+            }
+        });
     });
 });
