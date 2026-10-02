@@ -1,7 +1,7 @@
 # Plan: Harden TOC and cover handling for malformed EPUBs
 
-> **Status: REVIEWED — decisions recorded in §9.** Nothing here is
-> implemented yet.
+> **Status: IMPLEMENTED** (one PR, all five slices of §5). Decisions in §9;
+> where the build differs from the design below, §10 says so.
 > Program rules in `plan/overhaul/README.md` §4 apply to every PR below.
 
 Trigger: a user import of *When I Don't Desire God* (Crossway, built with
@@ -403,3 +403,25 @@ baseline (the new pure module should *raise* it).
 | 3 | Cover backfill: automatic or manual-only? | **Automatic, once** after the update. A manual "Re-scan covers" button too (§5, PR 5). |
 | 4 | Rename the "Synthetic TOC" toggle? | **No.** The UX is unchanged. |
 | 5 | Treat bare "Chapter N" labels as low quality? | **Yes.** They are replaced per entry when another source has a better label for the same target (§4.2). |
+
+---
+
+## 10. As built — deviations from the design
+
+| Design said | Built | Why |
+|---|---|---|
+| A manifest item outside the spine maps to the nearest spine item (§4.2, T5) | It is flagged `unresolved` (greyed out) | Manifest order is not reading order (the trigger book lists every chapter opener first), so "nearest" would jump to the wrong place. A greyed entry that explains itself is honest. |
+| Lower-priority TOC source wins on a strictly better resolve rate (§4.2) | It wins on reaching more distinct spine documents, or when the current pick resolves under half its entries, or on the label floor | A good nav with two dead links would otherwise lose to a flatter NCX — exactly the `toc-structure-edge-cases` fixture. |
+| Label repair matched by href | Matches by entry id first, then leaf entries before grouping entries | A `<span>` group borrows its first child's href and was lending its label to that child (found by the E2E journey). |
+| Cover backfill in `MaintenanceService` (§5 PR 5) | `src/app/boot/coverBackfill.ts` boot task + `rescanCovers()` | It needs the import preamble (domains) and the stores; `lib/` may reach neither. |
+| — | The import projection now carries `syntheticToc` | Pre-existing gap the journey surfaced: a freshly imported book had no stored TOC until the next boot, so the toggle was empty and the reader could not repair labels from it. |
+| — | Cover search is two-pass (declared covers first, then heuristics) | Well-formed books and the Drive preview open no spine documents. |
+| — | Resolvers load lazily from `extract`, `reprocess` and `remoteEpub` | Keeps them off the entry chunk (net +1.3 KB gzip instead of +4.7 KB). |
+
+Where things live: `src/lib/epub/structure/` (pure resolvers + tests),
+`src/domains/library/import/epubArchive.ts` (epub.js archive adapter),
+`EpubJsEngine.normalizeToc` / `resolveTarget` (live reader),
+`useTocController` (stored-TOC self-heal), `TOCPanel` (greyed entries),
+`src/test/harness/epubFixtures.ts` + `verification/fixtures/malformed/`
+(corpus), `verification/test_journey_malformed_epub.spec.ts` (journey).
+

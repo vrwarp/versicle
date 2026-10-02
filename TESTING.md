@@ -424,6 +424,7 @@ follow:
 | `src/test/setup.ts` | Global jsdom setup (fake-indexeddb, media/speech/localStorage mocks) |
 | `src/test/harness/` | Typed doubles, store seeding, `renderWithStores`, vitest-axe |
 | `src/test/fuzz-utils.ts` | Seeded PRNG for `*.fuzz.test.ts` |
+| `src/test/harness/epubFixtures.ts` + `verification/fixtures/malformed/` | Malformed-EPUB corpus (bad TOC hrefs/labels, undeclared covers) with expected outcomes; the committed `.epub` files are drift-gated — regenerate with `npm run fixtures:epub` |
 | `src/test-api.ts` | `window.__versicleTest` (DEV/VITE_E2E only) |
 | `tsconfig.test.json` / `tsconfig.e2e.json` | Test/e2e typecheck projects (in `tsc -b`) |
 | `.dependency-cruiser.cjs` + `.dependency-cruiser-baseline.json` | Boundary rules (mostly error) + frozen ratchet counts |
