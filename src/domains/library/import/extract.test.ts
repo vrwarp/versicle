@@ -259,4 +259,36 @@ describe('regression: nav doc in subfolder + undeclared cover', () => {
     const full = await extractBook(makeEpubFile(), { depth: 'full' });
     expect(flattenToc(full.structure.toc)).toEqual(edge.expected.toc);
   });
+
+  it("falls back to epub.js's own TOC (resolved) when nav and NCX yield nothing here", async () => {
+    // Same package, but the nav/NCX files are unreadable to our parser
+    // (dropped from the archive) while epub.js reports a TOC.
+    const files = fixtureArchive({
+      ...fixture,
+      files: Object.fromEntries(
+        Object.entries(fixture.files).filter(([p]) => p !== 'OEBPS/Text/toc.xhtml' && p !== 'OEBPS/toc.ncx'),
+      ),
+    });
+    vi.mocked(ePub).mockImplementationOnce(
+      () =>
+        ({
+          ready: Promise.resolve(),
+          opened: Promise.resolve(),
+          loaded: {
+            metadata: Promise.resolve({ title: fixture.title, creator: 'x' }),
+            navigation: Promise.resolve({ toc: [{ id: 'x', href: '../Text/CH1.xhtml', label: 'From epub.js' }] }),
+          },
+          coverUrl: vi.fn(() => Promise.resolve(null)),
+          container: { packagePath: fixture.opfPath },
+          archive: {
+            getText: (url: string) => files.readText(url.slice(1)),
+            getBlob: (url: string, type?: string) => files.readBlob(url.slice(1), type ?? ''),
+          },
+          destroy: vi.fn(),
+        }) as unknown as ReturnType<typeof ePub>,
+    );
+    const result = await extractBook(makeEpubFile(), { depth: 'metadata' });
+    expect(flattenToc(result.toc)).toEqual([{ label: 'From epub.js', href: 'Text/CH1.xhtml' }]);
+  });
 });
+

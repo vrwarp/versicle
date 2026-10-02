@@ -174,7 +174,7 @@ export async function extractPreamble(file: Blob, options: PreambleOptions): Pro
     // malformed books (plan/epub-toc-cover-hardening.md). `null` only for a
     // non-archived book, where epub.js's own answers are used unchanged.
     const archive = archiveOfEpubJsBook(book);
-    const { readBookStructure, resolveStructureCover, resolveStructureToc } = await import(
+    const { readBookStructure, resolveStructureCover, resolveStructureToc, resolveForeignToc } = await import(
       '@lib/epub/structure/bookStructure'
     );
     let structure: BookStructure | null = null;
@@ -246,18 +246,19 @@ export async function extractPreamble(file: Blob, options: PreambleOptions): Pro
 
     let toc: NavigationItem[];
     const choice = structure ? resolveStructureToc(structure) : null;
-    if (choice) {
+    if (choice?.source) {
       toc = choice.toc;
-      if (choice.source) {
-        logger.info(
-          `TOC from ${choice.source}: ${choice.score?.resolved}/${choice.score?.total} entries resolve; ` +
-            `junk labels ${Math.round(choice.junkRateBefore * 100)}% → ${Math.round(choice.junkRateAfter * 100)}%`,
-        );
-      }
+      logger.info(
+        `TOC from ${choice.source}: ${choice.score?.resolved}/${choice.score?.total} entries resolve; ` +
+          `junk labels ${Math.round(choice.junkRateBefore * 100)}% → ${Math.round(choice.junkRateAfter * 100)}%`,
+      );
     } else {
+      // No package structure, or neither nav nor NCX parsed into entries
+      // here: epub.js's own parse, still resolved onto the spine if we can.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const navigation = await (book.loaded as any).navigation;
-      toc = navigation ? navigation.toc : [];
+      const raw: NavigationItem[] = navigation?.toc ?? [];
+      toc = structure && raw.length > 0 ? resolveForeignToc(structure, raw) : raw;
     }
 
     return {

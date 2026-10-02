@@ -76,6 +76,16 @@ export function resolveStructureToc(
   );
 }
 
+/**
+ * Resolve a TOC tree parsed elsewhere (epub.js's navigation) against this
+ * package — the fallback when neither nav nor NCX parsed here yielded
+ * entries but epub.js did.
+ */
+export function resolveForeignToc(structure: BookStructure, items: NavigationItem[]): NavigationItem[] {
+  const { index } = structure;
+  return resolveToc(items, { index, tocPath: index.model.navPath ?? index.model.ncxPath, order: 'raw' });
+}
+
 export interface CoverResolution extends CoverChoice {
   candidates: CoverCandidate[];
 }

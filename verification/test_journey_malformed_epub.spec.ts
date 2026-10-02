@@ -110,3 +110,19 @@ test('malformed EPUB: broken TOC entries are greyed out and explain themselves',
   await utils.waitForSectionChange(page, before);
   expect(await utils.currentSectionHref(page)).toBe('Text/ch2.xhtml');
 });
+
+test('malformed EPUB: a corrupt declared cover falls back to the real one, not the logo', async ({ page }) => {
+  // C4 + C7 + C8: <meta name="cover"> names a file by href, and that file is
+  // corrupt; the first page holds only a 400×100 publisher logo; the real
+  // 300×450 cover is merely NAMED like one. Validation runs on the platform
+  // decoder here (unit tests can only fake it).
+  const card = await importAndOpen(page, 'cover-meta-href-corrupt', 'Meta Href Cover');
+  const cover = card.getByRole('img', { name: 'Cover of Meta Href Cover' });
+  await expect(cover).toBeVisible({ timeout: 15000 });
+  await expect
+    .poll(() => cover.evaluate((img: HTMLImageElement) => (img.complete ? [img.naturalWidth, img.naturalHeight] : null)), {
+      timeout: 15000,
+    })
+    .toEqual([300, 450]);
+  await utils.captureScreenshot(page, 'malformed_5_corrupt_cover_fallback');
+});
