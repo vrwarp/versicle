@@ -177,3 +177,20 @@ describe('regression: backgrounding drains the recorder window all the way to di
     }
   });
 });
+
+/**
+ * A TOC entry whose href epub.js could not resolve made `jumpTo` reject
+ * inside a `.catch` that only logged — the click silently did nothing. The
+ * engine now resolves such hrefs, and anything still unresolvable is told to
+ * the reader.
+ */
+describe('regression: a failed jump is surfaced to the reader, not only logged', () => {
+  it('toasts from the jumpTo display() rejection handler', () => {
+    const start = CONTROLLER.indexOf('jumpTo: (cfi) => {');
+    expect(start, 'commands.jumpTo was renamed — update this gate').toBeGreaterThan(-1);
+    const block = CONTROLLER.slice(start, CONTROLLER.indexOf('jumpToEnd: (cfi) => {', start));
+    const handler = block.slice(block.indexOf('.catch((e) => {'));
+    expect(handler).toContain("logger.error('Failed to jump to location', e)");
+    expect(handler).toMatch(/showToast\([^)]*'error'\)/);
+  });
+});

@@ -11,8 +11,12 @@ import type { NavigationItem, BookMetadata } from '~types/book';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useBookStore } from '@store/useBookStore';
-import { useSmartTOC } from '@hooks/useSmartTOC';
+import { persistStoredToc, useSmartTOC } from '@hooks/useSmartTOC';
 import { findTocItem } from '@lib/reader/titleResolver';
+import { tocEquals } from '@lib/epub/structure/tocResolver';
+import { createLogger } from '@lib/logger';
+
+const logger = createLogger('useTocController');
 
 /**
  * perf: the shared empty synthetic TOC. A fresh `[]` per metadata identity
@@ -47,11 +51,22 @@ export function useTocController(opts: {
   const setCurrentSection = useReaderUIStore(state => state.setCurrentSection);
 
   const [useSyntheticToc, setUseSyntheticToc] = useState(false);
-  const [syntheticToc, setSyntheticToc] = useState<NavigationItem[]>(NO_SYNTHETIC_TOC);
+  const [storedToc, setSyntheticToc] = useState<NavigationItem[]>(NO_SYNTHETIC_TOC);
   // Tracks whether the user has explicitly toggled the switch in this session.
   // Prevents the bookMetadata effect from overriding their choice when Yjs
   // fires an observer after updateBook (which would cause a reset race).
   const userHasExplicitlySetSyntheticToc = useRef(false);
+
+  // The STORED TOC (the "synthetic" toggle's source) resolved against the
+  // live spine: books imported before the malformed-EPUB hardening stored
+  // nav-relative hrefs that never displayed. Waits for the publisher `toc`
+  // (the engine's packaging is parsed by then). Resolution is idempotent, so
+  // a healthy TOC comes back equal and keeps its identity.
+  const syntheticToc = useMemo(() => {
+    if (!engine || toc.length === 0 || storedToc.length === 0) return storedToc;
+    const healed = engine.normalizeToc(storedToc);
+    return tocEquals(healed, storedToc) ? storedToc : healed;
+  }, [engine, toc, storedToc]);
 
   // Determine active TOC item based on currentSectionId (href)
   const activeTocId = useMemo(() => {
@@ -78,6 +93,14 @@ export function useTocController(opts: {
     toc,
     setSyntheticToc
   );
+
+  // Write a healed stored TOC back so every other reader of it (title
+  // resolution, the control bar) sees spine hrefs too — once per change, and
+  // never while Enhance TOC is about to write its own result.
+  useEffect(() => {
+    if (!bookId || isEnhancing || syntheticToc === storedToc) return;
+    persistStoredToc(bookId, syntheticToc).catch((error) => logger.warn('Failed to persist healed TOC:', error));
+  }, [bookId, isEnhancing, syntheticToc, storedToc]);
 
   // Reset the explicit-set guard whenever the user navigates to a different book
   useEffect(() => {

@@ -92,11 +92,13 @@ export async function reprocessBookContent(
     if (preamble.perceptualPalette) manifest.perceptualPalette = preamble.perceptualPalette;
   }
 
+  // Lazy: the TOC label resolver stays off the eager import graph.
+  const { repairTocLabels } = await import('@lib/epub/structure/tocLabels');
   await bookContent.replaceDerivedContent(bookId, {
     manifest,
     structure: {
       bookId,
-      toc: preamble.toc.length > 0 ? preamble.toc : mapping.syntheticToc,
+      toc: preamble.toc.length > 0 ? repairTocLabels(preamble.toc, [], mapping.chapterTitles) : mapping.syntheticToc,
       spineItems: mapping.sections.map((s) => ({
         id: s.sectionId,
         characterCount: s.characterCount,

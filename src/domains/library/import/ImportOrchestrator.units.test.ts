@@ -1100,3 +1100,22 @@ describe('ImportOrchestrator.reprocess', () => {
     expect(h.statics.has('b1')).toBe(false);
   });
 });
+
+describe('regression: a freshly imported book carries its stored TOC', () => {
+  // The import projection was built from the manifest alone, so the stored
+  // TOC (resolved and label-repaired at extraction) only appeared after the
+  // next boot hydrated it from static_structure: the "Generated Titles"
+  // toggle was empty and the reader could not repair junk labels from it.
+  it('projects structure.toc as syntheticToc on NEW registration', async () => {
+    const toc = [{ id: 'a', href: 'Text/a.xhtml', label: 'The Beginning' }];
+    const h = build({
+      extract: vi.fn(async () =>
+        extraction({ structure: { bookId: 'new-book', toc, spineItems: [] } }),
+      ) as unknown as ImportOrchestratorDeps['extract'],
+    });
+
+    await h.orchestrator.importFile(epubFile('book.epub'), { adoptGhosts: false });
+
+    expect(h.statics.get('new-book')).toMatchObject({ id: 'new-book', syntheticToc: toc });
+  });
+});

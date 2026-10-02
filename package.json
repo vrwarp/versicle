@@ -23,6 +23,7 @@
     "generate:csp": "node scripts/generate-csp.mjs",
     "docs:generate": "REGEN_DOCS=1 REGEN_STORE_DOCS=1 vitest run src/app/docs/docs.test.ts src/store/__tests__/registry.test.ts",
     "generate:csp:check": "node scripts/generate-csp.mjs --check",
+    "fixtures:epub": "REGEN_EPUB_FIXTURES=1 vitest run src/test/harness/epubFixtures.test.ts",
     "compile-dict": "node scripts/compile-dict.cjs",
     "generate-trad2simp": "node scripts/generate-trad2simp.mjs",
     "test": "vitest run",

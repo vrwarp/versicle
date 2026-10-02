@@ -489,10 +489,13 @@ export class ImportOrchestrator {
         readingList.upsert({ ...extraction.readingListEntry, bookId: extraction.bookId });
       }
 
-      projection.setStatic(
-        extraction.bookId,
-        toBookMetadata(extraction.manifest, extraction.bookId, this.now()),
-      );
+      projection.setStatic(extraction.bookId, {
+        ...toBookMetadata(extraction.manifest, extraction.bookId, this.now()),
+        // The stored TOC (resolved + label-repaired at extraction) — what a
+        // reload reads from static_structure. Without it a freshly imported
+        // book had no stored TOC until the next boot.
+        syntheticToc: extraction.structure.toc,
+      });
       projection.removeOffloaded(extraction.bookId);
     });
   }

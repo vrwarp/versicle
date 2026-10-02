@@ -229,6 +229,17 @@ export class FakeReaderEngine implements ReaderEngine {
     }));
   }
 
+  /** Flags entries whose href names no section; hrefs are already spine hrefs here. */
+  normalizeToc(items: NavigationItem[]): NavigationItem[] {
+    return items.map((item) => {
+      const next: NavigationItem = { ...item };
+      if (item.subitems) next.subitems = this.normalizeToc(item.subitems);
+      if (item.href && this.indexFor(item.href) >= 0) delete next.unresolved;
+      else if (item.href) next.unresolved = true;
+      return next;
+    });
+  }
+
   resolveSection(cfiOrHref: string): ResolvedSection | null {
     const idx = this.indexFor(cfiOrHref);
     if (idx < 0) return null;

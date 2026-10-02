@@ -16,6 +16,11 @@ export interface NavigationItem {
   label: string;
   subitems?: NavigationItem[];
   parent?: string;
+  /**
+   * Set when the entry's href does not land in the spine (missing file, or
+   * a document epub.js cannot display). The TOC renders it greyed out.
+   */
+  unresolved?: boolean;
 }
 
 export interface PerceptualPalette {

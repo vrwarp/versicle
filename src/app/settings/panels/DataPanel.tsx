@@ -24,6 +24,7 @@ import { useToastStore } from '@store/useToastStore';
 import { useNavigationGuard } from '@hooks/useNavigationGuard';
 import { BackButtonPriority } from '@store/useBackNavigationStore';
 import { createLogger } from '@lib/logger';
+import { rescanCovers } from '@app/boot/coverBackfill';
 
 const logger = createLogger('DataPanel');
 
@@ -46,6 +47,8 @@ const DataPanel: React.FC = () => {
   const [regenerationPercent, setRegenerationPercent] = useState(0);
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
+  const [isRescanningCovers, setIsRescanningCovers] = useState(false);
+  const [coverRescanResult, setCoverRescanResult] = useState<string | null>(null);
 
   // The reading-list overlay closes on hardware back BEFORE the settings
   // overlay does (the settings close is plain history navigation; this
@@ -207,6 +210,24 @@ const DataPanel: React.FC = () => {
     }
   };
 
+  const handleRescanCovers = async () => {
+    setIsRescanningCovers(true);
+    setCoverRescanResult(null);
+    try {
+      const { scanned, found } = await rescanCovers();
+      setCoverRescanResult(
+        scanned === 0
+          ? 'Every book on this device already has a cover.'
+          : `Found ${found} cover${found === 1 ? '' : 's'} for ${scanned} book${scanned === 1 ? '' : 's'} without one.`,
+      );
+    } catch (e) {
+      logger.error('Cover re-scan failed', e);
+      setCoverRescanResult('Cover re-scan failed.');
+    } finally {
+      setIsRescanningCovers(false);
+    }
+  };
+
   const handleExportLight = async () => {
     try {
       setBackupStatus('Exporting metadata...');
@@ -281,6 +302,9 @@ const DataPanel: React.FC = () => {
         regenerationProgress={regenerationProgress}
         regenerationPercent={regenerationPercent}
         onRegenerateMetadata={handleRegenerateMetadata}
+        onRescanCovers={handleRescanCovers}
+        isRescanningCovers={isRescanningCovers}
+        coverRescanResult={coverRescanResult}
         onClearAllData={handleClearAllData}
         isClearing={isClearing}
       />

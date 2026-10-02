@@ -23,6 +23,10 @@ export interface DataManagementTabProps {
     regenerationProgress: string | null;
     regenerationPercent: number;
     onRegenerateMetadata: () => void;
+    /** Re-run cover finding for local books that have none (hardening plan §5). */
+    onRescanCovers?: () => void;
+    isRescanningCovers?: boolean;
+    coverRescanResult?: string | null;
     // Danger Zone
     onClearAllData: () => void;
     isClearing?: boolean;
@@ -44,6 +48,9 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
     regenerationProgress,
     regenerationPercent,
     onRegenerateMetadata,
+    onRescanCovers,
+    isRescanningCovers = false,
+    coverRescanResult = null,
     onClearAllData,
     isClearing = false
 }) => {
@@ -172,6 +179,26 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                     )}
                     {regenerationProgress && !isRegenerating && (
                         <p className="text-sm text-muted-foreground">{regenerationProgress}</p>
+                    )}
+                    {onRescanCovers && (
+                        <Button
+                            onClick={onRescanCovers}
+                            variant="outline"
+                            disabled={isRescanningCovers}
+                            className="gap-2"
+                            data-testid="rescan-covers-button"
+                        >
+                            {isRescanningCovers && (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                                    <span className="sr-only" aria-live="polite">Scanning covers...</span>
+                                </>
+                            )}
+                            <span aria-hidden={isRescanningCovers}>{isRescanningCovers ? "Scanning covers..." : "Re-scan Missing Covers"}</span>
+                        </Button>
+                    )}
+                    {coverRescanResult && (
+                        <p className="text-sm text-muted-foreground" data-testid="rescan-covers-result">{coverRescanResult}</p>
                     )}
                 </div>
             </div>

@@ -73,23 +73,16 @@ export function useSmartTOC(
 
       const newToc = reconstructToc(originalToc, titleMap);
 
-      // Persist enhanced TOC to static_structure in IDB
-      await bookContent.updateToc(bookId, newToc);
-
-      // Reactively update local static metadata cache in useLibraryStore
-      useLibraryStore.setState((state) => {
-        const nextStaticMetadata = { ...state.staticMetadata };
-        if (nextStaticMetadata[bookId]) {
-          nextStaticMetadata[bookId] = {
-            ...nextStaticMetadata[bookId],
-            syntheticToc: newToc
-          };
-        }
-        return { staticMetadata: nextStaticMetadata };
-      });
+      await persistStoredToc(bookId, newToc);
 
       setSyntheticToc(newToc);
-      showToast('Table of Contents enhanced successfully!', 'success');
+      const unreadable = totalItems - sectionsToProcess.length;
+      showToast(
+        unreadable > 0
+          ? `Table of Contents enhanced (${unreadable} ${unreadable === 1 ? 'entry' : 'entries'} could not be read).`
+          : 'Table of Contents enhanced successfully!',
+        'success',
+      );
 
     } catch (error) {
       logger.error('Failed to enhance TOC:', error);
@@ -101,6 +94,25 @@ export function useSmartTOC(
   }, [engine, bookId, originalToc, isAIEnabled, setSyntheticToc, showToast]);
 
   return { enhanceTOC, isEnhancing, progress };
+}
+
+/**
+ * Persist a book's stored TOC (static_structure.toc — the reader's
+ * "synthetic" TOC) and patch the library's static-metadata cache so open
+ * views see it without a reload. Shared by Enhance TOC and the reader's
+ * open-time TOC self-heal (useTocController).
+ */
+export async function persistStoredToc(bookId: string, toc: NavigationItem[]): Promise<void> {
+  await bookContent.updateToc(bookId, toc);
+  useLibraryStore.setState((state) => {
+    if (!state.staticMetadata[bookId]) return state;
+    return {
+      staticMetadata: {
+        ...state.staticMetadata,
+        [bookId]: { ...state.staticMetadata[bookId], syntheticToc: toc },
+      },
+    };
+  });
 }
 
 function countTocItems(items: NavigationItem[]): number {
@@ -121,18 +133,21 @@ async function collectSectionData(
   results: { id: string; text: string }[]
 ): Promise<void> {
   for (const item of items) {
-    try {
-      // Section text via the engine port (no re-unzip; href hash stripped inside)
-      const content = await engine.loadSectionText(item.href);
+    // A link the book cannot display (greyed in the TOC) has no text to read.
+    if (!item.unresolved) {
+      try {
+        // Section text via the engine port (no re-unzip; href hash stripped inside)
+        const content = await engine.loadSectionText(item.href);
 
-      if (content) {
-        const text = content.trim().substring(0, 500);
-        if (text.length > 0) {
-          results.push({ id: item.id, text });
+        if (content) {
+          const text = content.trim().substring(0, 500);
+          if (text.length > 0) {
+            results.push({ id: item.id, text });
+          }
         }
+      } catch (e) {
+        logger.warn(`Failed to process TOC item: ${item.label}`, e);
       }
-    } catch (e) {
-      logger.warn(`Failed to process TOC item: ${item.label}`, e);
     }
 
     onProgress(1);

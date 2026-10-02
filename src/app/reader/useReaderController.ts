@@ -854,6 +854,9 @@ export function useReaderController(
           })
           .catch((e) => {
             logger.error('Failed to jump to location', e);
+            // Was log-only: a TOC/bookmark link the book can't resolve made
+            // the click silently do nothing.
+            useToastStore.getState().showToast("Couldn't open that location in the book.", 'error');
           });
       } catch (e) {
         logger.error('Failed to jump to location', e);

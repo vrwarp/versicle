@@ -27,6 +27,7 @@ import { syncInitTask } from './syncInit';
 import { ttsInitializeTask, deviceRegistrationTask } from './deviceRegistration';
 import { deviceHeartbeatTask, driveAutoScanTask, driveTrickleTask, audioCacheEvictionTask, embeddingCacheEvictionTask, reingestWaveTask } from './backgroundTasks';
 import { embeddingBackfillTask } from './embeddingBackfill';
+import { coverBackfillTask } from './coverBackfill';
 import { artifactPublisherTask } from './artifactPublisher';
 import { artifactSweeperTask } from './artifactSweeper';
 import { socialLoginTask } from './socialLogin';
@@ -86,6 +87,7 @@ export function registerAppBootTasks(): void {
   registerBootTask('backgroundTasks', embeddingCacheEvictionTask);
   registerBootTask('backgroundTasks', reingestWaveTask);
   registerBootTask('backgroundTasks', embeddingBackfillTask);
+  registerBootTask('backgroundTasks', coverBackfillTask);
   registerBootTask('backgroundTasks', artifactPublisherTask);
   registerBootTask('backgroundTasks', artifactSweeperTask);
   registerBootTask('backgroundTasks', socialLoginTask);
