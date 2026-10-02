@@ -1,6 +1,7 @@
 # Plan: Harden TOC and cover handling for malformed EPUBs
 
-> **Status: PROPOSED — for review.** Nothing here is implemented yet.
+> **Status: REVIEWED — decisions recorded in §9.** Nothing here is
+> implemented yet.
 > Program rules in `plan/overhaul/README.md` §4 apply to every PR below.
 
 Trigger: a user import of *When I Don't Desire God* (Crossway, built with
@@ -178,9 +179,17 @@ resolvable child's target.
 scores each candidate tree:
 
 - **resolve rate**: the fraction of entries that land in the spine;
-- **label quality**: penalizes empty labels, all-identical labels, labels that
-  are filenames, and labels that match a placeholder pattern (`^\*?FIX_`,
-  `.int$`, `Untitled`, etc.);
+- **label quality**: penalizes the following labels (decision §9.5):
+  - empty labels;
+  - all-identical labels;
+  - labels that are filenames;
+  - labels that match a placeholder pattern (`^\*?FIX_`, `.int$`, `Untitled`,
+    etc.);
+  - **bare ordinal labels** — "Chapter 7", "Ch. 7", "Part II", "7" — matching
+    `^(chapter|ch\.?|part|section|book)?\s*[\divxlc]+\.?$/i`.
+
+  A label that *starts* with an ordinal but carries a title ("Chapter 1 Why I
+  Wrote This Book") is fine;
 - **coverage**: the distinct spine items it reaches.
 
 Priority stays nav, then NCX, then synthetic. A lower-priority source wins
@@ -188,7 +197,18 @@ only if it is strictly better on resolve rate, or the higher one fails the
 label-quality floor. Labels can also be **merged**: if the NCX's hrefs are
 fine but its labels are junk, and the nav's labels are good but its hrefs are
 broken, the resolver keeps the nav's labels with the resolved hrefs. That is
-exactly the trigger book.
+exactly the trigger book. The same per-entry merge applies to bare-ordinal
+labels: one is replaced only when another source has a better label **for the
+same spine target**. The fallback order for that better label is:
+
+1. the other TOC file;
+2. the chapter heading the offscreen extractor already derives
+   (`deriveChapterTitle`).
+
+With no better candidate, "Chapter 7" stays as it is. Labels are never
+blanked, and an href is never dropped because of its label. The merge is
+silent (decision §9.2): no "TOC repaired" note in the UI, only an `Ingestion`
+log line recording which source supplied the hrefs and which the labels.
 
 ### 4.3 Cover resolution (fixes C1–C8)
 
@@ -249,7 +269,7 @@ a "why is my cover wrong" report can be answered from the flight recorder.
 | `EpubJsEngine.getNavLabel` | `navigation.get(section.href)` is keyed by raw nav hrefs. Use the resolved TOC instead. |
 | `useSmartTOC` | Skip `unresolved` items. Report the count that couldn't be read, rather than failing the whole enhancement when only some do. |
 | `useReaderController.jumpTo` | On rejection, show a toast ("This chapter link is broken in the book file") instead of only logging. |
-| `TOCPanel` | Render `unresolved` entries muted, with a tooltip. Keep them visible so the structure isn't lost. |
+| `TOCPanel` | Render `unresolved` entries **greyed out** (decision §9.1) with a tooltip ("This link is broken in the book file"). Keep them visible so the structure isn't lost. A click shows the same toast as `jumpTo` and does not close the sidebar. |
 | `remoteEpub.ts` | Replace `findCoverHref` and `resolvePath` with `coverResolver`/`paths`. Gate the XHTML-hop candidates (steps 3–5) behind the ranged-read budget: at most 2 extra small entry reads. |
 
 Dependency direction: `@lib/epub/structure` imports nothing app-side. Callers
@@ -292,8 +312,10 @@ Each PR is independently shippable and leaves the gate green.
    - For each, it runs **only** the preamble cover step, not a full reprocess.
    - It writes the cover and palette, the same way reprocess applies the
      palette delta to the inventory.
-   - It runs throttled, after boot, and is cancellable.
-   - It also gets a manual "Re-scan covers" button in the Data settings panel.
+   - It runs **automatically once** after the update (decision §9.3),
+     throttled, after boot, and is cancellable.
+   - It also gets a manual "Re-scan covers" button in the Data settings panel,
+     for re-runs.
 
 ---
 
@@ -340,7 +362,7 @@ packaging instead.
 - `extract.test.ts` → `describe('regression: nav doc in subfolder + undeclared cover')`
 - `remoteEpub.test.ts` → `describe('regression: percent-encoded cover href / cover via XHTML')`
 - `EpubJsEngine.test.ts` → `describe('regression: display() with nav-relative href')`
-- `TOCPanel.test.tsx` → unresolved entries render muted and are not silently inert
+- `TOCPanel.test.tsx` → unresolved entries render greyed out and toast on click
 - `MaintenanceService.test.ts` → backfill is idempotent and flag-guarded
 
 **Real-epub.js check.** jsdom hangs opening an archived book (observed
@@ -372,15 +394,12 @@ baseline (the new pure module should *raise* it).
 
 ---
 
-## 9. Open questions for review
+## 9. Review decisions
 
-1. **Unresolved TOC entries:** show them muted (proposed), or hide them?
-2. **Label arbitration:** is silently merging nav labels onto NCX hrefs
-   acceptable, or should it surface as a "TOC repaired" note in the TOC panel?
-3. **Cover backfill:** run automatically once after the update (proposed), or
-   only from the manual "Re-scan covers" button?
-4. **Rename "Synthetic TOC":** the toggle shows the stored publisher TOC, not
-   a synthetic one, unless Enhance TOC ran. Rename it ("Enhanced titles"?) in
-   PR 2, or leave the UX as is?
-5. **Placeholder-label patterns:** start with the conservative list in §4.2,
-   or also treat "Chapter N"-only labels as low quality?
+| # | Question | Decision |
+|---|---|---|
+| 1 | Unresolved TOC entries: hide or show? | **Show them greyed out**, with a tooltip and a toast on click (§4.4). |
+| 2 | Nav-label + NCX-href merge: silent, or a "TOC repaired" note? | **Silent.** Log only (§4.2). |
+| 3 | Cover backfill: automatic or manual-only? | **Automatic, once** after the update. A manual "Re-scan covers" button too (§5, PR 5). |
+| 4 | Rename the "Synthetic TOC" toggle? | **No.** The UX is unchanged. |
+| 5 | Treat bare "Chapter N" labels as low quality? | **Yes.** They are replaced per entry when another source has a better label for the same target (§4.2). |
