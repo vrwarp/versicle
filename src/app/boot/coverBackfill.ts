@@ -28,7 +28,7 @@ const logger = createLogger('CoverBackfill');
 /** Bump to re-run the automatic pass on every device (e.g. after resolver improvements). */
 export const COVER_BACKFILL_FLAG = 'versicle.coverBackfill.v1';
 
-export interface ExtractedCover {
+interface ExtractedCover {
   coverBlob?: Blob;
   coverPalette?: number[];
   perceptualPalette?: PerceptualPalette;

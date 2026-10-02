@@ -93,13 +93,21 @@ export function repairTocLabels(
   const junk = junkMask(items);
   if (junk.size === 0) return items;
 
+  // Same entry first (a stored copy of this very TOC keeps its ids), then
+  // same target. Leaves are indexed before grouping entries: a group
+  // ("Part One") borrows its first child's href, and must not lend its
+  // label to that child.
+  const byIdHref = new Map<string, string>();
   const byHref = new Map<string, string>();
   const byFile = new Map<string, string>();
   for (const alt of alternatives) {
     const altJunk = junkMask(alt);
-    for (const entry of flatten(alt)) {
-      if (entry.unresolved || altJunk.has(entry) || !entry.href) continue;
+    const usable = flatten(alt).filter((e) => !e.unresolved && !altJunk.has(e) && e.href);
+    const leavesFirst = [...usable.filter((e) => !e.subitems?.length), ...usable.filter((e) => e.subitems?.length)];
+    for (const entry of leavesFirst) {
       const label = entry.label.replace(/\s+/g, ' ').trim();
+      const idKey = `${entry.id}\u0000${entry.href}`;
+      if (!byIdHref.has(idKey)) byIdHref.set(idKey, label);
       if (!byHref.has(entry.href)) byHref.set(entry.href, label);
       const file = splitFragment(entry.href)[0];
       if (!byFile.has(file)) byFile.set(file, label);
@@ -109,7 +117,7 @@ export function repairTocLabels(
   const pick = (item: NavigationItem): string | undefined => {
     if (item.unresolved || !item.href) return undefined;
     const [file, fragment] = splitFragment(item.href);
-    const direct = byHref.get(item.href);
+    const direct = byIdHref.get(`${item.id}\u0000${item.href}`) ?? byHref.get(item.href);
     if (direct) return direct;
     if (fragment) return undefined;
     const sameFile = byFile.get(file);
@@ -133,7 +141,7 @@ export function repairTocLabels(
   return walk(items);
 }
 
-export type TocSourceKind = 'nav' | 'ncx';
+type TocSourceKind = 'nav' | 'ncx';
 
 export interface TocSourceCandidate {
   kind: TocSourceKind;

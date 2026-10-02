@@ -21,7 +21,6 @@ import type { PerceptualPalette } from '~types/book';
 import { AppError } from '~types/errors';
 import { TTS_EXTRACTION_VERSION } from '@lib/ingestion/sentence-extraction';
 import { extractPreamble, mapChapters, type BookSearchText, type ChapterMapping } from './extract';
-import { repairTocLabels } from '@lib/epub/structure/tocLabels';
 
 export interface ReprocessResult {
   /** Set when the cover palette was re-extracted — apply to the synced inventory. */
@@ -93,6 +92,8 @@ export async function reprocessBookContent(
     if (preamble.perceptualPalette) manifest.perceptualPalette = preamble.perceptualPalette;
   }
 
+  // Lazy: the TOC label resolver stays off the eager import graph.
+  const { repairTocLabels } = await import('@lib/epub/structure/tocLabels');
   await bookContent.replaceDerivedContent(bookId, {
     manifest,
     structure: {

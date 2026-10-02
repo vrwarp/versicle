@@ -43,13 +43,9 @@ import { cheapHash, computeContentHash, computeLegacyFingerprint } from './ident
 import { getSanitizedBookMetadata } from './metadata';
 import { validateZipSignature } from './validate';
 import { archiveOfEpubJsBook } from './epubArchive';
-import {
-  readBookStructure,
-  resolveStructureCover,
-  resolveStructureToc,
-  type BookStructure,
-} from '@lib/epub/structure/bookStructure';
-import { repairTocLabels } from '@lib/epub/structure/tocLabels';
+// Type-only: the structure resolvers load lazily at first import (Phase 8
+// §A, like epubjs below) — this module rides the eager LibraryView graph.
+import type { BookStructure } from '@lib/epub/structure/bookStructure';
 
 const logger = createLogger('Ingestion');
 
@@ -178,6 +174,9 @@ export async function extractPreamble(file: Blob, options: PreambleOptions): Pro
     // malformed books (plan/epub-toc-cover-hardening.md). `null` only for a
     // non-archived book, where epub.js's own answers are used unchanged.
     const archive = archiveOfEpubJsBook(book);
+    const { readBookStructure, resolveStructureCover, resolveStructureToc } = await import(
+      '@lib/epub/structure/bookStructure'
+    );
     let structure: BookStructure | null = null;
     if (archive) {
       try {
@@ -480,6 +479,7 @@ export async function extractBook(file: File, opts: ExtractBookOptions): Promise
   };
 
   const now = Date.now();
+  const { repairTocLabels } = await import('@lib/epub/structure/tocLabels');
 
   return {
     ...shared,

@@ -21,9 +21,10 @@
  * file instead of retrying it forever.
  */
 
-import { readBookStructure, resolveStructureCover, type ArchivePort } from './structure/bookStructure';
+// Type-only: the cover resolvers load on first preview (this module rides
+// the eager Drive/library graph — Phase 8 §A first-use splitting).
+import type { ArchivePort } from './structure/bookStructure';
 import type { ImageProbe } from './structure/coverResolver';
-import { safeDecode } from './structure/paths';
 
 /** The port the reader pulls bytes through. `end` is INCLUSIVE (HTTP Range). */
 export interface RangeReader {
@@ -272,6 +273,8 @@ export async function readRemoteEpubPreview(
   //    at most MAX_TEXT_READS documents and MAX_IMAGE_READS images are
   //    fetched, so a pathological book costs a bounded number of ranges.
   try {
+    const { readBookStructure, resolveStructureCover } = await import('./structure/bookStructure');
+    const { safeDecode } = await import('./structure/paths');
     let textReads = 0;
     let imageReads = 0;
     const entryFor = (zipPath: string) => entries.get(zipPath) ?? entries.get(safeDecode(zipPath));

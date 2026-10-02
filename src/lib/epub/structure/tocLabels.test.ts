@@ -68,6 +68,21 @@ describe('repairTocLabels', () => {
     expect(out[1].label).toBe('Chapter 2');
   });
 
+  it('never lends a grouping entry\u2019s label to the child whose href it borrowed', () => {
+    // Nav: <span>Part One</span> groups "Chapter 1"; resolution gives the
+    // group its first child's href, so both point at a.xhtml.
+    const nav: NavigationItem[] = [
+      { id: '', href: 'a.xhtml', label: 'Part One', subitems: [{ id: 'a', href: 'a.xhtml', label: 'Chapter 1' }] },
+    ];
+    const stored: NavigationItem[] = [
+      { id: 'nav-0', href: 'a.xhtml', label: 'Part One', subitems: [{ id: 'a', href: 'a.xhtml', label: 'The Beginning' }] },
+    ];
+    expect(repairTocLabels(nav, [stored])[0].subitems?.[0].label).toBe('The Beginning');
+    // Same outcome when ids differ: leaves are matched before groups.
+    const renamed = [{ ...stored[0], subitems: [{ id: 'x', href: 'a.xhtml', label: 'The Beginning' }] }];
+    expect(repairTocLabels(nav, [renamed])[0].subitems?.[0].label).toBe('The Beginning');
+  });
+
   it('treats an all-identical tree as junk and ignores junk alternatives', () => {
     const fix = [1, 2, 3].map((n) => ({ id: `${n}`, href: `${n}.xhtml`, label: 'Same' }));
     expect(junkLabelRate(fix)).toBe(1);

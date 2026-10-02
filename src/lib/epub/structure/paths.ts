@@ -43,14 +43,6 @@ export function safeDecode(value: string): string {
   }
 }
 
-/** Percent-encode a decoded path segment-wise (keeps `/`). */
-export function encodePath(value: string): string {
-  return value
-    .split('/')
-    .map((seg) => encodeURIComponent(seg))
-    .join('/');
-}
-
 /**
  * Normalize separators and dot segments. Leading `/`, `./` and empty
  * segments are dropped; `..` above the root is clamped (lenient on purpose:

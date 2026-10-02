@@ -9,7 +9,6 @@
  * encoded retry covers that case.
  */
 import type { ArchivePort } from '@lib/epub/structure/bookStructure';
-import { encodePath } from '@lib/epub/structure/paths';
 
 interface EpubJsArchiveLike {
   getText(url: string): Promise<string> | undefined;
@@ -19,6 +18,14 @@ interface EpubJsArchiveLike {
 interface EpubJsBookLike {
   archive?: EpubJsArchiveLike;
   container?: { packagePath?: string };
+}
+
+/** Percent-encode a decoded path segment-wise (keeps `/`). */
+function encodePath(value: string): string {
+  return value
+    .split('/')
+    .map((seg) => encodeURIComponent(seg))
+    .join('/');
 }
 
 async function tryBoth<T>(zipPath: string, read: (url: string) => Promise<T> | undefined): Promise<T | undefined> {

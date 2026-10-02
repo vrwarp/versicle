@@ -16,7 +16,7 @@ import type { PackageIndex } from './packageIndex';
 import type { ManifestEntry } from './packageModel';
 import { basename, normalizePath, resolveRelative, splitFragment } from './paths';
 
-export type CoverReason =
+type CoverReason =
   | 'cover-image-property'
   | 'meta-cover'
   | 'guide'
@@ -199,17 +199,17 @@ export async function findCoverCandidates(
 
 // ── Validation ────────────────────────────────────────────────────────────
 
-export type ImageProbeResult = { width: number; height: number } | 'undecodable' | 'unknown';
+type ImageProbeResult = { width: number; height: number } | 'undecodable' | 'unknown';
 export type ImageProbe = (blob: Blob) => Promise<ImageProbeResult>;
 
-export interface CoverPick {
+interface CoverPick {
   candidate: CoverCandidate;
   blob: Blob;
   width?: number;
   height?: number;
 }
 
-export interface CoverRejection {
+interface CoverRejection {
   candidate: CoverCandidate;
   why: 'missing' | 'undecodable' | 'implausible-size' | 'unverifiable';
 }
