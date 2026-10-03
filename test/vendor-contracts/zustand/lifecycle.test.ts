@@ -8,13 +8,13 @@ import { drain, replicate, countUpdates } from './helpers';
  * Fork contract suite — lifecycle callbacks and the schema-version poison
  * pill (phase2-fork-surgery.md §3 cases A.7, A.8).
  *
- * A.8 also pins TWO known gaps as current behavior (both fixed by Phase 4's
- * synchronous pre-merge `meta` check, finding D5):
+ * A.8 also pins two known gaps as current behavior (both covered at the app
+ * level by Phase 4's synchronous pre-merge `meta` check, finding D5):
  *   - a map that never carries __schemaVersion never quarantines;
- *   - creation-time hydration is not version-guarded at all (the eager
- *     map.size > 0 path patches state before any observer runs);
  *   - quarantine happens AFTER the Y-level merge — the doc itself has
  *     already absorbed the too-new data.
+ * A third gap — creation-time hydration was not version-guarded — is fixed
+ * in the fork (vrwarp/zustand-middleware-yjs#40) and pinned as fixed below.
  */
 
 interface State {
@@ -138,10 +138,11 @@ describe('contract A.8 — __schemaVersion poison pill', () => {
     expect(storeA.getState().count).toBe(600); // patched normally
   });
 
-  it('known gap (D5): creation-time hydration is not version-guarded', () => {
-    // A doc that is ALREADY at v6 when the v5-configured store is created:
-    // the eager pre-populated path hydrates and fires onLoaded without any
-    // version check; quarantine only arrives with the NEXT transaction.
+  it('creation-time hydration is version-guarded (D5 gap fixed in the fork)', async () => {
+    // A doc that is ALREADY at v6 when the v5-configured store is created
+    // (the cold start where IDB loaded the doc before the store existed):
+    // the store must not hydrate the v6 data or report it loaded, and goes
+    // obsolete without waiting for another transaction.
     const doc = new Y.Doc();
     doc.transact(() => {
       doc.getMap('shared').set('__schemaVersion', 6);
@@ -154,8 +155,12 @@ describe('contract A.8 — __schemaVersion poison pill', () => {
       yjs(doc, 'shared', creator, { schemaVersion: 5, onObsolete, onLoaded }),
     );
 
-    expect(onLoaded).toHaveBeenCalledTimes(1);
-    expect(onObsolete).not.toHaveBeenCalled();
-    expect(store.getState().count).toBe(42); // v6 data hydrated unguarded
+    expect(onLoaded).not.toHaveBeenCalled();
+    expect(store.getState().count).toBe(0); // v6 data NOT hydrated
+
+    await drain();
+    expect(onObsolete).toHaveBeenCalledTimes(1);
+    expect(onObsolete).toHaveBeenCalledWith(6);
+    expect(onLoaded).not.toHaveBeenCalled();
   });
 });
