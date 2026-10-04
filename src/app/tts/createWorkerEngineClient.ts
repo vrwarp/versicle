@@ -96,7 +96,17 @@ export interface WorkerEngineClient {
 /**
  * Spin up the TTS engine in a Worker and wire it to the main-thread backend + stores.
  */
-export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
+export interface WorkerEngineClientOptions {
+    /**
+     * Verification only (window.__ttsWorkerSmokeTest): resolve backend play/preload
+     * without producing audio. The caller injects the provider start/end events
+     * itself, so the engine sees a deterministic provider; without this, the real
+     * provider rejects in a headless browser and the engine (correctly) stops.
+     */
+    stubBackendPlayback?: boolean;
+}
+
+export async function createWorkerEngineClient(options: WorkerEngineClientOptions = {}): Promise<WorkerEngineClient> {
     const worker = new Worker(new URL('../../workers/tts.worker.ts', import.meta.url), { type: 'module' });
 
     // Surface worker load/runtime errors — otherwise a module-init failure inside the worker
@@ -181,8 +191,12 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
     const host: EngineHost = {
         platformName: () => Capacitor.getPlatform(),
         backendInit: () => backend.init(),
-        backendPlay: (text, options) => backend.play(text, options) as Promise<void>,
-        backendPreload: async (text, options) => backend.preload(text, options),
+        backendPlay: (text, playOptions) => options.stubBackendPlayback
+            ? Promise.resolve()
+            : backend.play(text, playOptions) as Promise<void>,
+        backendPreload: async (text, playOptions) => {
+            if (!options.stubBackendPlayback) backend.preload(text, playOptions);
+        },
         backendPause: async () => backend.pause(),
         backendStop: async () => backend.stop(),
         backendGetVoices: () => backend.getVoices(),

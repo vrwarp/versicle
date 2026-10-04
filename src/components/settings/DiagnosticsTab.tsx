@@ -4,6 +4,8 @@ import type { FlightSnapshot } from '~types/flight-recorder';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { ScrollArea } from '../ui/ScrollArea';
+import { Switch } from '../ui/Switch';
+import { isWebAudioKeepaliveEnabled, setWebAudioKeepaliveEnabled } from '@lib/tts/keepaliveFlags';
 import { formatBytes, formatDateTime, formatTime } from '@kernel/locale/format';
 import { useConfirm } from '../ui/ConfirmDialog';
 import {
@@ -16,7 +18,8 @@ import {
     Share2,
     RefreshCw,
     Clock,
-    FileJson
+    FileJson,
+    AudioWaveform
 } from 'lucide-react';
 
 export const DiagnosticsTab: React.FC = () => {
@@ -32,6 +35,12 @@ export const DiagnosticsTab: React.FC = () => {
         { eventCount: 0, capacity: 0, oldestWall: null });
     const [isCapturing, setIsCapturing] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [webAudioKeepalive, setWebAudioKeepalive] = useState(isWebAudioKeepaliveEnabled);
+
+    const handleWebAudioKeepalive = (enabled: boolean) => {
+        setWebAudioKeepaliveEnabled(enabled);
+        setWebAudioKeepalive(enabled);
+    };
 
     const loadSnapshots = async () => {
         setIsRefreshing(true);
@@ -75,6 +84,31 @@ export const DiagnosticsTab: React.FC = () => {
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            {/* Experimental: Web Audio keepalive (Android device check) */}
+            <div className="flex items-start justify-between gap-4 bg-muted/50 p-4 rounded-xl border border-border">
+                <div className="flex items-start gap-3">
+                    <div className="p-2 bg-primary/10 rounded-lg text-primary">
+                        <AudioWaveform className="w-5 h-5" />
+                    </div>
+                    <div>
+                        <p className="font-semibold text-foreground">
+                            Web Audio keepalive (experimental, Android)
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                            Keeps background reading alive with an inaudible 40 Hz tone played through
+                            Web Audio (plus your white noise, if selected) instead of an audio element.
+                            Takes effect the next time reading starts. Logs a heartbeat every 10 s.
+                        </p>
+                    </div>
+                </div>
+                <Switch
+                    id="webaudio-keepalive"
+                    checked={webAudioKeepalive}
+                    onCheckedChange={handleWebAudioKeepalive}
+                    aria-label="Web Audio keepalive"
+                />
+            </div>
+
             {/* Header / Buffer Stats */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-muted/50 p-4 rounded-xl border border-border">
                 <div className="flex items-center gap-3">

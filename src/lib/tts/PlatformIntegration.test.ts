@@ -61,7 +61,7 @@ describe('PlatformIntegration', () => {
     it('should update background audio mode', () => {
         platform.setBackgroundAudioMode('noise', true);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((platform as any).backgroundAudio.play).toHaveBeenCalledWith('noise');
+        expect((platform as any).backgroundAudio.element.play).toHaveBeenCalledWith('noise');
     });
 
     it('should update playback state', () => {
@@ -69,13 +69,13 @@ describe('PlatformIntegration', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((platform as any).mediaSessionManager.setPlaybackState).toHaveBeenCalledWith('playing');
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((platform as any).backgroundAudio.play).toHaveBeenCalled();
+        expect((platform as any).backgroundAudio.element.play).toHaveBeenCalled();
 
         platform.updatePlaybackState('paused');
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         expect((platform as any).mediaSessionManager.setPlaybackState).toHaveBeenCalledWith('paused');
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((platform as any).backgroundAudio.stopWithDebounce).toHaveBeenCalled();
+        expect((platform as any).backgroundAudio.element.stopWithDebounce).toHaveBeenCalled();
     });
 
     it('regression: transient loading/completed report mediaState=playing (native STATE_IDLE avoidance)', () => {
@@ -88,7 +88,7 @@ describe('PlatformIntegration', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sms = (platform as any).mediaSessionManager.setPlaybackState;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const bg = (platform as any).backgroundAudio;
+        const bg = (platform as any).backgroundAudio.element;
 
         for (const status of ['loading', 'completed'] as const) {
             vi.clearAllMocks();
