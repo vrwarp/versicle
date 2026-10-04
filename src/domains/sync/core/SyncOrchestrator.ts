@@ -512,6 +512,40 @@ export class SyncOrchestrator {
     return { uid: user.uid, activeWorkspaceId: workspaceId, workspaces, alive, hasData };
   }
 
+  /**
+   * Download the REMOTE replicated document for the active workspace into a
+   * throwaway doc and return its full state — the "what does Firestore
+   * actually hold?" half of the diagnostics library cross-check. Reuses the
+   * clean-sync/switch temp-provider path (downloadWorkspaceState), with two
+   * diagnostics-specific settings: a timeout REJECTS (an unreachable remote
+   * must not read as an empty one), and an effectively infinite flush
+   * threshold so the temp provider never forces a threshold compaction.
+   * The live connection and the live doc are untouched.
+   */
+  async downloadRemoteStateForDiagnostics(timeoutMs = 20000): Promise<
+    | { ok: true; workspaceId: string; update: Uint8Array; ms: number }
+    | { ok: false; error: string; ms: number }
+  > {
+    const started = Date.now();
+    const user = this.getCurrentUser();
+    const workspaceId = this.getActiveWorkspaceId();
+    if (!user || !workspaceId) {
+      return { ok: false, error: !user ? 'not signed in' : 'no active workspace', ms: 0 };
+    }
+    try {
+      const update = await downloadWorkspaceState(this.getBackend(user.uid), workspaceId, {
+        maxWaitTimeMs: this.config.maxWaitFirestoreTime,
+        maxUpdatesThreshold: 1_000_000_000,
+        timeoutMs,
+        onAttachError: 'reject',
+        onTimeout: 'reject',
+      });
+      return { ok: true, workspaceId, update, ms: Date.now() - started };
+    } catch (error) {
+      return { ok: false, error: String(error), ms: Date.now() - started };
+    }
+  }
+
   // ── Getters ────────────────────────────────────────────────────────────────
 
   getStatus(): FirestoreSyncStatus {

@@ -35,6 +35,14 @@ export interface DownloadWorkspaceStateOptions {
    * propagates — the legacy switch behavior. Default 'reject'.
    */
   onAttachError?: 'resolve' | 'reject';
+  /**
+   * Handshake-timeout policy: 'resolve' returns whatever synced so far (the
+   * legacy "unreachable means empty" behavior); 'reject' fails with a
+   * timeout error instead — for callers that must not mistake an
+   * unreachable remote for an empty one (the sync diagnostics remote
+   * check). Default 'resolve'.
+   */
+  onTimeout?: 'resolve' | 'reject';
 }
 
 export async function downloadWorkspaceState(
@@ -42,8 +50,13 @@ export async function downloadWorkspaceState(
   workspaceId: string,
   options: DownloadWorkspaceStateOptions
 ): Promise<Uint8Array> {
-  const { maxWaitTimeMs, maxUpdatesThreshold, timeoutMs = 15000, onAttachError = 'reject' } =
-    options;
+  const {
+    maxWaitTimeMs,
+    maxUpdatesThreshold,
+    timeoutMs = 15000,
+    onAttachError = 'reject',
+    onTimeout = 'resolve',
+  } = options;
 
   const tempDoc = new Y.Doc();
   let connection: SyncConnection | null = null;
@@ -60,6 +73,11 @@ export async function downloadWorkspaceState(
 
       const timer = setTimeout(() => {
         if (!resolved) {
+          if (onTimeout === 'reject') {
+            resolved = true;
+            reject(new Error(`Workspace download timed out after ${timeoutMs}ms (no initial sync)`));
+            return;
+          }
           logger.warn(
             `Workspace download timeout reached for ${workspaceId}. ` +
               'Assuming empty or unreachable remote.'

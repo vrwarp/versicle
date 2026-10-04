@@ -898,4 +898,43 @@ describe('SyncOrchestrator diagnostics (read-only export surface)', () => {
     expect(remote.hasData).toMatchObject({ ok: false, error: expect.stringContaining('timed out after 20ms') });
     expect(remote.workspaces).toMatchObject({ ok: true });
   });
+
+  it('downloadRemoteStateForDiagnostics returns the remote doc state via a temp connection', async () => {
+    const connectArgs: Array<{ workspaceId: string; threshold: number }> = [];
+    const h = build();
+    await h.signIn();
+    h.backend.connect = (tempDoc, workspaceId, opts) => {
+      connectArgs.push({ workspaceId, threshold: opts.maxUpdatesThreshold });
+      tempDoc.getMap('library').set('remote-book', 1);
+      return syncedConnection();
+    };
+
+    const r = await h.orchestrator.downloadRemoteStateForDiagnostics(1000);
+
+    expect(r.ok).toBe(true);
+    const probe = new Y.Doc();
+    Y.applyUpdate(probe, (r as { update: Uint8Array }).update);
+    expect(probe.getMap('library').get('remote-book')).toBe(1);
+    // The live connection is untouched; the temp one never forces compaction.
+    expect(connectArgs).toEqual([{ workspaceId: 'ws_1', threshold: 1_000_000_000 }]);
+    expect(h.orchestrator.getDiagnostics()).toMatchObject({ status: 'connected' });
+  });
+
+  it('downloadRemoteStateForDiagnostics reports a timeout as an error, not an empty remote', async () => {
+    const h = build();
+    await h.signIn();
+    h.backend.connect = () => idleConnection();
+
+    expect(await h.orchestrator.downloadRemoteStateForDiagnostics(10)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('timed out after 10ms'),
+    });
+  });
+
+  it('downloadRemoteStateForDiagnostics needs a signed-in user', async () => {
+    expect(await build().orchestrator.downloadRemoteStateForDiagnostics()).toMatchObject({
+      ok: false,
+      error: 'not signed in',
+    });
+  });
 });
