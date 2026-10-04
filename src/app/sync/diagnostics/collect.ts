@@ -87,6 +87,9 @@ function environment(): Record<string, unknown> {
   const nav = typeof navigator !== 'undefined' ? navigator : undefined;
   return {
     appVersion: packageJson.version,
+    // Git commit + build time of THIS bundle (the APK freezes whatever was
+    // built into it; the web app redeploys on every push).
+    build: typeof __VERSICLE_BUILD__ !== 'undefined' ? __VERSICLE_BUILD__ : null,
     buildMode: import.meta.env.MODE,
     platform: Capacitor.getPlatform(),
     native: Capacitor.isNativePlatform(),

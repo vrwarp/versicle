@@ -508,6 +508,9 @@ test('Sync diagnostics export', async ({ page }) => {
     'y-cinder (doc ↔ Firestore)': 'match',
     'yjs (encode round trip)': 'match',
   });
+  // The build stamp (git commit + build time) rides every report.
+  expect(report.environment.build).toMatchObject({ sha: expect.any(String), time: expect.any(String) });
+  await expect(page.getByTestId('sync-diagnostics-build')).toContainText('Build ');
   expect(report.libraries['y-cinder']).toMatch(/vrwarp\/y-cinder#[0-9a-f]{40}/);
 
   await closeSettings(page);

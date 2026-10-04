@@ -12,6 +12,14 @@ import { CloudCog, Download } from 'lucide-react';
 import { Button } from '@components/ui/Button';
 import { formatBytes } from '@kernel/locale/format';
 
+/** "Build abc1234 · 2026-10-04 14:02" — which bundle this device runs. */
+function buildLabel(): string {
+  if (typeof __VERSICLE_BUILD__ === 'undefined') return 'Build unknown';
+  const { sha, dirty, time } = __VERSICLE_BUILD__;
+  const short = sha === 'unknown' ? 'unknown' : sha.slice(0, 7);
+  return `Build ${short}${dirty ? '+local' : ''} · ${time.slice(0, 16).replace('T', ' ')} UTC`;
+}
+
 type ExportState =
   | { kind: 'idle' }
   | { kind: 'busy' }
@@ -64,6 +72,9 @@ export const SyncDiagnosticsSection: React.FC = () => {
         collecting downloads a fresh copy of your cloud library to compare against and can
         take up to 30 seconds. The file is compressed (.json.gz) and contains no book text
         or notes — only IDs, timestamps, content hashes and logs. Your email is masked.
+      </p>
+      <p className="text-xs text-muted-foreground font-mono" data-testid="sync-diagnostics-build">
+        {buildLabel()}
       </p>
       {state.kind === 'done' && (
         <p className="text-xs text-primary" role="status">

@@ -36,6 +36,11 @@ describe('SyncDiagnosticsSection', () => {
     expect(stub.calls).toBe(1);
   });
 
+  it('shows which build this device runs (unknown under vitest: no define)', () => {
+    render(<SyncDiagnosticsSection />);
+    expect(screen.getByTestId('sync-diagnostics-build')).toHaveTextContent('Build unknown');
+  });
+
   it('surfaces a failed export', async () => {
     stub.impl = async () => {
       throw new Error('Failed to export file on device');
