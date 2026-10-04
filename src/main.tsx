@@ -61,7 +61,9 @@ if (typeof window !== 'undefined') {
   // Lazy import keeps the worker out of the main bundle until invoked.
   window.__ttsWorkerSmokeTest = async () => {
     const { createWorkerEngineClient } = await import('./app/tts/createWorkerEngineClient');
-    const client = await createWorkerEngineClient();
+    // Stubbed playback: the provider start/end events below are injected, so the
+    // headless browser's real speech provider (which rejects) must stay out of it.
+    const client = await createWorkerEngineClient({ stubBackendPlayback: true });
     const events: Array<{ status: string; index: number }> = [];
     let lastStatus: string | null = null;
     const waitFor = async (predicate: () => boolean, label: string) => {
