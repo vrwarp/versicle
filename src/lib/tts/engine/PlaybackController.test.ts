@@ -158,6 +158,59 @@ describe('PlaybackController', () => {
         });
     });
 
+    describe('regression: late provider events after pause/stop', () => {
+        // A provider event that was already in flight when the user (or an
+        // interruption) paused must not undo the pause. Native TTS "pause" is a
+        // stop, so the engine can still receive the stopped utterance's start/end.
+        it('ignores a provider start that arrives after a pause', async () => {
+            const { svc, backend } = makeEngine();
+            await svc.setQueue([{ text: 'One', cfi: '1' }, { text: 'Two', cfi: '2' }]);
+            await svc.play();
+            backend.fireStart();
+            await vi.waitFor(() => expect(svc.snapshot().status).toBe('playing'));
+
+            await svc.pause();
+            backend.fireStart();
+            await sequenced(svc, () => {});
+
+            expect(svc.snapshot().status).toBe('paused');
+        });
+
+        it('ignores a provider end that arrives after a pause (no advance, no auto-resume)', async () => {
+            const { svc, backend } = makeEngine();
+            await svc.setQueue([{ text: 'One', cfi: '1' }, { text: 'Two', cfi: '2' }]);
+            await svc.play();
+            backend.fireStart();
+            await vi.waitFor(() => expect(svc.snapshot().status).toBe('playing'));
+            const playedBefore = backend.played.length;
+
+            await svc.pause();
+            backend.fireEnd();
+            await sequenced(svc, () => {});
+
+            expect(svc.snapshot().status).toBe('paused');
+            expect(svc.getQueue().length).toBe(2);
+            expect(svc.snapshot().index).toBe(0);
+            expect(backend.played.length).toBe(playedBefore);
+        });
+
+        it('a stop during a voice preview does not cut the next real playback short', async () => {
+            const { svc, backend } = makeEngine();
+            await svc.preview('Preview text');
+            await svc.stop();
+
+            await svc.setQueue([{ text: 'One', cfi: '1' }, { text: 'Two', cfi: '2' }]);
+            await svc.play();
+            backend.fireStart();
+            backend.fireEnd();
+
+            // The finished first sentence advances to the second instead of being
+            // treated as the end of the (long-gone) preview.
+            await vi.waitFor(() => expect(svc.snapshot().index).toBe(1));
+            expect(svc.snapshot().status).not.toBe('stopped');
+        });
+    });
+
     describe('session persistence (the SessionStore single owner; moved from QueueModel.test)', () => {
         it('persists queue content once per queueId; index moves do not re-save; masks do', async () => {
             const ctx = new FakeEngineContext();

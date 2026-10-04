@@ -143,6 +143,10 @@ export class PlaybackController implements TtsEngine {
         const providerEvents: TTSProviderEvents = {
             onStart: () => {
                 void this.enqueue('provider.start', async () => {
+                    // Only a start the engine is waiting for flips to 'playing'. A
+                    // start that was in flight when playback paused or stopped (native
+                    // TTS pause is a stop) must not undo that pause or stop.
+                    if (this.status !== 'loading' && this.status !== 'playing') return;
                     this.setStatus('playing');
                 });
             },
@@ -902,6 +906,9 @@ export class PlaybackController implements TtsEngine {
         // IndexedDB transaction can hang and would otherwise wedge the sequencer.
         void this.savePlaybackState('stopped').catch(() => {});
         await this.platformIntegration.stop();
+        // A stop ends any voice preview too; otherwise the flag outlives it and
+        // the next real sentence's end is mistaken for the preview's end.
+        this.isPreviewing = false;
         this.setStatus('stopped');
         this.providerManager.stop();
     }
@@ -1051,7 +1058,10 @@ export class PlaybackController implements TtsEngine {
             this.setStatus('stopped');
             return;
         }
-        if (this.status === 'stopped') return;
+        // An end that arrives while paused belongs to the utterance the pause
+        // stopped: don't record it as heard and don't advance. Resuming replays
+        // the current sentence (playInternal treats 'paused' as resume).
+        if (this.status === 'stopped' || this.status === 'paused') return;
 
         if (this.currentBookId) {
             const item = this.stateManager.getCurrentItem();
