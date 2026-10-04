@@ -464,6 +464,19 @@ test('Sync diagnostics export', async ({ page }) => {
   await openSettings(page);
   await gotoSettingsTab(page, 'sync');
   await expect(page.getByText('✓ Connected')).toBeVisible({ timeout: 15000 });
+  // One real edit while connected. (MockFireProvider, unlike y-cinder's
+  // initial-sync push, persists the doc only on the next update after it
+  // attaches — without this the mock cloud would legitimately lag.)
+  await page.locator('#device-name-input').fill('Diagnostics Tablet');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const raw = localStorage.getItem('versicle_mock_firestore_snapshot');
+        return raw ? Object.keys(JSON.parse(raw)).some((k) => k.includes('/versicle/ws_')) : false;
+      }),
+    { timeout: 15000 })
+    .toBe(true);
   await gotoSettingsTab(page, 'diagnostics');
   await expect(page.getByTestId('sync-diagnostics-section')).toBeVisible();
 
@@ -475,7 +488,7 @@ test('Sync diagnostics export', async ({ page }) => {
   await captureScreenshot(page, 'sync_diagnostics_exported');
 
   const report = JSON.parse(zlib.gunzipSync(fs.readFileSync((await download.path())!)).toString('utf8'));
-  expect(report.format).toBe(1);
+  expect(report.format).toBe(2);
   expect(report.orchestrator.status).toBe('connected');
   expect(report.orchestrator.provider).toMatchObject({ attached: true, transport: { transport: 'mock' } });
   const activeWs = report.syncSettings.activeWorkspaceId;
@@ -486,6 +499,16 @@ test('Sync diagnostics export', async ({ page }) => {
   expect(report.recorder.events.some((e: { event: { type: string; status?: string } }) =>
     e.event.type === 'status' && e.event.status === 'connected')).toBe(true);
   expect(report.recorder.updateTotals.local.count).toBeGreaterThan(0);
+  // The library-layer cross-checks ran against real y-idb / middleware /
+  // (mock) transport code and every layer agrees on an idle device.
+  console.log('[diagnostics] verdicts', JSON.stringify(report.verdicts));
+  expect(report.verdicts).toEqual({
+    'zustand-middleware-yjs (store ↔ doc)': 'match',
+    'y-idb (doc ↔ IndexedDB)': 'match',
+    'y-cinder (doc ↔ Firestore)': 'match',
+    'yjs (encode round trip)': 'match',
+  });
+  expect(report.libraries['y-cinder']).toMatch(/vrwarp\/y-cinder#[0-9a-f]{40}/);
 
   await closeSettings(page);
 });

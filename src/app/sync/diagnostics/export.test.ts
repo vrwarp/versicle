@@ -27,6 +27,6 @@ describe('sync diagnostics export', () => {
     const call = exported.calls.at(-1)!;
     expect(call.filename).toBe(result.filename);
     const json = strFromU8(gunzipSync(new Uint8Array(await (call.data as Blob).arrayBuffer())));
-    expect(JSON.parse(json)).toMatchObject({ format: 1, crdt: { doc: { stateVector: expect.any(Array) } } });
+    expect(JSON.parse(json)).toMatchObject({ format: 2, crdt: { doc: { stateVector: expect.any(Array) } } });
   });
 });

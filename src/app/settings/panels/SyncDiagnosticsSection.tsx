@@ -42,7 +42,8 @@ export const SyncDiagnosticsSection: React.FC = () => {
           <div>
             <h3 className="font-semibold text-foreground">Sync diagnostics</h3>
             <p className="text-sm text-muted-foreground">
-              Connection state, recent sync activity and a fingerprint of the synced data.
+              Connection state, recent sync activity, and a layer-by-layer check of the
+              sync libraries: app state, this device's storage and the cloud copy.
             </p>
           </div>
         </div>
@@ -59,9 +60,10 @@ export const SyncDiagnosticsSection: React.FC = () => {
         </Button>
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed">
-        Export on each device that is not syncing, at about the same time. The file is
-        compressed (.json.gz) and contains no book text or notes — only IDs, timestamps,
-        content hashes and logs. Your email is masked.
+        Export on each device that is not syncing, at about the same time, while online —
+        collecting downloads a fresh copy of your cloud library to compare against and can
+        take up to 30 seconds. The file is compressed (.json.gz) and contains no book text
+        or notes — only IDs, timestamps, content hashes and logs. Your email is masked.
       </p>
       {state.kind === 'done' && (
         <p className="text-xs text-primary" role="status">

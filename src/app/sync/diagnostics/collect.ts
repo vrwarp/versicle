@@ -20,7 +20,6 @@
  * the Firebase API key is reduced to a fingerprint. Entry KEYS (book ids,
  * device ids, …) are included because the cross-device diff needs them.
  */
-import * as Y from 'yjs';
 import { Capacitor } from '@capacitor/core';
 import { getYDoc, getYjsPersistence, CURRENT_SCHEMA_VERSION } from '@store/yjs-provider';
 import { useSyncStore } from '@store/useSyncStore';
@@ -30,149 +29,18 @@ import { getRecentLogs } from '@lib/logger';
 import { MigrationStateService } from '@domains/sync/workspaces/MigrationStateService';
 import { peekSyncOrchestrator, isSyncEnabled } from '../createSync';
 import { getRecorderSnapshot } from './recorder';
+import { fnv1a, summarizeDoc } from './docSummary';
+import { runIntegrityChecks } from './integrity';
 import packageJson from '../../../../package.json';
 
 /** Bump when the report shape changes incompatibly. */
-const SYNC_DIAGNOSTICS_FORMAT = 1;
-
-/** Per-map entry cap (keeps a pathological map from bloating the export). */
-const MAX_ENTRIES_PER_MAP = 20000;
-
-/** 32-bit FNV-1a, hex. Stable across devices/engines for the same string. */
-export function fnv1a(input: string): string {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0');
-}
-
-/** JSON with object keys sorted, so equal values hash equally on every device. */
-export function stableStringify(value: unknown): string {
-  if (value === undefined) return 'undefined';
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? String(value);
-  if (value instanceof Uint8Array) return `bytes:${value.byteLength}:${fnv1a(Array.from(value).join(','))}`;
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-  const obj = value as Record<string, unknown>;
-  return `{${Object.keys(obj)
-    .sort()
-    .map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`)
-    .join(',')}}`;
-}
+const SYNC_DIAGNOSTICS_FORMAT = 2;
 
 export function maskEmail(email: string | null | undefined): string | null {
   if (!email) return null;
   const at = email.indexOf('@');
   if (at <= 0) return '***';
   return `${email[0]}***${email.slice(at)}`;
-}
-
-function toPlain(value: unknown): unknown {
-  if (value instanceof Y.AbstractType) return value.toJSON();
-  return value;
-}
-
-/** Epoch-millisecond-looking numeric top-level fields (2001‥2286). */
-function timestampFields(value: unknown): Record<string, number> | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const out: Record<string, number> = {};
-  let n = 0;
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof v === 'number' && v > 1e12 && v < 1e13) {
-      out[k] = v;
-      if (++n >= 8) break;
-    }
-  }
-  return n > 0 ? out : undefined;
-}
-
-interface MapEntrySummary {
-  /** FNV-1a of the stable JSON of the value. */
-  h: string;
-  /** Epoch-ms timestamp fields of the value, when it is an object. */
-  ts?: Record<string, number>;
-}
-
-interface SharedTypeSummary {
-  kind: string;
-  size: number;
-  /** Hash over all entry hashes — equal digests ⇒ identical content. */
-  digest: string;
-  entries?: Record<string, MapEntrySummary>;
-  truncated?: boolean;
-}
-
-/** Summarize the replicated doc (see module docs, questions 3 + 4). */
-export function summarizeDoc(doc: Y.Doc): Record<string, unknown> {
-  const stateVector = Y.decodeStateVector(Y.encodeStateVector(doc));
-  const clients = [...stateVector.entries()]
-    .map(([client, clock]) => ({ client, clock, self: client === doc.clientID }))
-    .sort((a, b) => b.clock - a.clock);
-
-  const store = doc.store as unknown as {
-    pendingStructs: { missing: Map<number, number>; update: Uint8Array } | null;
-    pendingDs: Uint8Array | null;
-  };
-  const pendingStructs = store.pendingStructs
-    ? {
-        missing: Object.fromEntries(store.pendingStructs.missing),
-        updateBytes: store.pendingStructs.update.byteLength,
-      }
-    : null;
-
-  const shared: Record<string, SharedTypeSummary> = {};
-  for (const [name, type] of doc.share) {
-    if (type instanceof Y.Map) {
-      const entries: Record<string, MapEntrySummary> = {};
-      const hashes: string[] = [];
-      let count = 0;
-      let truncated = false;
-      for (const key of [...type.keys()].sort()) {
-        const plain = toPlain(type.get(key));
-        const h = fnv1a(stableStringify(plain));
-        hashes.push(`${key}=${h}`);
-        if (count < MAX_ENTRIES_PER_MAP) {
-          const ts = timestampFields(plain);
-          entries[key] = ts ? { h, ts } : { h };
-        } else {
-          truncated = true;
-        }
-        count++;
-      }
-      shared[name] = {
-        kind: 'map',
-        size: type.size,
-        digest: fnv1a(hashes.join('|')),
-        entries,
-        ...(truncated ? { truncated } : {}),
-      };
-    } else if (type instanceof Y.Array) {
-      shared[name] = { kind: 'array', size: type.length, digest: fnv1a(stableStringify(type.toJSON())) };
-    } else if (type instanceof Y.Text) {
-      shared[name] = { kind: 'text', size: type.length, digest: fnv1a(type.toString()) };
-    } else {
-      // A root nobody on this device has accessed with a concrete type yet
-      // (data arrived from elsewhere). Report its raw shape only.
-      const raw = type as unknown as { _map: Map<string, unknown>; _length: number };
-      shared[name] = {
-        kind: 'untyped',
-        size: raw._map?.size ?? raw._length ?? 0,
-        digest: fnv1a([...(raw._map?.keys() ?? [])].sort().join('|')),
-      };
-    }
-  }
-
-  return {
-    clientID: doc.clientID,
-    gc: doc.gc,
-    encodedStateBytes: Y.encodeStateAsUpdate(doc).byteLength,
-    stateVector: clients,
-    pendingStructs,
-    pendingDeleteSetBytes: store.pendingDs?.byteLength ?? 0,
-    metaSchemaVersion: doc.share.has('meta') ? (doc.getMap('meta').get('schemaVersion') ?? null) : null,
-    shared,
-  };
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -195,6 +63,24 @@ async function safely<T>(run: () => T | Promise<T>): Promise<T | { error: string
   } catch (error) {
     return { error: String(error) };
   }
+}
+
+/**
+ * The sync-path libraries this BUILD was made with (the forks are pinned to
+ * commits — two devices on different builds can run different library
+ * code). From package.json, so it is the declared pin, not a lockfile read.
+ */
+function libraries(): Record<string, string | null> {
+  const deps = packageJson.dependencies as Record<string, string | undefined>;
+  const pick = (name: string): string | null => deps[name] ?? null;
+  return {
+    yjs: pick('yjs'),
+    'y-cinder': pick('y-cinder'),
+    'y-idb': pick('y-idb'),
+    'zustand-middleware-yjs': pick('zustand-middleware-yjs'),
+    firebase: pick('firebase'),
+    zustand: pick('zustand'),
+  };
 }
 
 function environment(): Record<string, unknown> {
@@ -264,7 +150,10 @@ export interface SyncDiagnosticsReport {
  * failure. The remote probe is skipped when sync never composed, and is
  * time-bounded so an offline device still exports promptly.
  */
-export async function collectSyncDiagnostics(opts?: { remoteTimeoutMs?: number }): Promise<SyncDiagnosticsReport> {
+export async function collectSyncDiagnostics(opts?: {
+  remoteTimeoutMs?: number;
+  integrityRemoteTimeoutMs?: number;
+}): Promise<SyncDiagnosticsReport> {
   const orchestrator = peekSyncOrchestrator();
   const remoteTimeoutMs = opts?.remoteTimeoutMs ?? 8000;
   const persistence = getYjsPersistence();
@@ -280,11 +169,17 @@ export async function collectSyncDiagnostics(opts?: { remoteTimeoutMs?: number }
     ),
   ]);
 
+  // The library cross-checks (./integrity.ts) — run before the logs are
+  // read so anything they log lands in this report.
+  const integrity = await safely(() => runIntegrityChecks({ remoteTimeoutMs: opts?.integrityRemoteTimeoutMs }));
+
   const now = Date.now();
   return {
     format: SYNC_DIAGNOSTICS_FORMAT,
     generatedAt: now,
     generatedAtIso: new Date(now).toISOString(),
+    verdicts: 'verdicts' in integrity ? integrity.verdicts : integrity,
+    libraries: await safely(libraries),
     environment: await safely(environment),
     devices: await safely(devices),
     syncSettings: await safely(syncSettings),
@@ -301,6 +196,7 @@ export async function collectSyncDiagnostics(opts?: { remoteTimeoutMs?: number }
       currentSchemaVersion: CURRENT_SCHEMA_VERSION,
       doc: await safely(() => summarizeDoc(getYDoc())),
     },
+    integrity,
     recorder: getRecorderSnapshot(),
     logs: getRecentLogs(),
   };
