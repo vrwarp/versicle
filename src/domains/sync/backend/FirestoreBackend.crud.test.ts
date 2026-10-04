@@ -28,6 +28,7 @@ const h = vi.hoisted(() => ({
   deleteDocThrows: null as Error | null,
   bytesByPath: new Map<string, ArrayBuffer>(),
   getBytesError: null as (Error & { code?: string }) | null,
+  provider: null as Record<string, unknown> | null,
 }));
 
 vi.mock('@lib/sync/firebase-config', () => ({
@@ -39,6 +40,7 @@ vi.mock('y-cinder', () => ({
   FireProvider: class {
     constructor(public readonly options: Record<string, unknown>) {
       h.ops.push('FireProvider');
+      h.provider = this as unknown as Record<string, unknown>;
     }
     on() {}
     off() {}
@@ -503,5 +505,32 @@ describe('FirestoreBackend.connect', () => {
     backend().connect({} as never, WS, { maxWaitTimeMs: 1, maxUpdatesThreshold: 1 });
 
     expect(h.ops).toContain('FireProvider');
+  });
+
+  it('describe() reports the provider state without driving it', () => {
+    const conn = backend().connect({} as never, WS, { maxWaitTimeMs: 1, maxUpdatesThreshold: 1 });
+    Object.assign(h.provider!, {
+      synced: true,
+      epoch: 2,
+      _pendingUpdates: [new Uint8Array(3), new Uint8Array(4)],
+      _saveRetryCount: 1,
+      _epochFenced: false,
+      _corruptedDocIds: new Set(['d1']),
+    });
+
+    expect(conn.describe?.()).toMatchObject({
+      transport: 'firestore',
+      path: `users/${UID}/versicle/${WS}`,
+      destroyed: false,
+      synced: true,
+      epoch: 2,
+      pendingUpdates: 2,
+      pendingBytes: 7,
+      saveRetryCount: 1,
+      epochFenced: false,
+      corruptedDocIds: ['d1'],
+    });
+    conn.destroy();
+    expect(conn.describe?.()).toMatchObject({ destroyed: true });
   });
 });

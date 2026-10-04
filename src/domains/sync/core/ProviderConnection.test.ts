@@ -146,7 +146,16 @@ describe('ProviderConnection.attach — the happy path', () => {
     expect(harness.statuses).toEqual(['connecting', 'connected']);
     expect(harness.provider.isAttached()).toBe(true);
     expect(new Set(conn.subscribed)).toEqual(
-      new Set(['connection-error', 'sync-failure', 'save-rejected', 'saved', 'epoch-changed'])
+      new Set([
+        'connection-error',
+        'sync-failure',
+        'save-rejected',
+        'saved',
+        'epoch-changed',
+        // Diagnostics-only (log ring breadcrumbs; no status/event effect).
+        'synced',
+        'corrupted-document',
+      ])
     );
     expect(harness.infoLogs.some((l) => l.includes('Connected to workspace: ws_1'))).toBe(true);
   });

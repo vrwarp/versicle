@@ -436,6 +436,82 @@ export class SyncOrchestrator {
     return this.auth.onAuthChange(callback);
   }
 
+  // ── Diagnostics (read-only; the sync diagnostics export) ─────────────────
+
+  /**
+   * Synchronous snapshot of the orchestrator's live state for the sync
+   * diagnostics export (src/app/sync/diagnostics). Never mutates anything.
+   */
+  getDiagnostics(): Record<string, unknown> {
+    const user = this.getCurrentUser();
+    return {
+      started: this.started,
+      status: this.status,
+      authStatus: this.getAuthStatus(),
+      uid: user?.uid ?? null,
+      email: user?.email ?? null,
+      activeWorkspaceId: this.getActiveWorkspaceId(),
+      backendUid: this.backend?.uid ?? null,
+      mockBackend: Boolean(this.backendSelection.mockSession),
+      firebaseAppName: this.currentApp?.name ?? null,
+      firebaseAppMatchesCurrent: this.currentApp ? this.currentApp === getFirebaseApp() : null,
+      config: { ...this.config },
+      debounceOverrideMs: this.deps.debounceOverrideMs(),
+      currentSchemaVersion: this.deps.currentSchemaVersion,
+      provider: this.provider.describe(),
+    };
+  }
+
+  /**
+   * Ask the backend what the REMOTE side looks like for the signed-in user:
+   * every workspace in the directory (tombstoned included), plus liveness
+   * and has-data probes for the active one. Uses only existing C3 methods;
+   * every probe is individually time-bounded and failure-tolerant so the
+   * export works offline (it then records the error instead).
+   */
+  async probeRemoteDiagnostics(timeoutMs = 8000): Promise<Record<string, unknown>> {
+    const user = this.getCurrentUser();
+    if (!user) return { skipped: 'not signed in' };
+    const backend = this.getBackend(user.uid);
+    const workspaceId = this.getActiveWorkspaceId();
+
+    const bounded = async <T>(label: string, run: () => Promise<T>): Promise<
+      { ok: true; value: T; ms: number } | { ok: false; error: string; ms: number }
+    > => {
+      const started = Date.now();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const value = await Promise.race([
+          run(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+          }),
+        ]);
+        return { ok: true, value, ms: Date.now() - started };
+      } catch (error) {
+        const code = (error as { code?: unknown })?.code;
+        return {
+          ok: false,
+          error: `${String(error)}${code !== undefined ? ` (code=${String(code)})` : ''}`,
+          ms: Date.now() - started,
+        };
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+      }
+    };
+
+    const [workspaces, alive, hasData] = await Promise.all([
+      bounded('listWorkspaces', () => backend.listWorkspaces({ includeDeleted: true })),
+      workspaceId
+        ? bounded('isWorkspaceAlive', () => backend.isWorkspaceAlive(workspaceId))
+        : Promise.resolve(null),
+      workspaceId
+        ? bounded('probeHasData', () => backend.probeHasData(workspaceId))
+        : Promise.resolve(null),
+    ]);
+    return { uid: user.uid, activeWorkspaceId: workspaceId, workspaces, alive, hasData };
+  }
+
   // ── Getters ────────────────────────────────────────────────────────────────
 
   getStatus(): FirestoreSyncStatus {
