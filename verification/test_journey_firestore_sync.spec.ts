@@ -1,7 +1,8 @@
 import type { Page } from '@playwright/test';
-import { test, expect, openSettings, gotoSettingsTab, closeSettings } from './utils';
+import { test, expect, openSettings, gotoSettingsTab, closeSettings, resetApp, captureScreenshot } from './utils';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as zlib from 'zlib';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -447,4 +448,44 @@ test('Offline Resilience Test', async ({ browser }) => {
 
   await page.close();
   await context.close();
+});
+
+test('Sync diagnostics export', async ({ page }) => {
+  // The user-facing debugging path for "my devices don't converge": a
+  // signed-in, connected device exports a gzip'd report that names its
+  // workspace, its live transport, the remote directory and its CRDT state.
+  await page.addInitScript({ content: 'window.__VERSICLE_MOCK_FIRESTORE__ = true;' });
+  await page.addInitScript({ content: 'window.__VERSICLE_FIRESTORE_DEBOUNCE_MS__ = 20;' });
+  await resetApp(page);
+  await expect(page.getByTestId('library-view')).toBeVisible({ timeout: 15000 });
+
+  // The mock backend auto-provisions "My Library" and connects; the Sync
+  // tab shows the live connection once the provider is attached.
+  await openSettings(page);
+  await gotoSettingsTab(page, 'sync');
+  await expect(page.getByText('✓ Connected')).toBeVisible({ timeout: 15000 });
+  await gotoSettingsTab(page, 'diagnostics');
+  await expect(page.getByTestId('sync-diagnostics-section')).toBeVisible();
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByTestId('sync-diagnostics-export').click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^versicle-sync-web-.*\.json\.gz$/);
+  await expect(page.getByRole('status').filter({ hasText: 'Exported versicle-sync-' })).toBeVisible();
+  await captureScreenshot(page, 'sync_diagnostics_exported');
+
+  const report = JSON.parse(zlib.gunzipSync(fs.readFileSync((await download.path())!)).toString('utf8'));
+  expect(report.format).toBe(1);
+  expect(report.orchestrator.status).toBe('connected');
+  expect(report.orchestrator.provider).toMatchObject({ attached: true, transport: { transport: 'mock' } });
+  const activeWs = report.syncSettings.activeWorkspaceId;
+  expect(activeWs).toMatch(/^ws_/);
+  expect(report.remote.workspaces.ok).toBe(true);
+  expect(report.remote.workspaces.value.map((w: { workspaceId: string }) => w.workspaceId)).toContain(activeWs);
+  expect(report.crdt.doc.stateVector.some((c: { self: boolean }) => c.self)).toBe(true);
+  expect(report.recorder.events.some((e: { event: { type: string; status?: string } }) =>
+    e.event.type === 'status' && e.event.status === 'connected')).toBe(true);
+  expect(report.recorder.updateTotals.local.count).toBeGreaterThan(0);
+
+  await closeSettings(page);
 });

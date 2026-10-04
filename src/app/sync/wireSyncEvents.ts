@@ -23,9 +23,12 @@ import { peekSyncOrchestrator } from './createSync';
 import { stopDeviceHeartbeat } from '@app/boot/backgroundTasks';
 import { useSyncStore } from '@store/useSyncStore';
 import { useToastStore } from '@store/useToastStore';
+import { recordSyncEvent } from './diagnostics/recorder';
 
 export function wireSyncEvents(): () => void {
   return getSyncEventBus().on((event) => {
+    // Diagnostics tap (src/app/sync/diagnostics): history only, no behavior.
+    recordSyncEvent(event);
     const toast = useToastStore.getState().showToast;
     const sync = useSyncStore.getState();
 
