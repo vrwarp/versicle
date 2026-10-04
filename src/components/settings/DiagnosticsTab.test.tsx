@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { DiagnosticsTab } from './DiagnosticsTab';
 import { useAudioCommands } from '@app/tts/useAudioCommands';
+import { isWebAudioKeepaliveEnabled, setWebAudioKeepaliveEnabled } from '@lib/tts/keepaliveFlags';
 
 vi.mock('@app/tts/useAudioCommands', () => ({
     useAudioCommands: vi.fn(),
@@ -45,6 +46,19 @@ describe('DiagnosticsTab (worker data via the engine handle)', () => {
     beforeEach(() => {
         commands = makeCommands();
         vi.mocked(useAudioCommands).mockReturnValue(commands as never);
+    });
+
+    it('toggles the device-local Web Audio keepalive switch', async () => {
+        setWebAudioKeepaliveEnabled(false);
+        render(<DiagnosticsTab />);
+        const toggle = screen.getByRole('switch', { name: 'Web Audio keepalive' });
+        expect(toggle.getAttribute('aria-checked')).toBe('false');
+        fireEvent.click(toggle);
+        expect(isWebAudioKeepaliveEnabled()).toBe(true);
+        expect(toggle.getAttribute('aria-checked')).toBe('true');
+        fireEvent.click(toggle);
+        expect(isWebAudioKeepaliveEnabled()).toBe(false);
+        await waitFor(() => expect(commands.exportDiagnostics).toHaveBeenCalled());
     });
 
     it('renders the ENGINE buffer stats from exportDiagnostics (not a local singleton)', async () => {

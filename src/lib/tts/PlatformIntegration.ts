@@ -1,4 +1,5 @@
-import { BackgroundAudio, type BackgroundAudioMode } from './BackgroundAudio';
+import type { BackgroundAudioMode } from './BackgroundAudio';
+import { KeepaliveSelector } from './KeepaliveSelector';
 import { MediaSessionManager, type MediaSessionMetadata } from './MediaSessionManager';
 import { Capacitor } from '@capacitor/core';
 import type { TTSStatus } from './engine/TtsEngine';
@@ -74,7 +75,7 @@ export type MediaPlatformFactory = (events: PlatformEvents) => MediaPlatform;
  * Background Audio persistence (silent audio loop).
  */
 export class PlatformIntegration implements MediaPlatform {
-    private backgroundAudio: BackgroundAudio;
+    private backgroundAudio: KeepaliveSelector;
     private backgroundAudioMode: BackgroundAudioMode = 'silence';
     private mediaSessionManager: MediaSessionManager;
     private lastMetadata: MediaSessionMetadata | null = null;
@@ -85,7 +86,7 @@ export class PlatformIntegration implements MediaPlatform {
      * @param {PlatformEvents} events Callback handlers for platform control events.
      */
     constructor(events: PlatformEvents) {
-        this.backgroundAudio = new BackgroundAudio();
+        this.backgroundAudio = new KeepaliveSelector();
         this.mediaSessionManager = new MediaSessionManager({
             onPlay: events.onPlay,
             onPause: events.onPause,
