@@ -867,6 +867,7 @@ describe('SyncOrchestrator diagnostics (read-only export surface)', () => {
           return [meta(), meta({ workspaceId: 'ws_dead', deletedAt: 5 })];
         },
         probeHasData: async () => true,
+        probePendingWrites: async () => ({ state: 'stuck' as const, ms: 8000 }),
       },
     });
     await h.signIn();
@@ -881,6 +882,7 @@ describe('SyncOrchestrator diagnostics (read-only export surface)', () => {
       workspaces: { ok: true, value: [{ workspaceId: 'ws_1' }, { workspaceId: 'ws_dead', deletedAt: 5 }] },
       alive: { ok: true, value: true },
       hasData: { ok: true, value: true },
+      pendingWrites: { state: 'stuck', ms: 8000 },
     });
   });
 

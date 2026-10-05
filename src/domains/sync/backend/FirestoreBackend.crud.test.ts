@@ -29,6 +29,8 @@ const h = vi.hoisted(() => ({
   bytesByPath: new Map<string, ArrayBuffer>(),
   getBytesError: null as (Error & { code?: string }) | null,
   provider: null as Record<string, unknown> | null,
+  /** waitForPendingWrites behavior: resolve, hang, or throw. */
+  pendingWrites: 'ack' as 'ack' | 'hang' | 'throw',
 }));
 
 vi.mock('@lib/sync/firebase-config', () => ({
@@ -80,6 +82,11 @@ vi.mock('firebase/firestore', () => ({
     h.deletedDocs.push(ref.path);
   },
   writeBatch: () => ({ delete: () => undefined, commit: async () => undefined }),
+  waitForPendingWrites: () => {
+    if (h.pendingWrites === 'throw') return Promise.reject(new Error('terminated'));
+    if (h.pendingWrites === 'hang') return new Promise(() => undefined);
+    return Promise.resolve();
+  },
 }));
 
 vi.mock('firebase/storage', () => ({
@@ -532,5 +539,27 @@ describe('FirestoreBackend.connect', () => {
     });
     conn.destroy();
     expect(conn.describe?.()).toMatchObject({ destroyed: true });
+  });
+});
+
+describe('FirestoreBackend.probePendingWrites (diagnostics)', () => {
+  afterEach(() => {
+    h.pendingWrites = 'ack';
+  });
+
+  it('acknowledged when the issued writes are acked in time', async () => {
+    expect(await backend().probePendingWrites(50)).toMatchObject({ state: 'acknowledged' });
+  });
+
+  it("stuck when they are not — the 'receives but never sends' signature", async () => {
+    h.pendingWrites = 'hang';
+    expect(await backend().probePendingWrites(20)).toMatchObject({ state: 'stuck', ms: expect.any(Number) });
+  });
+
+  it('unavailable without a db, or when the SDK throws', async () => {
+    h.pendingWrites = 'throw';
+    expect(await backend().probePendingWrites(20)).toMatchObject({ state: 'unavailable', error: 'Error: terminated' });
+    h.db = null;
+    expect(await backend().probePendingWrites(20)).toMatchObject({ state: 'unavailable' });
   });
 });

@@ -38,6 +38,7 @@ import {
   query,
   limit,
   writeBatch,
+  waitForPendingWrites,
   type Firestore,
 } from 'firebase/firestore';
 import {
@@ -144,6 +145,30 @@ export class FirestoreBackend implements SyncBackend {
     const db = getFirestoreDb();
     if (!db) throw new Error('Firestore not initialized');
     await setDoc(doc(db, this.metaPath(workspaceId)), { ...patch }, { merge: true });
+  }
+
+  async probePendingWrites(
+    timeoutMs: number
+  ): Promise<{ state: 'acknowledged' | 'stuck' | 'unavailable'; ms: number; error?: string }> {
+    const db = getFirestoreDb();
+    if (!db) return { state: 'unavailable', ms: 0, error: 'Firestore not initialized' };
+    const started = Date.now();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      // Resolves once every write this client has ALREADY issued is
+      // acknowledged by the server (it never waits for later writes).
+      const outcome = await Promise.race([
+        waitForPendingWrites(db).then(() => 'acknowledged' as const),
+        new Promise<'stuck'>((resolve) => {
+          timer = setTimeout(() => resolve('stuck'), timeoutMs);
+        }),
+      ]);
+      return { state: outcome, ms: Date.now() - started };
+    } catch (error) {
+      return { state: 'unavailable', ms: Date.now() - started, error: String(error) };
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   async isWorkspaceAlive(workspaceId: string): Promise<boolean> {

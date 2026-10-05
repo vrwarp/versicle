@@ -500,7 +500,7 @@ export class SyncOrchestrator {
       }
     };
 
-    const [workspaces, alive, hasData] = await Promise.all([
+    const [workspaces, alive, hasData, pendingWrites] = await Promise.all([
       bounded('listWorkspaces', () => backend.listWorkspaces({ includeDeleted: true })),
       workspaceId
         ? bounded('isWorkspaceAlive', () => backend.isWorkspaceAlive(workspaceId))
@@ -508,8 +508,13 @@ export class SyncOrchestrator {
       workspaceId
         ? bounded('probeHasData', () => backend.probeHasData(workspaceId))
         : Promise.resolve(null),
+      // Do this device's issued writes reach the server? 'stuck' while reads
+      // work = receives but never sends.
+      backend.probePendingWrites
+        ? backend.probePendingWrites(Math.min(timeoutMs, 8000))
+        : Promise.resolve(null),
     ]);
-    return { uid: user.uid, activeWorkspaceId: workspaceId, workspaces, alive, hasData };
+    return { uid: user.uid, activeWorkspaceId: workspaceId, workspaces, alive, hasData, pendingWrites };
   }
 
   /**

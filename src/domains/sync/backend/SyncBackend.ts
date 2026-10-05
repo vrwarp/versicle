@@ -160,6 +160,15 @@ export interface SyncBackend {
    * offline client must still be able to queue writes).
    */
   isWorkspaceAlive(workspaceId: string): Promise<boolean>;
+
+  /**
+   * Diagnostics only (optional, additive C3 evolution): do this client's
+   * already-issued writes get acknowledged by the server within
+   * `timeoutMs`? A transport whose write channel has stalled while reads
+   * still flow reports 'stuck' — the signature of "this device receives
+   * but never sends". Read-only; never drives behavior.
+   */
+  probePendingWrites?(timeoutMs: number): Promise<{ state: 'acknowledged' | 'stuck' | 'unavailable'; ms: number; error?: string }>;
   /** Clean-sync probe: does the replicated doc hold any data? */
   probeHasData(workspaceId: string): Promise<boolean>;
   /**

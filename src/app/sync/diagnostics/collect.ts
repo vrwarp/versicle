@@ -66,6 +66,37 @@ async function safely<T>(run: () => T | Promise<T>): Promise<T | { error: string
 }
 
 /**
+ * "Does this device SEND?" in one line. y-cinder saves through a Firestore
+ * write that waits for the server's acknowledgment with no timeout, and a
+ * save in flight blocks every later one — so a stalled write channel
+ * (reads unaffected) shows up as a save in flight for a long time with the
+ * queue growing behind it, and as Firestore writes that never get acked.
+ */
+export function uploadHealth(
+  orchestratorDiag: Record<string, unknown> | null,
+  remote: unknown,
+  now: number
+): Record<string, unknown> {
+  const provider = (orchestratorDiag?.provider ?? null) as { transport?: Record<string, unknown> | null } | null;
+  const t = provider?.transport ?? null;
+  const pendingWrites = (remote as { pendingWrites?: { state?: string } } | null)?.pendingWrites ?? null;
+  if (!t) return { verdict: 'skipped', reason: 'no live sync connection' };
+  const pendingSince = typeof t.pendingSince === 'number' ? t.pendingSince : null;
+  const oldestPendingAgeMs = pendingSince !== null ? now - pendingSince : null;
+  const stalled =
+    pendingWrites?.state === 'stuck' ||
+    (t.saveInFlight === true && oldestPendingAgeMs !== null && oldestPendingAgeMs > 60_000);
+  return {
+    verdict: stalled ? 'stuck' : 'ok',
+    saveInFlight: t.saveInFlight ?? null,
+    pendingUpdates: t.pendingUpdates ?? null,
+    oldestPendingAgeMs,
+    saveRetryCount: t.saveRetryCount ?? null,
+    firestorePendingWrites: pendingWrites,
+  };
+}
+
+/**
  * The sync-path libraries this BUILD was made with (the forks are pinned to
  * commits — two devices on different builds can run different library
  * code). From package.json, so it is the declared pin, not a lockfile read.
@@ -182,6 +213,7 @@ export async function collectSyncDiagnostics(opts?: {
     generatedAt: now,
     generatedAtIso: new Date(now).toISOString(),
     verdicts: 'verdicts' in integrity ? integrity.verdicts : integrity,
+    uploads: uploadHealth(orchestrator ? orchestrator.getDiagnostics() : null, remote, now),
     libraries: await safely(libraries),
     environment: await safely(environment),
     devices: await safely(devices),
