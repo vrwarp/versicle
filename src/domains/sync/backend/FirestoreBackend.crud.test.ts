@@ -28,6 +28,9 @@ const h = vi.hoisted(() => ({
   deleteDocThrows: null as Error | null,
   bytesByPath: new Map<string, ArrayBuffer>(),
   getBytesError: null as (Error & { code?: string }) | null,
+  provider: null as Record<string, unknown> | null,
+  /** waitForPendingWrites behavior: resolve, hang, or throw. */
+  pendingWrites: 'ack' as 'ack' | 'hang' | 'throw',
 }));
 
 vi.mock('@lib/sync/firebase-config', () => ({
@@ -39,6 +42,7 @@ vi.mock('y-cinder', () => ({
   FireProvider: class {
     constructor(public readonly options: Record<string, unknown>) {
       h.ops.push('FireProvider');
+      h.provider = this as unknown as Record<string, unknown>;
     }
     on() {}
     off() {}
@@ -78,6 +82,11 @@ vi.mock('firebase/firestore', () => ({
     h.deletedDocs.push(ref.path);
   },
   writeBatch: () => ({ delete: () => undefined, commit: async () => undefined }),
+  waitForPendingWrites: () => {
+    if (h.pendingWrites === 'throw') return Promise.reject(new Error('terminated'));
+    if (h.pendingWrites === 'hang') return new Promise(() => undefined);
+    return Promise.resolve();
+  },
 }));
 
 vi.mock('firebase/storage', () => ({
@@ -503,5 +512,54 @@ describe('FirestoreBackend.connect', () => {
     backend().connect({} as never, WS, { maxWaitTimeMs: 1, maxUpdatesThreshold: 1 });
 
     expect(h.ops).toContain('FireProvider');
+  });
+
+  it('describe() reports the provider state without driving it', () => {
+    const conn = backend().connect({} as never, WS, { maxWaitTimeMs: 1, maxUpdatesThreshold: 1 });
+    Object.assign(h.provider!, {
+      synced: true,
+      epoch: 2,
+      _pendingUpdates: [new Uint8Array(3), new Uint8Array(4)],
+      _saveRetryCount: 1,
+      _epochFenced: false,
+      _corruptedDocIds: new Set(['d1']),
+    });
+
+    expect(conn.describe?.()).toMatchObject({
+      transport: 'firestore',
+      path: `users/${UID}/versicle/${WS}`,
+      destroyed: false,
+      synced: true,
+      epoch: 2,
+      pendingUpdates: 2,
+      pendingBytes: 7,
+      saveRetryCount: 1,
+      epochFenced: false,
+      corruptedDocIds: ['d1'],
+    });
+    conn.destroy();
+    expect(conn.describe?.()).toMatchObject({ destroyed: true });
+  });
+});
+
+describe('FirestoreBackend.probePendingWrites (diagnostics)', () => {
+  afterEach(() => {
+    h.pendingWrites = 'ack';
+  });
+
+  it('acknowledged when the issued writes are acked in time', async () => {
+    expect(await backend().probePendingWrites(50)).toMatchObject({ state: 'acknowledged' });
+  });
+
+  it("stuck when they are not — the 'receives but never sends' signature", async () => {
+    h.pendingWrites = 'hang';
+    expect(await backend().probePendingWrites(20)).toMatchObject({ state: 'stuck', ms: expect.any(Number) });
+  });
+
+  it('unavailable without a db, or when the SDK throws', async () => {
+    h.pendingWrites = 'throw';
+    expect(await backend().probePendingWrites(20)).toMatchObject({ state: 'unavailable', error: 'Error: terminated' });
+    h.db = null;
+    expect(await backend().probePendingWrites(20)).toMatchObject({ state: 'unavailable' });
   });
 });

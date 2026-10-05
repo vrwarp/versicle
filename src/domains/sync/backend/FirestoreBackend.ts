@@ -38,6 +38,7 @@ import {
   query,
   limit,
   writeBatch,
+  waitForPendingWrites,
   type Firestore,
 } from 'firebase/firestore';
 import {
@@ -144,6 +145,30 @@ export class FirestoreBackend implements SyncBackend {
     const db = getFirestoreDb();
     if (!db) throw new Error('Firestore not initialized');
     await setDoc(doc(db, this.metaPath(workspaceId)), { ...patch }, { merge: true });
+  }
+
+  async probePendingWrites(
+    timeoutMs: number
+  ): Promise<{ state: 'acknowledged' | 'stuck' | 'unavailable'; ms: number; error?: string }> {
+    const db = getFirestoreDb();
+    if (!db) return { state: 'unavailable', ms: 0, error: 'Firestore not initialized' };
+    const started = Date.now();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      // Resolves once every write this client has ALREADY issued is
+      // acknowledged by the server (it never waits for later writes).
+      const outcome = await Promise.race([
+        waitForPendingWrites(db).then(() => 'acknowledged' as const),
+        new Promise<'stuck'>((resolve) => {
+          timer = setTimeout(() => resolve('stuck'), timeoutMs);
+        }),
+      ]);
+      return { state: outcome, ms: Date.now() - started };
+    } catch (error) {
+      return { state: 'unavailable', ms: Date.now() - started, error: String(error) };
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   async isWorkspaceAlive(workspaceId: string): Promise<boolean> {
@@ -502,10 +527,23 @@ export class FirestoreBackend implements SyncBackend {
         self: true,
       })) as never);
 
+    // Diagnostics-only breadcrumbs: these y-cinder events are not part of the
+    // normalized connection surface, but a silent stall is far easier to
+    // explain with them in the log ring (src/lib/logger.ts).
+    p.on('compaction-failed', ((event: { consecutiveFailures?: number; retryInMs?: number; error?: unknown }) =>
+      logger.warn(
+        `Compaction failed (${event.consecutiveFailures ?? '?'} in a row; retry in ${event.retryInMs ?? '?'}ms)`,
+        event.error
+      )) as never);
+    p.on('sync', ((isSynced: boolean) =>
+      logger.info(`Provider sync state: ${isSynced ? 'synced' : 'not synced'}`)) as never);
+
+    const connectedAt = Date.now();
     let destroyed = false;
     return {
       on: emitter.on,
       off: emitter.off,
+      describe: () => describeProvider(provider, { connectedAt, destroyed, path: this.docPath(workspaceId) }),
       destroy: () => {
         if (destroyed) return;
         destroyed = true;
@@ -516,4 +554,77 @@ export class FirestoreBackend implements SyncBackend {
       },
     };
   }
+}
+
+/**
+ * Read y-cinder's live provider state for the diagnostics export. Public
+ * getters are read directly; the queue/retry internals are PRIVATE fields of
+ * the vendored provider, read defensively through an untyped view — a field
+ * that disappears in a future y-cinder simply reports `undefined`. Never
+ * used for control flow.
+ */
+function describeProvider(
+  provider: FireProvider,
+  ctx: { connectedAt: number; destroyed: boolean; path: string }
+): Record<string, unknown> {
+  const internals = provider as unknown as Record<string, unknown>;
+  const read = (key: string): unknown => {
+    try {
+      return internals[key];
+    } catch {
+      return undefined;
+    }
+  };
+  const sizeOf = (value: unknown): number | undefined => {
+    if (Array.isArray(value)) return value.length;
+    if (value instanceof Set || value instanceof Map) return value.size;
+    return undefined;
+  };
+  let pendingBytes: number | undefined;
+  const pending = read('_pendingUpdates');
+  if (Array.isArray(pending)) {
+    pendingBytes = pending.reduce(
+      (sum: number, u: unknown) => sum + (u instanceof Uint8Array ? u.byteLength : 0),
+      0
+    );
+  }
+  const safeGet = <T>(get: () => T): T | undefined => {
+    try {
+      return get();
+    } catch {
+      return undefined;
+    }
+  };
+  return {
+    transport: 'firestore',
+    path: ctx.path,
+    connectedAt: ctx.connectedAt,
+    destroyed: ctx.destroyed,
+    synced: safeGet(() => provider.synced),
+    epoch: safeGet(() => provider.epoch),
+    isCompacting: safeGet(() => provider.isCompacting),
+    providerDestroyed: read('_isDestroyed'),
+    epochFenced: read('_epochFenced'),
+    initialSyncInFlight: read('_initialSyncInFlight'),
+    pendingUpdates: sizeOf(pending),
+    pendingBytes,
+    pendingSince: read('_pendingSince'),
+    saveInFlight: read('_inflightSave') != null,
+    deferredUpdateBlobs: sizeOf(read('_deferredUpdateBlobs')),
+    saveRetryCount: read('_saveRetryCount'),
+    syncRetryCount: read('_syncRetryCount'),
+    offlineRetryCount: read('_offlineRetryCount'),
+    listenerRetryCount: read('_listenerRetryCount'),
+    listenersAttachedAt: read('_listenersAttachedAt'),
+    activeListeners: sizeOf(read('_unsubscribers')),
+    corruptedDocIds: (() => {
+      const ids = read('_corruptedDocIds');
+      return ids instanceof Set ? [...ids].map(String).slice(0, 50) : undefined;
+    })(),
+    compactionFailures: read('_compactionFailures'),
+    compactionBackoffUntil: read('_compactionBackoffUntil'),
+    clockOffsetMs: read('_cachedClockOffset'),
+    maxWaitTime: read('maxWaitTime'),
+    maxUpdatesThreshold: read('maxUpdatesThreshold'),
+  };
 }

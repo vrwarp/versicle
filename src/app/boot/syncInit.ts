@@ -15,6 +15,8 @@ import {
   isSyncEnabled,
 } from '../sync/createSync';
 import { wireSyncEvents } from '../sync/wireSyncEvents';
+import { startSyncDiagnosticsRecorder } from '../sync/diagnostics/recorder';
+import { getYDoc, getYjsPersistence } from '@store/yjs-provider';
 import { createLogger } from '@lib/logger';
 
 const logger = createLogger('Boot');
@@ -30,6 +32,15 @@ export const syncInitTask: BootTask = {
     // never blocks on network.
     await configureSyncBackendSelection();
     ctx.addCleanup(wireSyncEvents());
+    // Sync diagnostics (Settings → Diagnostics → export): record doc
+    // updates by origin + lifecycle transitions from boot onward, so an
+    // export taken after "it didn't sync" has the history leading up to it.
+    ctx.addCleanup(
+      startSyncDiagnosticsRecorder({
+        doc: getYDoc(),
+        isIdbOrigin: (origin) => origin !== null && origin === getYjsPersistence(),
+      })
+    );
 
     if (!ctx.syncAllowed) {
       logger.info('Sync init skipped: migration awaiting confirmation.');

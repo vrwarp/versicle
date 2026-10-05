@@ -31,6 +31,9 @@ export class ProviderConnection {
   private connection: SyncConnection | null = null;
   /** Detach handle for the live `meta` quarantine observer (§D5.2). */
   private metaQuarantineCleanup: (() => void) | null = null;
+  /** Diagnostics: where/when the current connection was attached. */
+  private attachedWorkspaceId: string | null = null;
+  private attachedAt: number | null = null;
 
   constructor(private readonly deps: ProviderConnectionDeps) {}
 
@@ -53,6 +56,8 @@ export class ProviderConnection {
     try {
       const connection = backend.connect(deps.doc(), workspaceId, opts);
       this.connection = connection;
+      this.attachedWorkspaceId = workspaceId;
+      this.attachedAt = Date.now();
 
       // Transport error events, normalized by the backend adapter.
       // No UX here: the transport announces, wireSyncEvents presents.
@@ -86,6 +91,14 @@ export class ProviderConnection {
       });
 
       // A committed save → lastSyncTime (the `flushed` semantics).
+      connection.on('synced', () => {
+        logger.info(`Initial sync complete for workspace: ${workspaceId}`);
+      });
+
+      connection.on('corrupted-document', (event) => {
+        logger.error('Firestore reported a corrupted document (quarantined by the provider):', event);
+      });
+
       connection.on('saved', (at) => {
         events.emit({ type: 'flushed', at });
       });
@@ -143,6 +156,27 @@ export class ProviderConnection {
       logger.error('Failed to connect:', error);
       deps.setStatus('error');
     }
+  }
+
+  /**
+   * Read-only snapshot for the sync diagnostics export: whether a
+   * connection is attached, to which workspace, since when, and whatever
+   * the transport itself reports (SyncConnection.describe).
+   */
+  describe(): Record<string, unknown> {
+    let transport: Record<string, unknown> | null = null;
+    try {
+      transport = this.connection?.describe?.() ?? null;
+    } catch (error) {
+      transport = { describeError: String(error) };
+    }
+    return {
+      attached: this.connection !== null,
+      workspaceId: this.connection ? this.attachedWorkspaceId : null,
+      attachedAt: this.connection ? this.attachedAt : null,
+      liveQuarantineObserver: this.metaQuarantineCleanup !== null,
+      transport,
+    };
   }
 
   /** Detach the provider (flush + destroy) and report `disconnected`. */

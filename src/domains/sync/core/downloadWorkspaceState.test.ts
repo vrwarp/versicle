@@ -157,6 +157,22 @@ describe('downloadWorkspaceState — the timeout arm', () => {
     expect(readProbe(blob)).toBeUndefined();
   });
 
+  it("onTimeout: 'reject' fails loudly instead of reading an unreachable remote as empty", async () => {
+    const backend = makeBackend(rec, (doc) => {
+      seed(doc, 'partial'); // synced never fires
+    });
+
+    await expect(
+      downloadWorkspaceState(backend, 'ws_slow', {
+        maxWaitTimeMs: 1,
+        maxUpdatesThreshold: 1,
+        timeoutMs: 5,
+        onTimeout: 'reject',
+      })
+    ).rejects.toThrow('timed out after 5ms');
+    expect(rec.destroys).toBe(1);
+  });
+
   it('clears the budget timer once the handshake lands (no late warning)', async () => {
     const backend = makeBackend(rec, (_doc, emitSynced) => setTimeout(emitSynced, 0));
 

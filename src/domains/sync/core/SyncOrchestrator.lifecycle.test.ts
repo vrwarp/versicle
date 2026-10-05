@@ -797,3 +797,163 @@ describe('SyncOrchestrator.getConnectedArtifactBackend', () => {
     });
   });
 });
+
+describe('SyncOrchestrator diagnostics (read-only export surface)', () => {
+  it('reports the live connection, including the transport describe()', async () => {
+    const h = build({
+      backend: {
+        connect: () => ({ ...idleConnection(), describe: () => ({ transport: 'scripted', pendingUpdates: 3 }) }),
+      },
+    });
+    await h.signIn();
+
+    const d = h.orchestrator.getDiagnostics();
+    expect(d).toMatchObject({
+      started: true,
+      status: 'connected',
+      authStatus: 'signed-in',
+      uid: 'uid-1',
+      activeWorkspaceId: 'ws_1',
+      backendUid: 'uid-1',
+      provider: {
+        attached: true,
+        workspaceId: 'ws_1',
+        transport: { transport: 'scripted', pendingUpdates: 3 },
+      },
+    });
+  });
+
+  it('reports a detached provider after stop()', async () => {
+    const h = build();
+    await h.signIn();
+    h.orchestrator.stop();
+
+    expect(h.orchestrator.getDiagnostics()).toMatchObject({
+      started: false,
+      status: 'disconnected',
+      provider: { attached: false, workspaceId: null, transport: null },
+    });
+  });
+
+  it('a throwing transport describe() is captured, not propagated', async () => {
+    const h = build({
+      backend: {
+        connect: () => ({
+          ...idleConnection(),
+          describe: () => {
+            throw new Error('boom');
+          },
+        }),
+      },
+    });
+    await h.signIn();
+
+    expect(h.orchestrator.getDiagnostics().provider).toMatchObject({
+      attached: true,
+      transport: { describeError: 'Error: boom' },
+    });
+  });
+
+  it('probeRemoteDiagnostics skips when signed out', async () => {
+    expect(await build().orchestrator.probeRemoteDiagnostics()).toEqual({ skipped: 'not signed in' });
+  });
+
+  it('probeRemoteDiagnostics lists every workspace (tombstoned included) and probes the active one', async () => {
+    const listOpts: unknown[] = [];
+    const h = build({
+      backend: {
+        listWorkspaces: async (opts) => {
+          listOpts.push(opts);
+          return [meta(), meta({ workspaceId: 'ws_dead', deletedAt: 5 })];
+        },
+        probeHasData: async () => true,
+        probePendingWrites: async () => ({ state: 'stuck' as const, ms: 8000 }),
+      },
+    });
+    await h.signIn();
+    listOpts.length = 0;
+
+    const remote = await h.orchestrator.probeRemoteDiagnostics();
+
+    expect(listOpts).toEqual([{ includeDeleted: true }]);
+    expect(remote).toMatchObject({
+      uid: 'uid-1',
+      activeWorkspaceId: 'ws_1',
+      workspaces: { ok: true, value: [{ workspaceId: 'ws_1' }, { workspaceId: 'ws_dead', deletedAt: 5 }] },
+      alive: { ok: true, value: true },
+      hasData: { ok: true, value: true },
+      pendingWrites: { state: 'stuck', ms: 8000 },
+    });
+  });
+
+  it('probeRemoteDiagnostics records failures and timeouts per probe', async () => {
+    const h = build();
+    await h.signIn();
+    h.backend.isWorkspaceAlive = async () => {
+      throw Object.assign(new Error('denied'), { code: 'permission-denied' });
+    };
+    h.backend.probeHasData = () => new Promise<boolean>(() => undefined);
+
+    const remote = await h.orchestrator.probeRemoteDiagnostics(20);
+
+    expect(remote.alive).toMatchObject({ ok: false, error: 'Error: denied (code=permission-denied)' });
+    expect(remote.hasData).toMatchObject({ ok: false, error: expect.stringContaining('timed out after 20ms') });
+    expect(remote.workspaces).toMatchObject({ ok: true });
+  });
+
+  it('downloadRemoteStateForDiagnostics returns the remote doc state via a temp connection', async () => {
+    const connectArgs: Array<{ workspaceId: string; threshold: number }> = [];
+    const h = build();
+    await h.signIn();
+    h.backend.connect = (tempDoc, workspaceId, opts) => {
+      connectArgs.push({ workspaceId, threshold: opts.maxUpdatesThreshold });
+      tempDoc.getMap('library').set('remote-book', 1);
+      return syncedConnection();
+    };
+
+    const r = await h.orchestrator.downloadRemoteStateForDiagnostics(1000);
+
+    expect(r.ok).toBe(true);
+    const probe = new Y.Doc();
+    Y.applyUpdate(probe, (r as { update: Uint8Array }).update);
+    expect(probe.getMap('library').get('remote-book')).toBe(1);
+    // The live connection is untouched; the temp one never forces compaction.
+    expect(connectArgs).toEqual([{ workspaceId: 'ws_1', threshold: 1_000_000_000 }]);
+    expect(h.orchestrator.getDiagnostics()).toMatchObject({ status: 'connected' });
+  });
+
+  it('downloadRemoteStateForDiagnostics reports a timeout as an error, not an empty remote', async () => {
+    const h = build();
+    await h.signIn();
+    h.backend.connect = () => idleConnection();
+
+    expect(await h.orchestrator.downloadRemoteStateForDiagnostics(10)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('timed out after 10ms'),
+    });
+  });
+
+  it('downloadRemoteStateForDiagnostics needs a signed-in user', async () => {
+    expect(await build().orchestrator.downloadRemoteStateForDiagnostics()).toMatchObject({
+      ok: false,
+      error: 'not signed in',
+    });
+  });
+
+  it('repairUploadMissing needs a signed-in user', async () => {
+    expect(await build().orchestrator.repairUploadMissing()).toMatchObject({ ok: false, error: 'not signed in' });
+  });
+
+  it('repairUploadMissing runs against the active workspace on the live doc', async () => {
+    const h = build();
+    await h.signIn();
+    h.backend.connect = () => syncedConnection();
+
+    // The scripted cloud is empty and the live doc holds one edit: the
+    // repair finds the cloud behind and uploads it (the scripted
+    // connection never acks, so the upload itself times out).
+    h.doc.getMap('library').set('b1', 1);
+    const r = await h.orchestrator.repairUploadMissing(50);
+    expect(r).toMatchObject({ ok: false, error: expect.stringContaining('Repair upload timed out') });
+  });
+});

@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from 'node:url'
 import { createReadStream, existsSync, statSync, mkdirSync, readdirSync, copyFileSync } from 'node:fs'
 import path from 'node:path'
+import { execSync } from 'node:child_process'
 import { defineConfig, loadEnv, type Plugin, type Connect } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -124,6 +125,28 @@ const aliases = {
   '@xmldom/xmldom': srcAlias('lib/xmldom-browser-stub.ts'),
 }
 
+/**
+ * Build identity baked into the bundle (read by the sync diagnostics export).
+ * The Capacitor APK ships whatever `dist/` held when it was built, while the
+ * web app redeploys on every push — so "which build is this device on?" is a
+ * real diagnostic question. Falls back gracefully where there is no .git
+ * (Docker builds): CI's GITHUB_SHA, else 'unknown'.
+ */
+function buildStamp(): { sha: string; dirty: boolean; time: string } {
+  const git = (args: string): string | null => {
+    try {
+      return execSync(`git ${args}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    } catch {
+      return null;
+    }
+  };
+  return {
+    sha: git('rev-parse HEAD') ?? process.env.GITHUB_SHA ?? 'unknown',
+    dirty: (git('status --porcelain --untracked-files=no') ?? '') !== '',
+    time: new Date().toISOString(),
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -133,6 +156,9 @@ export default defineConfig(({ mode }) => {
   const analyze = env.ANALYZE === 'true';
   return {
     base: env.VITE_BASE || '/',
+    define: {
+      __VERSICLE_BUILD__: JSON.stringify(buildStamp()),
+    },
     resolve: {
       alias: aliases,
       // Single-instance guard (phase2-fork-surgery.md §6.6c): the upstream

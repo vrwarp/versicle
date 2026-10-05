@@ -27,6 +27,7 @@ import type { WorkspaceMetadata } from '~types/workspace';
 import { WorkspaceDeletedError } from '~types/errors';
 import type { PurgeReport, SyncBackend } from '../backend/SyncBackend';
 import { downloadWorkspaceState } from './downloadWorkspaceState';
+import { uploadMissingState, type UploadMissingStateResult } from './uploadMissingState';
 import { readDocSchemaVersion, readUpdateSchemaVersion } from './quarantine';
 import { AuthSession, type AuthChangeCallback } from './AuthSession';
 import { ProviderConnection } from './ProviderConnection';
@@ -434,6 +435,141 @@ export class SyncOrchestrator {
   /** Subscribe to auth status changes; fires immediately with the current. */
   onAuthChange(callback: AuthChangeCallback): () => void {
     return this.auth.onAuthChange(callback);
+  }
+
+  // ── Diagnostics (read-only; the sync diagnostics export) ─────────────────
+
+  /**
+   * Synchronous snapshot of the orchestrator's live state for the sync
+   * diagnostics export (src/app/sync/diagnostics). Never mutates anything.
+   */
+  getDiagnostics(): Record<string, unknown> {
+    const user = this.getCurrentUser();
+    return {
+      started: this.started,
+      status: this.status,
+      authStatus: this.getAuthStatus(),
+      uid: user?.uid ?? null,
+      email: user?.email ?? null,
+      activeWorkspaceId: this.getActiveWorkspaceId(),
+      backendUid: this.backend?.uid ?? null,
+      mockBackend: Boolean(this.backendSelection.mockSession),
+      firebaseAppName: this.currentApp?.name ?? null,
+      firebaseAppMatchesCurrent: this.currentApp ? this.currentApp === getFirebaseApp() : null,
+      config: { ...this.config },
+      debounceOverrideMs: this.deps.debounceOverrideMs(),
+      currentSchemaVersion: this.deps.currentSchemaVersion,
+      provider: this.provider.describe(),
+    };
+  }
+
+  /**
+   * Ask the backend what the REMOTE side looks like for the signed-in user:
+   * every workspace in the directory (tombstoned included), plus liveness
+   * and has-data probes for the active one. Uses only existing C3 methods;
+   * every probe is individually time-bounded and failure-tolerant so the
+   * export works offline (it then records the error instead).
+   */
+  async probeRemoteDiagnostics(timeoutMs = 8000): Promise<Record<string, unknown>> {
+    const user = this.getCurrentUser();
+    if (!user) return { skipped: 'not signed in' };
+    const backend = this.getBackend(user.uid);
+    const workspaceId = this.getActiveWorkspaceId();
+
+    const bounded = async <T>(label: string, run: () => Promise<T>): Promise<
+      { ok: true; value: T; ms: number } | { ok: false; error: string; ms: number }
+    > => {
+      const started = Date.now();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const value = await Promise.race([
+          run(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+          }),
+        ]);
+        return { ok: true, value, ms: Date.now() - started };
+      } catch (error) {
+        const code = (error as { code?: unknown })?.code;
+        return {
+          ok: false,
+          error: `${String(error)}${code !== undefined ? ` (code=${String(code)})` : ''}`,
+          ms: Date.now() - started,
+        };
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+      }
+    };
+
+    const [workspaces, alive, hasData, pendingWrites] = await Promise.all([
+      bounded('listWorkspaces', () => backend.listWorkspaces({ includeDeleted: true })),
+      workspaceId
+        ? bounded('isWorkspaceAlive', () => backend.isWorkspaceAlive(workspaceId))
+        : Promise.resolve(null),
+      workspaceId
+        ? bounded('probeHasData', () => backend.probeHasData(workspaceId))
+        : Promise.resolve(null),
+      // Do this device's issued writes reach the server? 'stuck' while reads
+      // work = receives but never sends.
+      backend.probePendingWrites
+        ? backend.probePendingWrites(Math.min(timeoutMs, 8000))
+        : Promise.resolve(null),
+    ]);
+    return { uid: user.uid, activeWorkspaceId: workspaceId, workspaces, alive, hasData, pendingWrites };
+  }
+
+  /**
+   * Download the REMOTE replicated document for the active workspace into a
+   * throwaway doc and return its full state — the "what does Firestore
+   * actually hold?" half of the diagnostics library cross-check. Reuses the
+   * clean-sync/switch temp-provider path (downloadWorkspaceState), with two
+   * diagnostics-specific settings: a timeout REJECTS (an unreachable remote
+   * must not read as an empty one), and an effectively infinite flush
+   * threshold so the temp provider never forces a threshold compaction.
+   * The live connection and the live doc are untouched.
+   */
+  async downloadRemoteStateForDiagnostics(timeoutMs = 20000): Promise<
+    | { ok: true; workspaceId: string; update: Uint8Array; ms: number }
+    | { ok: false; error: string; ms: number }
+  > {
+    const started = Date.now();
+    const user = this.getCurrentUser();
+    const workspaceId = this.getActiveWorkspaceId();
+    if (!user || !workspaceId) {
+      return { ok: false, error: !user ? 'not signed in' : 'no active workspace', ms: 0 };
+    }
+    try {
+      const update = await downloadWorkspaceState(this.getBackend(user.uid), workspaceId, {
+        maxWaitTimeMs: this.config.maxWaitFirestoreTime,
+        maxUpdatesThreshold: 1_000_000_000,
+        timeoutMs,
+        onAttachError: 'reject',
+        onTimeout: 'reject',
+      });
+      return { ok: true, workspaceId, update, ms: Date.now() - started };
+    } catch (error) {
+      return { ok: false, error: String(error), ms: Date.now() - started };
+    }
+  }
+
+  /**
+   * MANUAL repair (Settings → Diagnostics): upload whatever this device holds
+   * that the cloud copy does not actually integrate — including a gap in
+   * some client's edit history that y-cinder's metadata hides, which
+   * otherwise leaves every later edit of that client parked on every other
+   * device. See uploadMissingState. Uses a throwaway doc + temp provider;
+   * the live doc and connection are untouched. Idempotent.
+   */
+  async repairUploadMissing(timeoutMs = 30000): Promise<UploadMissingStateResult> {
+    const user = this.getCurrentUser();
+    const workspaceId = this.getActiveWorkspaceId();
+    if (!user || !workspaceId) {
+      return { ok: false, error: !user ? 'not signed in' : 'no active workspace', ms: 0 };
+    }
+    return uploadMissingState(this.getBackend(user.uid), workspaceId, this.deps.doc(), {
+      maxWaitTimeMs: this.config.maxWaitFirestoreTime,
+      timeoutMs,
+    });
   }
 
   // ── Getters ────────────────────────────────────────────────────────────────

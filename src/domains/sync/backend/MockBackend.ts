@@ -293,10 +293,12 @@ export class MockBackend implements SyncBackend {
     provider.on('corrupted-document', (event) => emitter.emit('corrupted-document', event));
     provider.on('saved', (at) => emitter.emit('saved', at));
 
+    const path = this.docPath(workspaceId);
     let destroyed = false;
     return {
       on: emitter.on,
       off: emitter.off,
+      describe: () => ({ transport: 'mock', path, destroyed }),
       destroy: () => {
         if (destroyed) return;
         destroyed = true;

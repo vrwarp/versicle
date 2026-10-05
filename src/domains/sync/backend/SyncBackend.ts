@@ -72,6 +72,13 @@ export interface SyncConnection {
    * C3 evolution, P9 — pinned by the emulator runner's round-trip cases.
    */
   destroy(): void | Promise<void>;
+  /**
+   * Best-effort, read-only snapshot of the transport's internal state
+   * (pending-write queue, retry counters, epoch fence, …) for the sync
+   * diagnostics export. Optional and free-form: it never drives behavior,
+   * and a transport with nothing to report omits it. Additive C3 evolution.
+   */
+  describe?(): Record<string, unknown>;
 }
 
 export interface ConnectOptions {
@@ -153,6 +160,15 @@ export interface SyncBackend {
    * offline client must still be able to queue writes).
    */
   isWorkspaceAlive(workspaceId: string): Promise<boolean>;
+
+  /**
+   * Diagnostics only (optional, additive C3 evolution): do this client's
+   * already-issued writes get acknowledged by the server within
+   * `timeoutMs`? A transport whose write channel has stalled while reads
+   * still flow reports 'stuck' — the signature of "this device receives
+   * but never sends". Read-only; never drives behavior.
+   */
+  probePendingWrites?(timeoutMs: number): Promise<{ state: 'acknowledged' | 'stuck' | 'unavailable'; ms: number; error?: string }>;
   /** Clean-sync probe: does the replicated doc hold any data? */
   probeHasData(workspaceId: string): Promise<boolean>;
   /**

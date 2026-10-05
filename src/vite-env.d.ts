@@ -11,6 +11,12 @@ interface ImportMetaEnv {
   readonly VITE_E2E?: string;
 }
 
+/**
+ * Build identity injected by vite.config.ts `define` (git commit + build
+ * time). Undefined under vitest — read it with a typeof guard.
+ */
+declare const __VERSICLE_BUILD__: { sha: string; dirty: boolean; time: string } | undefined;
+
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
