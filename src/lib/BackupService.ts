@@ -53,7 +53,10 @@ export interface BackupManifestV2 {
  * losslessly. `coverBlob` itself is never present in a v3 backup.
  */
 export type BackupStaticManifestV3 = Omit<StaticBookManifest, 'coverBlob'> & {
-  /** Base64-encoded bytes of the cover image thumbnail, if the book has one. */
+  /**
+   * Base64-encoded bytes of the cover image thumbnail, if the book has one.
+   * Always omitted by the light (JSON) backup — the palettes stand in.
+   */
   coverBlobBase64?: string;
 };
 
@@ -126,8 +129,17 @@ function decodeBase64Window(base64: string): Uint8Array {
 export class BackupService {
   private readonly BACKUP_VERSION = 3;
 
+  /**
+   * Quick JSON export: everything except the cover thumbnails. Covers are
+   * the bulk of the file (base64 inflates them a further 4/3), and a large
+   * library pushed this past what Android could hand to the native layer.
+   * Each book's `coverPalette` / `perceptualPalette` still ride along, so a
+   * restore onto a device without the cover renders the gradient cover; a
+   * device that already has the cover keeps it (see `sanitizeManifestRow`).
+   * The full ZIP backup keeps the cover bytes.
+   */
   async createLightBackup(): Promise<void> {
-    const manifest = await this.generateManifest();
+    const manifest = await this.generateManifest({ includeCovers: false });
     const jsonString = JSON.stringify(manifest, null, 2);
     const filename = `versicle_backup_light_${new Date().toISOString().split('T')[0]}.json`;
 
@@ -258,8 +270,12 @@ export class BackupService {
    * v3: binary cover blobs are base64-encoded (`coverBlobBase64`) so they
    * survive JSON.stringify losslessly. v2 embedded the raw rows and silently
    * corrupted every cover to `{}`.
+   *
+   * `includeCovers: false` omits `coverBlobBase64` from every row (the
+   * light backup); restore already treats a missing cover as "keep the
+   * local one, else none".
    */
-  async generateManifest(): Promise<BackupManifestV3> {
+  async generateManifest({ includeCovers = true }: { includeCovers?: boolean } = {}): Promise<BackupManifestV3> {
     // Ensure Yjs is synced before capturing snapshot, and drain the y-idb
     // debounce queue (fork flush(), packages/y-idb/PROVENANCE.md surgery 1)
     // so a backup can never miss the last 200ms write window.
@@ -275,7 +291,7 @@ export class BackupService {
 
     const staticManifestRows = await bookContent.listManifests();
     const staticManifests = await Promise.all(
-      staticManifestRows.map(row => this.toBackupManifestRow(row))
+      staticManifestRows.map(row => this.toBackupManifestRow(row, includeCovers))
     );
     const metrics = await bookContent.listLocations();
 
@@ -518,13 +534,17 @@ export class BackupService {
    * Convert an IDB manifest row to its v3 backup form: a binary cover (stored
    * as ArrayBuffer for WebKit compatibility, or as Blob in older rows) becomes
    * base64; non-binary garbage (e.g. `{}` left behind by pre-v3 restores) is
-   * stripped so it never re-enters a backup file.
+   * stripped so it never re-enters a backup file. With `includeCovers`
+   * false the cover is dropped entirely.
    */
-  private async toBackupManifestRow(manifest: StaticManifestRow): Promise<BackupStaticManifestV3> {
+  private async toBackupManifestRow(manifest: StaticManifestRow, includeCovers: boolean): Promise<BackupStaticManifestV3> {
     const { coverBlob, ...rest } = manifest;
     const row: BackupStaticManifestV3 = { ...rest };
     const cover: unknown = coverBlob;
 
+    if (!includeCovers) {
+      return row;
+    }
     if (cover instanceof ArrayBuffer) {
       row.coverBlobBase64 = this.uint8ArrayToBase64(new Uint8Array(cover));
     } else if (cover instanceof Blob) {

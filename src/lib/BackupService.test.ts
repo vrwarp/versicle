@@ -652,6 +652,54 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
     });
   });
 
+  describe('regression: light backup omits cover images (Android export OOM)', () => {
+    const palette = [1, 2, 3, 4, 5];
+    const perceptual = { primary: '#123456' };
+
+    it('exports no cover bytes but keeps the cover palettes', async () => {
+      vi.mocked(bookContent.listManifests).mockResolvedValue([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { bookId: 'b1', title: 'Covered', coverBlob: new Uint8Array([1, 2, 3]).buffer, coverPalette: palette, perceptualPalette: perceptual } as any
+      ]);
+
+      await service.createLightBackup();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = (exportFile as any).mock.calls[0][0];
+      const row = (JSON.parse(data as string) as BackupManifestV3).staticManifests[0];
+      expect(row.coverBlobBase64).toBeUndefined();
+      expect('coverBlob' in row).toBe(false);
+      expect(row.coverPalette).toEqual(palette);
+      expect(row.perceptualPalette).toEqual(perceptual);
+    });
+
+    it('restoring it keeps an existing local cover and adds none where there was none', async () => {
+      const localCover = new Uint8Array([9, 9, 9]).buffer;
+      vi.mocked(bookContent.listManifests).mockResolvedValue([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { bookId: 'b1', title: 'Local', coverBlob: localCover, coverPalette: palette } as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { bookId: 'b2', title: 'Other', coverBlob: new Uint8Array([7]).buffer, coverPalette: palette } as any
+      ]);
+      await service.createLightBackup();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = (exportFile as any).mock.calls[0][0];
+
+      // Restore onto a device that only has b1 locally.
+      vi.mocked(bookContent.listManifests).mockResolvedValue([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { bookId: 'b1', title: 'Local', coverBlob: localCover } as any
+      ]);
+      await service.restoreBackup(new File([data as string], 'backup.json'));
+
+      const putRows = manifestPutRows();
+      expect(putRows.find(r => r.bookId === 'b1').coverBlob).toBe(localCover);
+      const b2 = putRows.find(r => r.bookId === 'b2');
+      expect('coverBlob' in b2).toBe(false);
+      expect(b2.coverPalette).toEqual(palette);
+    });
+  });
+
   describe('regression: cover blob corruption (backup manifest v3)', () => {
     it('exports v3 with covers base64-encoded so JSON round-trips are lossless', async () => {
       const coverBytes = new Uint8Array([1, 2, 3, 250, 255]);
@@ -662,11 +710,9 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
         }
       ]);
 
-      await service.createLightBackup();
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data } = (exportFile as any).mock.calls[0][0];
-      const manifest: BackupManifestV3 = JSON.parse(data as string);
+      // The full backup's manifest path (the light backup omits covers).
+      const data = JSON.stringify(await service.generateManifest());
+      const manifest: BackupManifestV3 = JSON.parse(data);
 
       expect(manifest.version).toBe(3);
       // Raw binary never enters the JSON (v2 corrupted it to `{}`)
@@ -676,7 +722,7 @@ describe('BackupService (v2 - Yjs Snapshots)', () => {
 
       // Restore the exported JSON and verify the cover bytes survive intact
       vi.mocked(bookContent.listManifests).mockResolvedValue([]);
-      await service.restoreBackup(new File([data as string], 'backup.json'));
+      await service.restoreBackup(new File([data], 'backup.json'));
 
       const putRows = manifestPutRows();
       const restored = putRows.find(r => r.bookId === 'b1' && 'coverBlob' in r);

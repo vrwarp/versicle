@@ -98,7 +98,7 @@ V3 is structurally identical to v2 except binary fields in `staticManifests` are
 
 ```typescript
 export type BackupStaticManifestV3 = Omit<StaticBookManifest, 'coverBlob'> & {
-  coverBlobBase64?: string;   // base64-encoded thumbnail; absent if no cover
+  coverBlobBase64?: string;   // base64-encoded thumbnail; absent if no cover, and always absent in a light backup
 };
 
 export interface BackupManifestV3 {
@@ -171,7 +171,7 @@ sequenceDiagram
     participant EF as "exportFile()"
 
     U->>BS: "createLightBackup()"
-    BS->>BS: "generateManifest()"
+    BS->>BS: "generateManifest({ includeCovers: false })"
     BS->>YP: "waitForYjsSync()"
     YP-->>BS: "resolved"
     BS->>YIDB: "getYjsPersistence().flush()"
@@ -181,7 +181,7 @@ sequenceDiagram
     BS->>BS: "uint8ArrayToBase64(stateUpdate)"
     BS->>BC: "listManifests()"
     BC-->>BS: "StaticManifestRow[]"
-    BS->>BS: "toBackupManifestRow() per row\n(coverBlob → coverBlobBase64)"
+    BS->>BS: "toBackupManifestRow() per row\n(coverBlob dropped)"
     BS->>BC: "listLocations()"
     BC-->>BS: "CacheRenderMetricsRow[]"
     BS-->>BS: "BackupManifestV3 assembled"
@@ -189,15 +189,17 @@ sequenceDiagram
     EF-->>U: "file download / native share"
 ```
 
+The light backup leaves out the cover thumbnails: they were most of the file (base64 adds another third), and a large library produced a JSON export that Android could not hand to the native layer. Each row keeps `coverPalette` / `perceptualPalette`, so a book restored onto a device without its cover shows the gradient cover; a device that already has the cover keeps it (restore merges, see [Cover-Blob Repair](#cover-blob-repair-the-v2-defect-and-v3-fix)).
+
 The pre-export flush (`getYjsPersistence()?.flush()`) is critical: the vendored y-idb fork batches writes with a debounce window. Without flushing, the last 200 ms of user changes could be missing from the snapshot. This surgery was added to the y-idb fork as "Surgery 1" (see [packages/y-idb/PROVENANCE.md](../../packages/y-idb/PROVENANCE.md)).
 
-`exportFile()` in [src/lib/export.ts](../../src/lib/export.ts) handles both targets: on web it uses `file-saver`'s `saveAs`; on Capacitor native it writes to `Directory.Cache` then invokes the system share sheet via `@capacitor/share`.
+`exportFile()` in [src/lib/export.ts](../../src/lib/export.ts) handles both targets: on web it uses `file-saver`'s `saveAs`; on Capacitor native it writes to `Directory.Cache` in 1.5 MiB `writeFile`/`appendFile` slices (each Capacitor call is one JSON message parsed on Android's capped Java heap, so a single large write crashed the app with an OOM) then invokes the system share sheet via `@capacitor/share`.
 
 ### Full Backup (ZIP)
 
 The full backup adds EPUB file archiving on top of the light backup:
 
-1. Call `generateManifest()` (same as light backup)
+1. Call `generateManifest()` (as the light backup does, but with cover thumbnails included as `coverBlobBase64`)
 2. Open a JSZip instance; write `manifest.json`
 3. Open a `files/` folder in the zip
 4. Iterate `library.books` keys from the Y.Doc's `books` submap
@@ -644,7 +646,7 @@ Checkpoint restore goes through `RecoverySettingsTab.handleConfirmRestore()`, wh
 
 [src/lib/BackupService.test.ts](../../src/lib/BackupService.test.ts) covers:
 
-- `createLightBackup` — asserts the exported file is valid v3 JSON with a non-empty `yjsSnapshot`
+- `createLightBackup` — asserts the exported file is valid v3 JSON with a non-empty `yjsSnapshot`, and (regression block) that it carries no cover bytes but keeps the palettes, with restore keeping an existing local cover
 - `createFullBackup` — asserts the export is a ZIP with the correct MIME type
 - V2 restore — asserts `clearData` was called, then verifies the raw `versicle-yjs` IDB updates store contains the snapshot
 - V1 rejection — asserts the "Fatal: yjsSnapshot is missing" error
