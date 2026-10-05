@@ -83,7 +83,7 @@
     "ua-parser-js": "^2.0.8",
     "uuid": "^13.0.0",
     "vite-plugin-pwa": "^1.2.0",
-    "y-cinder": "github:vrwarp/y-cinder#fe4ea4589ae45f2f1c49ae68ff9022041c665f29",
+    "y-cinder": "github:vrwarp/y-cinder#3a6ad5f9c0bc791fb8a85ed2a7eaf9d3cdfb1802",
     "y-idb": "github:vrwarp/y-idb#bcf85f31069db69ca62b46d808afb6c71e0bd618",
     "y-protocols": "^1.0.7",
     "yjs": "^13.6.20",
