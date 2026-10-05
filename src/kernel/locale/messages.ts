@@ -181,6 +181,8 @@ export const messages = {
     'This will permanently reclaim cloud storage for this workspace. Your local data will be preserved but sync will be disabled for this workspace ID.',
   'diagnostics.deleteSnapshots.title': 'Delete all snapshots?',
   'diagnostics.deleteSnapshots.body': 'Are you sure you want to delete all diagnostic snapshots?',
+  'diagnostics.syncRepair.title': 'Re-upload data the cloud is missing?',
+  'diagnostics.syncRepair.body': "Downloads your cloud library, compares it with this device, and uploads only what the cloud is missing. Nothing is deleted or overwritten, and it is safe to run more than once. Run it on the device whose changes are not reaching your other devices.",
   'devices.applySettings.title': 'Apply device settings?',
   'devices.applySettings.body': 'This will overwrite your current Theme and TTS settings. Continue?',
   'devices.remove.title': 'Remove this device?',

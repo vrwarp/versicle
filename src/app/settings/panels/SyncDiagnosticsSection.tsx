@@ -8,8 +8,9 @@
  * not carry it.
  */
 import React, { useState } from 'react';
-import { CloudCog, Download } from 'lucide-react';
+import { CloudCog, Download, Wrench } from 'lucide-react';
 import { Button } from '@components/ui/Button';
+import { useConfirm } from '@components/ui/ConfirmDialog';
 import { formatBytes } from '@kernel/locale/format';
 
 /** "Build abc1234 · 2026-10-04 14:02" — which bundle this device runs. */
@@ -26,8 +27,39 @@ type ExportState =
   | { kind: 'done'; filename: string; bytes: number }
   | { kind: 'error'; message: string };
 
+type RepairState =
+  | { kind: 'idle' }
+  | { kind: 'busy' }
+  | { kind: 'done'; message: string }
+  | { kind: 'error'; message: string };
+
 export const SyncDiagnosticsSection: React.FC = () => {
   const [state, setState] = useState<ExportState>({ kind: 'idle' });
+  const [repair, setRepair] = useState<RepairState>({ kind: 'idle' });
+  const confirm = useConfirm();
+
+  const handleRepair = async () => {
+    if (!(await confirm({ titleKey: 'diagnostics.syncRepair.title', bodyKey: 'diagnostics.syncRepair.body' }))) {
+      return;
+    }
+    setRepair({ kind: 'busy' });
+    try {
+      const { repairCloudCopy } = await import('@app/sync/diagnostics/repair');
+      const result = await repairCloudCopy();
+      if (!result.ok) {
+        setRepair({ kind: 'error', message: result.error });
+      } else if (!result.uploaded) {
+        setRepair({ kind: 'done', message: 'Nothing to repair: the cloud already has everything on this device.' });
+      } else {
+        setRepair({
+          kind: 'done',
+          message: `Uploaded ${formatBytes(result.bytes)} the cloud was missing. Your other devices should catch up within a minute.`,
+        });
+      }
+    } catch (error) {
+      setRepair({ kind: 'error', message: error instanceof Error ? error.message : String(error) });
+    }
+  };
 
   const handleExport = async () => {
     setState({ kind: 'busy' });
@@ -73,6 +105,32 @@ export const SyncDiagnosticsSection: React.FC = () => {
         take up to 30 seconds. The file is compressed (.json.gz) and contains no book text
         or notes — only IDs, timestamps, content hashes and logs. Your email is masked.
       </p>
+      <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Changes from this device not reaching your others? Re-upload what the cloud is missing.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRepair}
+          disabled={repair.kind === 'busy'}
+          className="gap-2 shrink-0"
+          data-testid="sync-diagnostics-repair"
+        >
+          <Wrench className="w-4 h-4" />
+          {repair.kind === 'busy' ? 'Repairing…' : 'Repair'}
+        </Button>
+      </div>
+      {repair.kind === 'done' && (
+        <p className="text-xs text-primary" role="status" data-testid="sync-diagnostics-repair-result">
+          {repair.message}
+        </p>
+      )}
+      {repair.kind === 'error' && (
+        <p className="text-xs text-destructive" role="alert" data-testid="sync-diagnostics-repair-result">
+          Repair failed: {repair.message}
+        </p>
+      )}
       <p className="text-xs text-muted-foreground font-mono" data-testid="sync-diagnostics-build">
         {buildLabel()}
       </p>

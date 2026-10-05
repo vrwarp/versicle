@@ -208,7 +208,7 @@ deleting a test cannot inflate the percentages.
 
 ## Emulator-gated suites (Firebase security rules + sync contract)
 
-Two suites run against the Firebase emulator and **auto-skip when no emulator
+Three suites run against the Firebase emulator and **auto-skip when no emulator
 is reachable**, so the default `npx vitest run` stays green without one:
 
 - `src/lib/sync/security-rules.test.ts` — pins `firestore.rules` +
@@ -220,6 +220,11 @@ is reachable**, so the default `npx vitest run` stays green without one:
   sibling `syncBackendContract.mock.test.ts` runs the same behavioral spec
   against the mock backend on every `npm test` — one spec, N transports,
   same pattern as `engineParityScenarios`.
+- `src/lib/sync/repairUpload.emulator.test.ts` — the sync repair
+  (`uploadMissingState`) against real y-cinder: manufactures a gap in one
+  device's clock range on the server (its later edits park on every peer),
+  proves the repair heals it, and characterizes that a plain reconnect heals
+  an updates-tier gap. Permissive rules under its own project id.
 
 Running them (requires Java; ports come from `firebase.json` — Firestore
 8080, Auth 9099, Storage 9199):
@@ -228,7 +233,7 @@ Running them (requires Java; ports come from `firebase.json` — Firestore
 # one-shot: start emulators, run the suites, tear down
 npx firebase-tools emulators:exec --only firestore,storage,auth \
   --project demo-versicle-rules \
-  "npx vitest run src/lib/sync/security-rules.test.ts src/lib/sync/syncBackendContract.emulator.test.ts"
+  "npx vitest run src/lib/sync/security-rules.test.ts src/lib/sync/syncBackendContract.emulator.test.ts src/lib/sync/repairUpload.emulator.test.ts"
 
 # or keep the emulator running in another terminal
 npx firebase-tools emulators:start --only firestore,storage,auth \

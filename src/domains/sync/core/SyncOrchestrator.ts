@@ -27,6 +27,7 @@ import type { WorkspaceMetadata } from '~types/workspace';
 import { WorkspaceDeletedError } from '~types/errors';
 import type { PurgeReport, SyncBackend } from '../backend/SyncBackend';
 import { downloadWorkspaceState } from './downloadWorkspaceState';
+import { uploadMissingState, type UploadMissingStateResult } from './uploadMissingState';
 import { readDocSchemaVersion, readUpdateSchemaVersion } from './quarantine';
 import { AuthSession, type AuthChangeCallback } from './AuthSession';
 import { ProviderConnection } from './ProviderConnection';
@@ -549,6 +550,26 @@ export class SyncOrchestrator {
     } catch (error) {
       return { ok: false, error: String(error), ms: Date.now() - started };
     }
+  }
+
+  /**
+   * MANUAL repair (Settings → Diagnostics): upload whatever this device holds
+   * that the cloud copy does not actually integrate — including a gap in
+   * some client's edit history that y-cinder's metadata hides, which
+   * otherwise leaves every later edit of that client parked on every other
+   * device. See uploadMissingState. Uses a throwaway doc + temp provider;
+   * the live doc and connection are untouched. Idempotent.
+   */
+  async repairUploadMissing(timeoutMs = 30000): Promise<UploadMissingStateResult> {
+    const user = this.getCurrentUser();
+    const workspaceId = this.getActiveWorkspaceId();
+    if (!user || !workspaceId) {
+      return { ok: false, error: !user ? 'not signed in' : 'no active workspace', ms: 0 };
+    }
+    return uploadMissingState(this.getBackend(user.uid), workspaceId, this.deps.doc(), {
+      maxWaitTimeMs: this.config.maxWaitFirestoreTime,
+      timeoutMs,
+    });
   }
 
   // ── Getters ────────────────────────────────────────────────────────────────

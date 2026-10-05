@@ -939,4 +939,21 @@ describe('SyncOrchestrator diagnostics (read-only export surface)', () => {
       error: 'not signed in',
     });
   });
+
+  it('repairUploadMissing needs a signed-in user', async () => {
+    expect(await build().orchestrator.repairUploadMissing()).toMatchObject({ ok: false, error: 'not signed in' });
+  });
+
+  it('repairUploadMissing runs against the active workspace on the live doc', async () => {
+    const h = build();
+    await h.signIn();
+    h.backend.connect = () => syncedConnection();
+
+    // The scripted cloud is empty and the live doc holds one edit: the
+    // repair finds the cloud behind and uploads it (the scripted
+    // connection never acks, so the upload itself times out).
+    h.doc.getMap('library').set('b1', 1);
+    const r = await h.orchestrator.repairUploadMissing(50);
+    expect(r).toMatchObject({ ok: false, error: expect.stringContaining('Repair upload timed out') });
+  });
 });
