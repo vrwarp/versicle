@@ -22,7 +22,7 @@ import {
   type ReferenceDetectionNode,
 } from '@domains/google/genai/features/referenceDetection';
 import { parseQuotaSignals } from '@domains/google/genai/quotaSignals';
-import { MAX_GROUPS_FOR_DETERMINISTIC_ONLY } from '@lib/tts/ReferenceSectionDetector';
+import { LEADING_MARKER_MIN_POSITION, MAX_GROUPS_FOR_DETERMINISTIC_ONLY } from '@lib/tts/ReferenceSectionDetector';
 import { DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';
 import { ptDayString } from '@kernel/quota';
 
@@ -112,7 +112,29 @@ export function nodesFromPrompt(prompt: string): ReferenceDetectionNode[] | null
   }
 }
 
-type AttemptOutcome = 'accepted' | 'rejected' | 'silent';
+/**
+ * accepted/rejected: the model answered (and the validator's verdict);
+ * failed: the client logged a terminal failure ("Request failed", "All N
+ * rotation models failed" — a 503, a timeout, a 429 with rotation off …);
+ * silent: no logged outcome at all (the old client's blind spot).
+ */
+type AttemptOutcome = 'accepted' | 'rejected' | 'failed' | 'silent';
+
+/** A terminal failure as the current client logs it. */
+interface TerminalFailure {
+  /** "503 UNAVAILABLE", "429 RESOURCE_EXHAUSTED", "NET_TIMEOUT", … */
+  kind: string;
+  model: string;
+  error: string;
+}
+
+/** A logged answer whose request is not in the export (evicted from the ring buffer). */
+interface OrphanedResponse {
+  at: string;
+  correlationId?: string;
+  model?: string;
+  referenceStartIndex?: number;
+}
 
 interface DetectionAttempt {
   /** Index of the first request entry of this attempt. */
@@ -128,6 +150,28 @@ interface DetectionAttempt {
   referenceStartIndex?: number;
   responseParsed?: unknown;
   rejectionError?: string;
+  failure?: TerminalFailure;
+}
+
+/** The HTTP status + API status when there was a response, else the C10 code. */
+function failureKind(payload: Record<string, unknown>): string {
+  if (typeof payload.status === 'number') {
+    return typeof payload.apiStatus === 'string' ? `${payload.status} ${payload.apiStatus}` : String(payload.status);
+  }
+  return typeof payload.code === 'string' ? payload.code : 'unknown';
+}
+
+/**
+ * Index of the first group of the trailing run of `leadsWithMarker` groups
+ * when that run is long enough to reach the detector's position floor — the
+ * export-side estimate of the linked-note-tail fast path. The prompt flags
+ * every leading marker, linked or not, so this is an upper bound on what the
+ * detector (which also requires the link target) decides locally.
+ */
+function leadingMarkerRunStart(nodes: ReadonlyArray<ReferenceDetectionNode>): number {
+  let start = nodes.length;
+  while (start > 0 && nodes[start - 1].leadsWithMarker) start--;
+  return start < nodes.length && start >= nodes.length * LEADING_MARKER_MIN_POSITION ? start : -1;
 }
 
 /** Requests of the same prompt within this window with no outcome between are one attempt (rotation). */
@@ -136,19 +180,27 @@ const REJECTED_INDEX_RE = /referenceStartIndex (-?\d+) is (?:before 40% of chapt
 
 /**
  * Rebuild the reference-detection attempts. Entries written by the current
- * client carry a correlation id and pair exactly; older entries pair by the
- * prompt hash (rotation) and by group count (the telemetry record that
- * follows a response, or the "(N groups)" in a validation error).
+ * client carry a correlation id and pair by it ALONE — an id with no request
+ * behind it is an orphan (the request was evicted from the ring buffer before
+ * the export), never a guess; older entries pair by the prompt hash
+ * (rotation) and by group count (the telemetry record that follows a
+ * response, or the "(N groups)" in a validation error).
  */
-function reconstructDetectionAttempts(entries: ExportEntry[]): DetectionAttempt[] {
+function reconstructDetectionAttempts(
+  entries: ExportEntry[],
+): { attempts: DetectionAttempt[]; orphanedResponses: OrphanedResponse[] } {
   const attempts: DetectionAttempt[] = [];
   const open: DetectionAttempt[] = [];
   const byCid = new Map<string, DetectionAttempt>();
+  const orphanedResponses: OrphanedResponse[] = [];
   const close = (attempt: DetectionAttempt, outcome: AttemptOutcome): void => {
     attempt.outcome = outcome;
     const i = open.indexOf(attempt);
     if (i >= 0) open.splice(i, 1);
   };
+  /** null: the entry names an id nobody opened (orphan); undefined: no id, pair heuristically. */
+  const byId = (entry: ExportEntry): DetectionAttempt | null | undefined =>
+    entry.correlationId ? (byCid.get(entry.correlationId) ?? null) : undefined;
 
   for (const entry of entries) {
     if (entry.method !== 'detectContentTypes' && entry.method !== 'detectReferenceStart') continue;
@@ -185,8 +237,8 @@ function reconstructDetectionAttempts(entries: ExportEntry[]): DetectionAttempt[
 
     if (entry.type === 'RESPONSE' && entry.method === 'detectContentTypes') {
       const parsed = payload.parsed as { referenceStartIndex?: number; justification?: string } | undefined;
-      let attempt = entry.correlationId ? byCid.get(entry.correlationId) : undefined;
-      if (!attempt) {
+      let attempt = byId(entry);
+      if (attempt === undefined) {
         // The telemetry record follows within a few entries and names the group count.
         let groupCount: number | undefined;
         for (let j = entry.index + 1; j < Math.min(entries.length, entry.index + 6); j++) {
@@ -198,9 +250,18 @@ function reconstructDetectionAttempts(entries: ExportEntry[]): DetectionAttempt[
           }
         }
         const candidates = open.filter((a) => groupCount === undefined || a.groupCount === groupCount);
-        attempt = (candidates.length > 0 ? candidates : open)[Math.max(0, (candidates.length > 0 ? candidates : open).length - 1)];
+        const pool = candidates.length > 0 ? candidates : open;
+        attempt = pool[pool.length - 1] ?? null;
       }
-      if (!attempt) continue;
+      if (!attempt) {
+        orphanedResponses.push({
+          at: new Date(entry.timestamp).toISOString(),
+          correlationId: entry.correlationId,
+          model: typeof payload.model === 'string' ? payload.model : undefined,
+          referenceStartIndex: parsed?.referenceStartIndex,
+        });
+        continue;
+      }
       attempt.responseParsed = parsed;
       attempt.referenceStartIndex = parsed?.referenceStartIndex;
       close(attempt, 'accepted');
@@ -212,12 +273,12 @@ function reconstructDetectionAttempts(entries: ExportEntry[]): DetectionAttempt[
       if (message === 'Response failed validation') {
         const error = String(payload.error ?? '');
         const m = REJECTED_INDEX_RE.exec(error);
-        let attempt = entry.correlationId ? byCid.get(entry.correlationId) : undefined;
-        if (!attempt) {
+        let attempt = byId(entry);
+        if (attempt === undefined) {
           const groupCount = m ? Number(m[2]) : undefined;
           const candidates = open.filter((a) => groupCount === undefined || a.groupCount === groupCount);
           const pool = candidates.length > 0 ? candidates : open;
-          attempt = pool[pool.length - 1];
+          attempt = pool[pool.length - 1] ?? null;
         }
         if (!attempt) continue;
         attempt.rejectionError = error;
@@ -225,13 +286,21 @@ function reconstructDetectionAttempts(entries: ExportEntry[]): DetectionAttempt[
         close(attempt, 'rejected');
       } else if (message.startsWith('Request failed') || message.startsWith('All ')) {
         // The current client's terminal-failure entries: the attempt is closed
-        // with a reason, which the old client never wrote.
-        const attempt = entry.correlationId ? byCid.get(entry.correlationId) : open[open.length - 1];
-        if (attempt) close(attempt, 'silent');
+        // WITH its reason (status / code / model), which the old client never
+        // wrote — a 503 streak and a timeout are visible as what they are.
+        const matched = byId(entry);
+        const attempt = matched === undefined ? open[open.length - 1] : matched;
+        if (!attempt) continue;
+        attempt.failure = {
+          kind: failureKind(payload),
+          model: String(payload.model ?? '?'),
+          error: String(payload.error ?? ''),
+        };
+        close(attempt, 'failed');
       }
     }
   }
-  return attempts;
+  return { attempts, orphanedResponses };
 }
 
 interface EmbeddingErrorCluster {
@@ -268,10 +337,28 @@ export interface ReplayReport {
       newlyRejected: number;
       rejectedCases: { at: string; groupCount: number; index: number; headText: string; acceptedNow: boolean }[];
     };
+    /** Terminal failures the client logged, by what the server (or the gateway) said. */
+    failures: {
+      total: number;
+      /** "503 UNAVAILABLE" → 11, "NET_TIMEOUT" → 1, … */
+      byKind: Record<string, number>;
+      byModel: Record<string, number>;
+      /** Sections re-sent (after the detector's retry delay) that failed again. */
+      sectionsRetried: number;
+    };
+    /** Answers whose request is missing from the export (evicted from the ring buffer). */
+    orphanedResponses: OrphanedResponse[];
+    /**
+     * Attempts the linked-note-tail fast path would have answered locally,
+     * estimated from the prompt's leadsWithMarker flags (an upper bound: the
+     * link-target requirement is not visible in the prompt).
+     */
+    leadingMarkerFastPath: { requests: number; sections: number };
     tinySectionRequests: number;
     tinySections: number;
     rejectedResends: number;
     sameInstantRequests: number;
+    /** Requests left after every policy the current code applies (tiny, rejected re-send, fast path). */
     requestsAfter: number;
     quota: {
       maxRequestsPerPtDay: number;
@@ -326,7 +413,7 @@ function classifyEmbeddingError(message: string, status: number | undefined): Em
 }
 
 export function replayGenAILog(entries: ExportEntry[]): ReplayReport {
-  const attempts = reconstructDetectionAttempts(entries);
+  const { attempts, orphanedResponses } = reconstructDetectionAttempts(entries);
   const requests = entries.filter((e) => e.type === 'REQUEST' && e.method === 'detectContentTypes');
 
   // --- validator replay ---------------------------------------------------
@@ -361,18 +448,42 @@ export function replayGenAILog(entries: ExportEntry[]): ReplayReport {
       });
     }
   }
-  const outcomes: Record<AttemptOutcome, number> = { accepted: 0, rejected: 0, silent: 0 };
+  const outcomes: Record<AttemptOutcome, number> = { accepted: 0, rejected: 0, failed: 0, silent: 0 };
   for (const a of attempts) outcomes[a.outcome] += 1;
 
+  // --- terminal failures --------------------------------------------------
+  const failed = attempts.filter((a) => a.outcome === 'failed');
+  const byKind: Record<string, number> = {};
+  const byModel: Record<string, number> = {};
+  const failedPerSection = new Map<string, number>();
+  for (const a of failed) {
+    const kind = a.failure?.kind ?? 'unknown';
+    const model = a.failure?.model ?? '?';
+    byKind[kind] = (byKind[kind] ?? 0) + 1;
+    byModel[model] = (byModel[model] ?? 0) + 1;
+    failedPerSection.set(a.promptHash, (failedPerSection.get(a.promptHash) ?? 0) + 1);
+  }
+  const sectionsRetried = [...failedPerSection.values()].filter((n) => n > 1).length;
+
   // --- avoided requests ---------------------------------------------------
+  // Each policy is reported on its own; `requestsAfter` counts an attempt
+  // once however many policies would have caught it.
+  const avoided = new Set<DetectionAttempt>();
   const tiny = attempts.filter((a) => a.groupCount !== null && a.groupCount <= MAX_GROUPS_FOR_DETERMINISTIC_ONLY);
   const tinyRequests = tiny.reduce((n, a) => n + a.models.length, 0);
+  for (const a of tiny) avoided.add(a);
   const rejectedHashes = new Set<string>();
   let rejectedResends = 0;
   for (const a of attempts) {
-    if (rejectedHashes.has(a.promptHash)) rejectedResends += a.models.length;
+    if (rejectedHashes.has(a.promptHash)) {
+      rejectedResends += a.models.length;
+      avoided.add(a);
+    }
     if (a.outcome === 'rejected') rejectedHashes.add(a.promptHash);
   }
+  const fastPath = attempts.filter((a) => a.nodes !== null && leadingMarkerRunStart(a.nodes) >= 0);
+  for (const a of fastPath) avoided.add(a);
+  const avoidedRequests = [...avoided].reduce((n, a) => n + a.models.length, 0);
   let sameInstant = 0;
   for (let i = 1; i < requests.length; i++) {
     if (requests[i].timestamp - requests[i - 1].timestamp <= 1000) sameInstant += 1;
@@ -475,11 +586,17 @@ export function replayGenAILog(entries: ExportEntry[]): ReplayReport {
         newlyRejected,
         rejectedCases,
       },
+      failures: { total: failed.length, byKind, byModel, sectionsRetried },
+      orphanedResponses,
+      leadingMarkerFastPath: {
+        requests: fastPath.reduce((n, a) => n + a.models.length, 0),
+        sections: new Set(fastPath.map((a) => a.promptHash)).size,
+      },
       tinySectionRequests: tinyRequests,
       tinySections: new Set(tiny.map((a) => a.promptHash)).size,
       rejectedResends,
       sameInstantRequests: sameInstant,
-      requestsAfter: requests.length - tinyRequests - rejectedResends,
+      requestsAfter: requests.length - avoidedRequests,
       quota: {
         maxRequestsPerPtDay: counts.length ? Math.max(...counts) : 0,
         ptDaysOverHeadModel: counts.filter((n) => n > headModelRpd).length,
@@ -512,13 +629,20 @@ export function formatReplayReport(r: ReplayReport): string {
     '',
     'Reference detection',
     `  requests sent ............... ${d.requests} (${d.attempts} attempts, ${d.uniqueSections} distinct sections)`,
-    `  outcomes before ............. accepted ${d.outcomes.accepted}, rejected ${d.outcomes.rejected}, no logged outcome ${d.outcomes.silent}`,
+    `  outcomes before ............. accepted ${d.outcomes.accepted}, rejected ${d.outcomes.rejected}, failed ${d.outcomes.failed}, no logged outcome ${d.outcomes.silent}`,
+    `  terminal failures ........... ${d.failures.total}${
+      d.failures.total > 0
+        ? `: ${Object.entries(d.failures.byKind).map(([k, n]) => `${k} ×${n}`).join(', ')} — by model ${Object.entries(d.failures.byModel).map(([m, n]) => `${m} ×${n}`).join(', ')}; ${d.failures.sectionsRetried} sections re-sent to the same outcome — a 503 or timeout now rotates on and cools the model down`
+        : ''
+    }`,
+    `  orphaned responses .......... ${d.orphanedResponses.length} answers whose request was evicted from the log ring buffer before the export`,
     `  validator now ............... accepts ${d.validator.acceptedAfter}/${d.validator.acceptedBefore} previously accepted, ${d.validator.rejectedBefore - d.validator.rejectedAfterOfThose}/${d.validator.rejectedBefore} previously rejected; newly rejected ${d.validator.newlyRejected}`,
     ...d.validator.rejectedCases.map(
       (c) => `    ${c.at}  index ${c.index} of ${c.groupCount}  "${c.headText}"  → ${c.acceptedNow ? 'ACCEPTED' : 'still rejected'}`,
     ),
     `  tiny-section requests ....... ${d.tinySectionRequests} (${d.tinySections} sections) — now answered locally`,
     `  re-sends of rejected answers  ${d.rejectedResends} — now terminal after the first answer`,
+    `  linked-note-tail fast path .. ${d.leadingMarkerFastPath.requests} requests (${d.leadingMarkerFastPath.sections} sections) — now answered locally (estimate from the prompt flags; link targets are not in the prompt)`,
     `  same-instant request pairs .. ${d.sameInstantRequests} requests within 1 s of another — now serialized`,
     `  requests after .............. ${d.requestsAfter} (${((1 - d.requestsAfter / Math.max(1, d.requests)) * 100).toFixed(0)}% fewer)`,
     `  silent failures ............. ${d.outcomes.silent} — every one now leaves an error entry`,

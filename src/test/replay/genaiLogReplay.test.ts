@@ -35,6 +35,12 @@ const TINY_3 = [
   { id: 1, sampleText: 'A short line.' },
   { id: 2, sampleText: 'Another short line.' },
 ];
+/** Six body groups, then four endnotes that each open with a citation marker (a linked note tail at 60%). */
+const LINKED_NOTES_10 = Array.from({ length: 10 }, (_, i) => ({
+  id: i,
+  sampleText: i < 6 ? `Body paragraph ${i}.` : `Author, Title (Publisher, 2001), ${i}.`,
+  ...(i >= 6 ? { leadsWithMarker: true } : {}),
+}));
 
 const SYNTHETIC_EXPORT = [
   // A: accepted answer (index 7 of 10), telemetry follows the response.
@@ -79,6 +85,51 @@ const SYNTHETIC_EXPORT = [
     message: 'Response failed validation',
     error: 'referenceStartIndex 0 is before 40% of chapter (7 groups) — likely false positive',
   }),
+  // D/E: the Oct 2026 shape — a linked-note-tail section whose model call died on a
+  // head-model 503, re-sent after the detector's retry delay and lost to a timeout.
+  entry('2026-10-08T00:26:57.849Z', 'REQUEST', 'detectContentTypes', {
+    prompt: detectionPrompt(LINKED_NOTES_10),
+    schema: {},
+    model: 'gemini-3.8-flash',
+  }, 'cid-503'),
+  entry('2026-10-08T00:27:02.553Z', 'ERROR', 'detectContentTypes', {
+    message: 'Request failed',
+    model: 'gemini-3.8-flash',
+    error: 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.',
+    name: 'GenAIHttpError',
+    code: 'GENAI_UNKNOWN',
+    retryable: true,
+    aborted: false,
+    status: 503,
+    apiStatus: 'UNAVAILABLE',
+  }, 'cid-503'),
+  entry('2026-10-08T00:44:10.841Z', 'REQUEST', 'detectContentTypes', {
+    prompt: detectionPrompt(LINKED_NOTES_10),
+    schema: {},
+    model: 'gemini-3.8-flash',
+  }, 'cid-timeout'),
+  entry('2026-10-08T00:45:10.841Z', 'ERROR', 'detectContentTypes', {
+    message: 'Request failed',
+    model: 'gemini-3.8-flash',
+    error: 'Egress to "gemini" timed out after 60000ms.',
+    name: 'NetTimeoutError',
+    code: 'NET_TIMEOUT',
+    retryable: true,
+    aborted: false,
+  }, 'cid-timeout'),
+  // F: an answer whose request was evicted from the ring buffer before the export.
+  entry('2026-10-08T00:07:37.114Z', 'RESPONSE', 'detectContentTypes', {
+    text: '{"referenceStartIndex": 173}',
+    parsed: { justification: 'numbered endnotes from group 173', referenceStartIndex: 173 },
+    model: 'gemini-3.8-flash',
+  }, 'cid-evicted'),
+  entry('2026-10-08T00:07:37.122Z', 'RESPONSE', 'detectReferenceStart', {
+    bookId: 'b',
+    sectionId: 'chapter3.xhtml',
+    groupCount: 262,
+    justification: 'numbered endnotes from group 173',
+    perGroup: [],
+  }, 'cid-evicted'),
   // Embedding: two daily-cap errors 91 s apart, then a per-minute burst of three.
   entry('2026-07-07T17:00:33.000Z', 'ERROR', 'embedOne', {
     message: 'Quota exceeded for metric: generativelanguage.googleapis.com/embed_content_free_tier_requests, limit: 1000, model: gemini-embedding-2',
@@ -109,7 +160,7 @@ const SYNTHETIC_EXPORT = [
 describe('GenAI log replay (synthetic export)', () => {
   it('parses the export format, including the new cid/book/section header fields', () => {
     const entries = parseGenAILogExport(SYNTHETIC_EXPORT);
-    expect(entries).toHaveLength(16);
+    expect(entries).toHaveLength(22);
     expect(entries[0]).toMatchObject({ type: 'REQUEST', method: 'detectContentTypes', timestamp: Date.parse('2026-07-02T17:05:59.757Z') });
 
     const withContext = parseGenAILogExport(
@@ -128,13 +179,27 @@ describe('GenAI log replay (synthetic export)', () => {
   it('measures what the current code changes', () => {
     const report = replayGenAILog(parseGenAILogExport(SYNTHETIC_EXPORT));
     const d = report.detection;
-    expect(d.requests).toBe(4);
-    expect(d.attempts).toBe(4);
-    expect(d.uniqueSections).toBe(3);
-    expect(d.outcomes).toEqual({ accepted: 1, rejected: 2, silent: 1 });
+    expect(d.requests).toBe(6);
+    expect(d.attempts).toBe(6);
+    expect(d.uniqueSections).toBe(4);
+    expect(d.outcomes).toEqual({ accepted: 1, rejected: 2, failed: 2, silent: 1 });
     // The validator without the 40% guard accepts everything it accepted before AND both rejected answers.
     expect(d.validator).toMatchObject({ acceptedBefore: 1, acceptedAfter: 1, rejectedBefore: 2, rejectedAfterOfThose: 0, newlyRejected: 0 });
     expect(d.validator.rejectedCases.every((c) => c.acceptedNow)).toBe(true);
+    // Terminal failures are counted by what the server (or the gateway) said, per model,
+    // and a section re-sent to the same outcome is visible as such.
+    expect(d.failures).toEqual({
+      total: 2,
+      byKind: { '503 UNAVAILABLE': 1, NET_TIMEOUT: 1 },
+      byModel: { 'gemini-3.8-flash': 2 },
+      sectionsRetried: 1,
+    });
+    // A correlated answer with no request behind it is an orphan, never paired by guesswork.
+    expect(d.orphanedResponses).toEqual([
+      { at: '2026-10-08T00:07:37.114Z', correlationId: 'cid-evicted', model: 'gemini-3.8-flash', referenceStartIndex: 173 },
+    ]);
+    // Both failed attempts carried a linked note tail from group 6 of 10: answered locally now.
+    expect(d.leadingMarkerFastPath).toEqual({ requests: 2, sections: 1 });
     expect(d.tinySectionRequests).toBe(1);
     expect(d.rejectedResends).toBe(1);
     expect(d.sameInstantRequests).toBe(1);
@@ -148,7 +213,11 @@ describe('GenAI log replay (synthetic export)', () => {
     ]);
     expect(report.tables).toMatchObject({ requests: 2, responses: 1, emptyMimeRequests: 1 });
     expect(report.tables.narrationsByText[0].looksLikeTable).toBe(false);
-    expect(formatReplayReport(report)).toContain('requests after .............. 2');
+    const text = formatReplayReport(report);
+    expect(text).toContain('requests after .............. 2');
+    expect(text).toContain('terminal failures ........... 2: 503 UNAVAILABLE ×1, NET_TIMEOUT ×1 — by model gemini-3.8-flash ×2; 1 sections re-sent');
+    expect(text).toContain('orphaned responses .......... 1');
+    expect(text).toContain('linked-note-tail fast path .. 2 requests (1 sections)');
   });
 });
 
