@@ -117,6 +117,18 @@ export interface GenAICallContext {
 }
 
 /**
+ * The deterministic hints the detector hands the model (each -1 when absent):
+ * the start of a tail run of text enumerators ("[1] Author…"), and the start
+ * of a trailing run of groups that each open with a linked citation marker
+ * which did NOT qualify as the local answer (it begins too early in the
+ * section — the model decides whether the whole section is notes).
+ */
+export interface ReferenceDetectionHints {
+    enumeratorCandidate: number;
+    leadingMarkerCandidate: number;
+}
+
+/**
  * GenAI settings + activity log + change notifications, plus the model calls themselves.
  *
  * The model calls live on the port (not in the engine) so the GenAI SDK stays on the
@@ -140,7 +152,7 @@ export interface GenAIPort {
      */
     detectContentTypes(
         nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
-        hints: { enumeratorCandidate: number },
+        hints: ReferenceDetectionHints,
         context?: GenAICallContext,
     ): Promise<ContentTypeDetectionResult>;
     /** Generate TTS-friendly narrative adaptations for table images via the model (bookId: see detectContentTypes). */

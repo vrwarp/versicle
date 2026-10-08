@@ -41,6 +41,18 @@ export interface ReferenceDetectionNode {
   leadsWithMarker?: boolean;
 }
 
+/**
+ * The deterministic hints (each -1 when absent). HINT A is the start of a
+ * tail run of text enumerators; HINT B is the start of a trailing run of
+ * groups that each open with a linked citation marker — a run the detector
+ * did NOT decide locally because it begins before half the section, so the
+ * model must say whether the section is all notes or merely linked verses.
+ */
+export interface ReferenceDetectionHints {
+  enumeratorCandidate: number;
+  leadingMarkerCandidate: number;
+}
+
 export interface ReferenceDetectionResult {
   classifications: { id: string; type: DetectedContentType }[];
   justification: string;
@@ -101,7 +113,7 @@ export function buildResponseSchema(withHint: boolean): object {
 
 function buildPrompt(
   nodes: ReferenceDetectionNode[],
-  hints: { enumeratorCandidate: number },
+  hints: ReferenceDetectionHints,
 ): string {
   const n = nodes.length;
   const splitPoint = Math.ceil(n * 0.6);
@@ -121,6 +133,12 @@ function buildPrompt(
   if (hints.enumeratorCandidate >= 0) {
     hintLines.push(
       `- HINT A (enumerated bibliography): Group ${hints.enumeratorCandidate} starts a consecutive run of numbered entries (e.g. "[1] Author…"). This pattern suggests a bibliography-style reference section starting there.`,
+    );
+  }
+  if (hints.leadingMarkerCandidate >= 0) {
+    const count = n - hints.leadingMarkerCandidate;
+    hintLines.push(
+      `- HINT B (linked note block): Group ${hints.leadingMarkerCandidate} begins a run of ${count} groups, continuing to the end of the section, that each open with a citation marker linking back to the text — the shape of an endnote block. Beginning this early in the section it may instead be a passage whose every entry carries a linked number (e.g. scripture verses): decide from the text.`,
     );
   }
   const hintSection =
@@ -174,14 +192,14 @@ export function validateReferenceDetection(
 export async function detectReferenceSection(
   client: GenAIClient,
   nodes: ReferenceDetectionNode[],
-  hints: { enumeratorCandidate: number },
+  hints: ReferenceDetectionHints,
   context?: ReferenceDetectionContext,
 ): Promise<ReferenceDetectionResult> {
   if (nodes.length === 0) {
     return { classifications: [], justification: '', agreedWithHeuristic: null };
   }
 
-  const withHint = hints.enumeratorCandidate >= 0;
+  const withHint = hints.enumeratorCandidate >= 0 || hints.leadingMarkerCandidate >= 0;
   const result = await client.generateStructured({
     method: 'detectContentTypes',
     prompt: buildPrompt(nodes, hints),
