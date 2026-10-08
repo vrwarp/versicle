@@ -5,7 +5,13 @@
  * required validation, redacted logging.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { GeminiClient, GENAI_ROTATION_MODELS } from './GeminiClient';
+import {
+  GeminiClient,
+  GENAI_ROTATION_MODELS,
+  OVERLOADED_RETRY_DELAY_MS,
+  UNAVAILABLE_COOLDOWN_MS,
+  type GeminiClientDeps,
+} from './GeminiClient';
 import {
   GenAIHttpError,
   GenAIInvalidResponseError,
@@ -13,7 +19,7 @@ import {
 } from './errors';
 import type { GenAIConfig } from './contract';
 import type { EgressFn } from '@kernel/net';
-import { NetRateLimitedError } from '~types/errors';
+import { AppError, NetRateLimitedError } from '~types/errors';
 import type { GenAILogEntry } from './logging';
 import { DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';
 
@@ -38,6 +44,7 @@ function errorResponse(status: number, message = 'boom'): Response {
 function makeClient(
   responses: Response[],
   config: Partial<GenAIConfig> = {},
+  deps: Partial<Pick<GeminiClientDeps, 'governor' | 'sleep' | 'now'>> = {},
 ) {
   const queue = [...responses];
   const calls: { url: string; init: RequestInit }[] = [];
@@ -57,6 +64,9 @@ function makeClient(
     }),
     egress,
     onLog: (entry) => logs.push(entry),
+    // The same-model retry pause is real time in production; never in a test.
+    sleep: async () => {},
+    ...deps,
   });
   return { client, calls, logs };
 }
@@ -375,14 +385,14 @@ describe('GeminiClient terminal outcomes are always logged', () => {
     });
   });
 
-  it('a 5xx with rotation ON logs an error entry (it is not a rotation case)', async () => {
-    const { client, logs } = makeClient([errorResponse(503, 'The service is currently unavailable.')], {
+  it('a 500 with rotation ON logs an error entry (it is not a rotation case)', async () => {
+    const { client, logs } = makeClient([errorResponse(500, 'An internal error has occurred.')], {
       rotationEnabled: true,
     });
-    await expect(client.generateText('prompt')).rejects.toMatchObject({ status: 503 });
-    expect(errorEntries(logs).map((l) => (l.payload as { status?: number }).status)).toEqual([503]);
+    await expect(client.generateText('prompt')).rejects.toMatchObject({ status: 500 });
+    expect(errorEntries(logs).map((l) => (l.payload as { status?: number }).status)).toEqual([500]);
     expect((errorEntries(logs)[0].payload as { error: string }).error).toBe(
-      'The service is currently unavailable.',
+      'An internal error has occurred.',
     );
   });
 
@@ -556,5 +566,149 @@ describe('GeminiClient 429 cooldowns follow the server\'s own quota signals', ()
     const { client, recordCooldown } = clientWith(errorResponse(429, 'RESOURCE_EXHAUSTED'));
     await expect(client.generateText('p')).rejects.toBeInstanceOf(GenAIHttpError);
     expect(recordCooldown).toHaveBeenCalledWith(30_000, 'gemini-3.6-flash');
+  });
+});
+
+/**
+ * The Oct 2026 export: 11 of 13 reference-detection requests died on a 503
+ * ("This model is currently experiencing high demand") from gemini-3.8-flash
+ * and one on the 60 s gateway timeout — every one thrown as terminal with
+ * eight untried rotation models below it, then re-sent to the same model five
+ * minutes later, for sixteen hours. A transiently unavailable model now
+ * rotates on and cools down so the NEXT request skips it pre-network; with
+ * rotation off a 503 gets one short same-model retry before it is terminal.
+ */
+describe('regression: an overloaded or timed-out model rotates instead of ending the request', () => {
+  const model = (url: string) => url.match(/models\/([^:]+):/)?.[1];
+  const overloaded = () =>
+    errorResponse(
+      503,
+      'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.',
+    );
+  /** The gateway's timeout as it reaches the client: by C10 code, no subclass identity needed. */
+  const timeout = () =>
+    new AppError('Egress to "gemini" timed out after 60000ms.', {
+      code: 'NET_TIMEOUT',
+      retryable: true,
+      context: { destinationId: 'gemini', timeoutMs: 60_000 },
+    });
+  const governor = () => ({ commit: vi.fn(), recordCooldown: vi.fn() });
+
+  it('a 503 with rotation ON moves to the next model and cools the overloaded one down', async () => {
+    const gov = governor();
+    const { client, calls, logs } = makeClient(
+      [overloaded(), geminiResponse('success')],
+      { rotationEnabled: true },
+      { governor: gov },
+    );
+    await expect(client.generateText('prompt')).resolves.toBe('success');
+    expect(calls.map((c) => model(c.url))).toEqual([GENAI_ROTATION_MODELS[0], GENAI_ROTATION_MODELS[1]]);
+    expect(gov.recordCooldown).toHaveBeenCalledWith(UNAVAILABLE_COOLDOWN_MS, GENAI_ROTATION_MODELS[0]);
+    // Expected chatter while a demand spike lasts: a debug step, no error entry.
+    expect(logs.filter((l) => l.type === 'error')).toHaveLength(0);
+    expect(logs.filter((l) => l.type === 'debug')[0].payload).toMatchObject({
+      status: 503,
+      model: GENAI_ROTATION_MODELS[0],
+      retryable: true,
+    });
+  });
+
+  it('a 503 Retry-After header sets the length of the cooldown', async () => {
+    const gov = governor();
+    const { client } = makeClient(
+      [
+        new Response(JSON.stringify({ error: { code: 503, status: 'UNAVAILABLE', message: 'high demand' } }), {
+          status: 503,
+          headers: { 'Retry-After': '45' },
+        }),
+        geminiResponse('success'),
+      ],
+      { rotationEnabled: true },
+      { governor: gov },
+    );
+    await expect(client.generateText('prompt')).resolves.toBe('success');
+    expect(gov.recordCooldown).toHaveBeenCalledWith(45_000, GENAI_ROTATION_MODELS[0]);
+  });
+
+  it('a gateway timeout with rotation ON rotates on and cools the silent model down', async () => {
+    const gov = governor();
+    const urls: string[] = [];
+    const egress = vi.fn(async (_id: string, url: string) => {
+      urls.push(url);
+      if (urls.length === 1) throw timeout();
+      return geminiResponse('late but fine');
+    }) as unknown as EgressFn;
+    const logs: GenAILogEntry[] = [];
+    const client = new GeminiClient({
+      getConfig: () => ({ apiKey: 'k', model: 'unused', rotationEnabled: true }),
+      egress,
+      onLog: (entry) => logs.push(entry),
+      governor: gov,
+      sleep: async () => {},
+    });
+    await expect(client.generateText('prompt')).resolves.toBe('late but fine');
+    expect(urls.map(model)).toEqual([GENAI_ROTATION_MODELS[0], GENAI_ROTATION_MODELS[1]]);
+    expect(gov.recordCooldown).toHaveBeenCalledWith(UNAVAILABLE_COOLDOWN_MS, GENAI_ROTATION_MODELS[0]);
+    expect(logs.filter((l) => l.type === 'error')).toHaveLength(0);
+    expect(logs.filter((l) => l.type === 'debug')[0].payload).toMatchObject({ code: 'NET_TIMEOUT' });
+  });
+
+  it('with rotation OFF a 503 is retried once on the same model after the short pause', async () => {
+    const sleep = vi.fn(async () => {});
+    const gov = governor();
+    const { client, calls, logs } = makeClient([overloaded(), geminiResponse('recovered')], {}, { sleep, governor: gov });
+    await expect(client.generateText('prompt')).resolves.toBe('recovered');
+    expect(calls.map((c) => model(c.url))).toEqual(['my-specific-model', 'my-specific-model']);
+    expect(sleep).toHaveBeenCalledWith(OVERLOADED_RETRY_DELAY_MS);
+    // The retry is the recovery path, not a cooldown: the model stays usable.
+    expect(gov.recordCooldown).not.toHaveBeenCalled();
+    expect(logs.filter((l) => l.type === 'error')).toHaveLength(0);
+    expect(logs.filter((l) => l.type === 'debug')).toHaveLength(1);
+  });
+
+  it('with rotation OFF a second 503 is terminal, logged once, and cools the model down', async () => {
+    const gov = governor();
+    const { client, calls, logs } = makeClient([overloaded(), overloaded()], {}, { governor: gov });
+    await expect(client.generateText('prompt')).rejects.toMatchObject({ status: 503 });
+    expect(calls).toHaveLength(2);
+    expect(gov.recordCooldown).toHaveBeenCalledWith(UNAVAILABLE_COOLDOWN_MS, 'my-specific-model');
+    const errors = logs.filter((l) => l.type === 'error');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].payload).toMatchObject({ message: 'Request failed', status: 503, retryable: true });
+  });
+
+  it('with rotation OFF a timeout gets no second wait: terminal at once, model cooled down', async () => {
+    const gov = governor();
+    const sleep = vi.fn(async () => {});
+    const egress = vi.fn(async () => {
+      throw timeout();
+    }) as unknown as EgressFn;
+    const logs: GenAILogEntry[] = [];
+    const client = new GeminiClient({
+      getConfig: () => ({ apiKey: 'k', model: 'my-specific-model', rotationEnabled: false }),
+      egress,
+      onLog: (entry) => logs.push(entry),
+      governor: gov,
+      sleep,
+    });
+    await expect(client.generateText('prompt')).rejects.toMatchObject({ code: 'NET_TIMEOUT' });
+    expect(egress).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(gov.recordCooldown).toHaveBeenCalledWith(UNAVAILABLE_COOLDOWN_MS, 'my-specific-model');
+    expect(logs.filter((l) => l.type === 'error')[0].payload).toMatchObject({ code: 'NET_TIMEOUT' });
+  });
+
+  it('every rotation model overloaded ends in ONE terminal error after the debug steps', async () => {
+    const gov = governor();
+    const { client, calls, logs } = makeClient(
+      GENAI_ROTATION_MODELS.map(() => overloaded()),
+      { rotationEnabled: true },
+      { governor: gov },
+    );
+    await expect(client.generateText('prompt')).rejects.toMatchObject({ status: 503 });
+    expect(calls).toHaveLength(GENAI_ROTATION_MODELS.length);
+    expect(gov.recordCooldown).toHaveBeenCalledTimes(GENAI_ROTATION_MODELS.length);
+    expect(logs.filter((l) => l.type === 'debug')).toHaveLength(GENAI_ROTATION_MODELS.length);
+    expect(logs.filter((l) => l.type === 'error')).toHaveLength(1);
   });
 });

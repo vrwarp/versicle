@@ -70,9 +70,37 @@ export function isModelUnavailable(error: unknown): boolean {
 }
 
 /**
+ * The model is OVERLOADED right now: a 503 UNAVAILABLE ("This model is
+ * currently experiencing high demand. Spikes in demand are usually temporary.
+ * Please try again later."). It says nothing about the prompt or the key —
+ * the same request is usually fine on the next model, or on this one a moment
+ * later. Typed off the HTTP status, never the message text.
+ */
+export function isOverloaded(error: unknown): boolean {
+  return error instanceof GenAIHttpError && error.status === 503;
+}
+
+/**
+ * A transient "no answer from this model" failure: it is {@link isOverloaded},
+ * or the gateway's per-destination timeout fired before a reply arrived
+ * (`NET_TIMEOUT`, branched on the C10 code because the error may have been
+ * revived across a worker boundary without its subclass). The Oct 2026
+ * activity-log export showed 11 of 13 reference-detection requests dying on a
+ * 503 from the head rotation model and one on the 60 s timeout — each thrown
+ * as terminal while eight untried models sat below it, and each re-sent to the
+ * same overloaded model five minutes later, for sixteen hours.
+ */
+export function isTransientlyUnavailable(error: unknown): boolean {
+  if (isOverloaded(error)) return true;
+  return error instanceof AppError && error.code === 'NET_TIMEOUT';
+}
+
+/**
  * The rotation continue-predicate: keep rotating to the remaining models on a
  * server 429 ({@link isResourceExhausted}), on an unusable model
- * ({@link isModelUnavailable}), OR on a PRE-NETWORK {@link NetRateLimitedError}.
+ * ({@link isModelUnavailable}), on a transiently unavailable one
+ * ({@link isTransientlyUnavailable}), OR on a PRE-NETWORK
+ * {@link NetRateLimitedError}.
  *
  * The NetRateLimitedError arm is the cooldown-backpressure case — when model A's
  * 429 sets a governor cooldown, model B's gateway acquire throws
@@ -84,11 +112,16 @@ export function isModelUnavailable(error: unknown): boolean {
  * answers 404 rather than 429 — without this arm the loop would rethrow on the
  * spot and strand every model below it, including the high-daily-quota ones
  * that carry the bulk of the day's traffic.
+ *
+ * The isTransientlyUnavailable arm keeps an OVERLOADED model from doing the
+ * same: a 503 or a timeout on the head model is a reason to try the next one,
+ * not to give up with the rest of the chain untried.
  */
 export function isRetryableForRotation(error: unknown): boolean {
   return (
     isResourceExhausted(error) ||
     isModelUnavailable(error) ||
+    isTransientlyUnavailable(error) ||
     error instanceof NetRateLimitedError
   );
 }
