@@ -516,9 +516,9 @@ When `rotationEnabled` is true in the config, `modelsToTry()` walks this array *
 - **5–6**, the stable 500-RPD lite models — the workhorses that serve ~88% of the day.
 - **7–9**, the preview and deprecating models. Google retires models on its own schedule and a retired model answers **404, not 429**; `isModelUnavailable` makes that continuable, but keeping anything with a shutdown date below the workhorses bounds even an uncovered failure mode to the last 60 requests of the day rather than the first 1,080.
 
-`isRetryableForRotation` continues on three conditions: a server 429 (`isResourceExhausted`), an unusable model (`isModelUnavailable` — a 404, or a 400 whose `apiStatus` is `FAILED_PRECONDITION`), and a pre-network `NetRateLimitedError`. A bare 400 `INVALID_ARGUMENT` deliberately does **not** rotate: a malformed prompt fails identically on every model, so rotating would turn one bad request into a round trip per model.
+`isRetryableForRotation` continues on four conditions: a server 429 (`isResourceExhausted`), an unusable model (`isModelUnavailable` — a 404, or a 400 whose `apiStatus` is `FAILED_PRECONDITION`), a transiently unavailable one (`isTransientlyUnavailable` — a 503 "high demand", or the gateway's `NET_TIMEOUT`), and a pre-network `NetRateLimitedError`. A bare 400 `INVALID_ARGUMENT` deliberately does **not** rotate: a malformed prompt fails identically on every model, so rotating would turn one bad request into a round trip per model. A 500 does not rotate either.
 
-The 429 cooldown is recorded against the failing model's OWN rate pool (`recordCooldown(…, modelId)`), so exhausting one model never backpressures its siblings. Rotation fall-throughs caused by exhausted quota log at `'debug'` — once the head of the list is spent they fire on every request and would evict the capped ring buffer — while a fall-through caused by an unusable model logs at `'error'`, because it means the rotation list itself needs editing.
+The 429 cooldown is recorded against the failing model's OWN rate pool (`recordCooldown(…, modelId)`), so exhausting one model never backpressures its siblings. A 503 or timeout records a cooldown the same way — `UNAVAILABLE_COOLDOWN_MS` (5 minutes), or the server's `Retry-After` when it sent one — so the NEXT request skips the overloaded model pre-network instead of spending another request of its daily budget (and up to a timeout of latency) to collect the same 503. On the Oct 2026 export gemini-3.8-flash answered 503 for sixteen hours and every section's detection probed it first. With rotation **off** there is no next model, so a 503 gets ONE same-model retry after `OVERLOADED_RETRY_DELAY_MS` (2 s) before it is terminal; a timeout gets no retry (it already cost the full destination timeout). Rotation fall-throughs caused by exhausted quota or an overloaded model log at `'debug'` — once the head of the list is spent (or swamped) they fire on every request and would evict the capped ring buffer — while a fall-through caused by an unusable model logs at `'error'`, because it means the rotation list itself needs editing.
 
 #### Request flow
 
@@ -532,9 +532,10 @@ private async executeWithRetry<T>(
 
 For each model in `modelsToTry()`:
 1. Call `operation(modelId)`.
-2. If `isResourceExhausted(error)` and rotation is enabled, log the 429 and try the next model.
-3. Otherwise rethrow immediately.
-4. If all models are exhausted, throw the last error.
+2. If `isRetryableForRotation(error)` and rotation is enabled, log the step (cooling the model down first when it was overloaded or timed out) and try the next model.
+3. If rotation is disabled and the error is a 503 not yet retried, log at debug, sleep `OVERLOADED_RETRY_DELAY_MS`, and call the same model once more.
+4. Otherwise log the terminal failure (cooling the model down when it was overloaded or timed out) and rethrow.
+5. If all models are exhausted, log one terminal entry and throw the last error.
 
 `generateStructured<T>()` additionally:
 - Logs the request (pre-redacted) via `onLog`.
@@ -712,17 +713,22 @@ The prompt uses asymmetric truncation (a named keeper from the legacy `GenAIServ
 
 This minimizes token usage while retaining the information most relevant to detecting where references begin. A `leadsWithMarker: true` flag is included for groups that start with a citation anchor (e.g. `[1]`, `*`), providing a strong signal for endnote blocks.
 
-The prompt also includes a deterministic heuristic hint with an `enumeratorCandidate` index:
+The prompt also includes the deterministic heuristic hints (`ReferenceDetectionHints`, each -1 when absent): HINT A with the `enumeratorCandidate` index, and HINT B with the `leadingMarkerCandidate` index — the start of a trailing run of groups that each open with a linked citation marker, which the detector did **not** decide locally because it begins before half the section (the model must say whether the section is all notes or merely linked verses):
 
 ```
 HINT A (enumerated bibliography): Group N starts a consecutive run of numbered
 entries (e.g. "[1] Author…"). This pattern suggests a bibliography-style
 reference section starting there.
+HINT B (linked note block): Group N begins a run of K groups, continuing to
+the end of the section, that each open with a citation marker linking back to
+the text — the shape of an endnote block. Beginning this early in the section
+it may instead be a passage whose every entry carries a linked number (e.g.
+scripture verses): decide from the text.
 In your justification, explicitly state whether you agree or disagree with
 each hint and why.
 ```
 
-This forced agree/disagree justification was a named keeper from the legacy analysis.
+This forced agree/disagree justification was a named keeper from the legacy analysis; `agreedWithHeuristic` is required in the response schema whenever either hint is present. A linked note tail that starts at or past 50% of the section never reaches the prompt at all: the detector answers it locally (see [34-tts-content-pipeline.md](34-tts-content-pipeline.md)).
 
 #### Validation (GG-5 fix)
 

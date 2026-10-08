@@ -22,21 +22,25 @@ export function createGenAILogTelemetry(genAI: Pick<GenAIPort, 'addLog'>): Detec
         onDetection(observation: DetectionObservation): void {
             const {
                 bookId, sectionId, correlationId, groups, markers, markerGroupIndex,
-                geminiCfi, referenceStartIndex, positionFraction,
-                detShadowCfi, enumeratorCandidateIndex, markerDropoffIndex,
-                agreedWithHeuristic, justification,
+                source, referenceStartCfi, referenceStartIndex, positionFraction,
+                detShadowCfi, enumeratorCandidateIndex, leadingMarkerRun, leadingMarkerCandidateIndex,
+                markerDropoffIndex, agreedWithHeuristic, justification, failure,
             } = observation;
             const n = groups.length;
 
             // Per-group marker counts (and whether any leading marker attributes there) from the
-            // shared attribution. leadsWithMarker is the position-aware signal now fed to the model.
+            // shared attribution. leadsWithMarker is the position-aware signal fed to the model;
+            // leadsWithLinkedMarker (a leading marker WITH a link target) is what the local
+            // linked-note-tail detector keys on — a verse number leads but does not link.
             const groupMarkerCounts = new Array(n).fill(0);
             const groupLeadsWithMarker = new Array(n).fill(false);
+            const groupLeadsWithLinkedMarker = new Array(n).fill(false);
             markers.forEach((mk, mi) => {
                 const gi = markerGroupIndex[mi];
                 if (gi >= 0 && gi < n) {
                     groupMarkerCounts[gi]++;
                     if (mk.leading) groupLeadsWithMarker[gi] = true;
+                    if (mk.leading && mk.targetHref) groupLeadsWithLinkedMarker[gi] = true;
                 }
             });
 
@@ -56,6 +60,7 @@ export function createGenAILogTelemetry(genAI: Pick<GenAIPort, 'addLog'>): Detec
                     enumeratorValue,
                     markerCount: groupMarkerCounts[i],
                     leadsWithMarker: groupLeadsWithMarker[i],
+                    leadsWithLinkedMarker: groupLeadsWithLinkedMarker[i],
                     segmentCount: g.segments.length,
                     startCfi: g.segments[0]?.cfi,
                     endCfi: g.segments[g.segments.length - 1]?.cfi,
@@ -70,6 +75,7 @@ export function createGenAILogTelemetry(genAI: Pick<GenAIPort, 'addLog'>): Detec
                 super: mk.super,
                 numeric: mk.numeric,
                 glued: mk.glued,
+                leading: mk.leading,
                 targetHref: mk.targetHref,
                 groupIndex: markerGroupIndex[mi] ?? -1,
             }));
@@ -108,24 +114,31 @@ export function createGenAILogTelemetry(genAI: Pick<GenAIPort, 'addLog'>): Detec
                 ? overlap / tailEnumeratorSet.size
                 : 0;
 
+            // A failed model call is an 'error' entry carrying the same structure
+            // as an answer, plus the failure: the export can then say WHY a
+            // section has no boundary AND what its markers looked like.
             genAI.addLog({
                 id: generateSecureId(),
                 timestamp: Date.now(),
-                type: 'response',
+                type: source === 'failure' ? 'error' : 'response',
                 method: 'detectReferenceStart',
                 correlationId,
                 payload: {
                     bookId,
                     sectionId,
                     correlationId,
+                    source,
+                    ...(failure ? { failure } : {}),
                     groupCount: n,
                     markerCount: markers.length,
                     orphanMarkerCount: markerGroupIndex.filter(gi => gi === -1).length,
-                    geminiCfi,
+                    referenceStartCfi,
                     referenceStartIndex,
                     positionFraction,
                     detShadowCfi,
                     enumeratorCandidateIndex,
+                    leadingMarkerRun,
+                    leadingMarkerCandidateIndex,
                     markerDropoffIndex,
                     agreedWithHeuristic,
                     justification,

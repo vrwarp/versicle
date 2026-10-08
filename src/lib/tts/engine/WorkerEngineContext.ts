@@ -41,7 +41,7 @@ import type {
     BookMetadata,
     GenAIPort,
     BookContentPort,
-    SessionStore, GenAICallContext } from './EngineContext';
+    SessionStore, GenAICallContext, ReferenceDetectionHints } from './EngineContext';
 import { repoBookContentPort, createRepoSessionStore } from './repoPorts';
 
 /**
@@ -275,7 +275,7 @@ export class WorkerEngineContext implements EngineContext {
         configure: (apiKey: string, model: string) => this.genAIConfigureFn(apiKey, model),
         detectContentTypes: (
             nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
-            hints: { enumeratorCandidate: number },
+            hints: ReferenceDetectionHints,
             context?: GenAICallContext,
         ) => this.genAIDetectFn(nodes, hints, context),
         generateTableAdaptations: (

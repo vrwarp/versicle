@@ -425,26 +425,30 @@ Before detection can run, sentences must be grouped by structural root. `Section
 stateDiagram-v2
     [*] --> CheckDB: detect() called
     CheckDB --> ReturnCached: persisted referenceStartCfi found
-    CheckDB --> CheckStrategy: not in DB
-    CheckStrategy --> RunDeterministic: strategy == deterministic
-    RunDeterministic --> Persist: save result
-    Persist --> [*]
-    CheckStrategy --> CheckGenAI: strategy == genai
-    CheckGenAI --> ReturnNull: !isEnabled or !apiKey
-    CheckGenAI --> CheckLoadingStatus: isConfigured
+    CheckDB --> CheckLoadingStatus: not in DB
     CheckLoadingStatus --> ReturnNull: loading within 60s
     CheckLoadingStatus --> CheckErrorStatus: timeout elapsed
     CheckErrorStatus --> ReturnNull: error within 5min
-    CheckErrorStatus --> MarkLoading: retry window elapsed
-    MarkLoading --> RunGenAI: detect via genAI.detectContentTypes()
-    RunGenAI --> Telemetry: onDetection()
-    Telemetry --> PersistResult: saveReferenceStartCfi()
-    PersistResult --> [*]
-    RunGenAI --> MarkError: exception
-    MarkError --> [*]
+    CheckErrorStatus --> ComputeShadow: retry window elapsed
+    ComputeShadow --> Persist: strategy == deterministic, or ≤ 5 groups
+    ComputeShadow --> Persist: linked note tail at ≥ 50% (fast path, no model call)
+    ComputeShadow --> CheckGenAI: otherwise
+    CheckGenAI --> ReturnNull: !isEnabled or !apiKey
+    CheckGenAI --> MarkLoading: isConfigured
+    MarkLoading --> RunGenAI: genAI.detectContentTypes() with HINT A / HINT B
+    RunGenAI --> Telemetry: onDetection() source "model"
+    Telemetry --> Persist: saveReferenceStartCfi()
+    Persist --> [*]
+    RunGenAI --> FailureTelemetry: exception → onDetection() source "failure"
+    FailureTelemetry --> Persist: GENAI_INVALID_RESPONSE → the shadow answer is terminal
+    FailureTelemetry --> MarkError: transient (503, timeout, offline)
+    MarkError --> ReturnShadow: the enumerator shadow answers THIS playback, or null
+    ReturnShadow --> [*]
 ```
 
-### Deterministic detector
+### Deterministic detectors
+
+Both deterministic signals (plus the marker attribution and `markerDropoffIndex`) are computed **once** per detection, before any path is chosen, and every path uses them — as the answer, as the model's hints, or as the fallback.
 
 ```typescript
 export function runDeterministicDetector(groups: ReadonlyArray<{ fullText: string }>): number
@@ -458,17 +462,26 @@ export const REFERENCE_ENUMERATOR_RE = /^\s*(?:\[(\d+)\]|(\d+)[.)]\s|(\d+)\s+[A-
 
 This catches `[1] Author`, `1. Author`, `1 Smith`. The run must start at or past 60% of the total group count (`bestRunStart >= groups.length * 0.6`) and have at least 2 consecutive matches. Returns the group index of the first entry in the run, or -1.
 
+```typescript
+export function findLeadingMarkerRun(groups, markers, markerGroupIndex): LeadingMarkerRun | null
+export function runLeadingMarkerDetector(groups, markers, markerGroupIndex): number
+```
+
+The **linked-note-tail detector**. Most EPUB endnotes number their entries with a superscript back-link (`<sup><a href="#t1">1</a></sup> Francis Collins et al., …`); extraction suppresses that number from the spoken text, so the enumerator regex never sees it (on the Oct 2026 activity-log export it found nothing in any of nine sections). `findLeadingMarkerRun` returns the trailing run of groups that each open with a citation marker carrying a link target (`leading && targetHref`), ending at the **last** group — a gap means the model decides. The link target is what separates a note head from a block-quoted verse number (leading, but linked to nothing). `runLeadingMarkerDetector` accepts the run when it starts at or past `LEADING_MARKER_MIN_POSITION` (50%): without a floor a scripture chapter whose every verse opens with a linked number would be silenced whole; a section that IS all notes starts below the floor and goes to the model with the run as HINT B instead. A single trailing group counts (a lone endnote).
+
 ### GenAI strategy with deterministic shadow
 
 When GenAI is available, the detector:
 
-1. Computes `enumeratorCandidateIndex` via `runDeterministicDetector` (shadow run for telemetry).
-2. Computes `markerDropoffIndex` via `computeMarkerDropoffIndex`: scans backward from the last group looking for the rightmost window (5 groups wide) with at least 2 superscript markers. Returns the index of that boundary group, or -1 when fewer than 3 total superscript markers exist.
-3. Builds the `nodesToDetect` array for the GenAI prompt, with `leadsWithMarker` computed per-group from `attributeMarkersToGroups()`.
-4. Calls `genAI.detectContentTypes(nodesToDetect, {enumeratorCandidate}, {bookId, bookTitle, sectionTitle})`.
+1. Computes the shadow once: `attributeMarkersToGroups()`, `enumeratorCandidateIndex` (`runDeterministicDetector`), the leading-marker run and its qualified index, and `markerDropoffIndex` via `computeMarkerDropoffIndex` (scans backward from the last group looking for the rightmost window, 5 groups wide, with at least 2 superscript markers; -1 when fewer than 3 total superscript markers exist).
+2. **Fast path**: a qualified linked note tail is persisted as the answer with no model call, reported to telemetry with `source: 'leading-marker'`. On the Oct 2026 export this would have answered five of nine sections locally — including three whose model calls never got an answer.
+3. Otherwise builds the `nodesToDetect` array for the GenAI prompt, with `leadsWithMarker` computed per-group from the attribution.
+4. Calls `genAI.detectContentTypes(nodesToDetect, {enumeratorCandidate, leadingMarkerCandidate}, {bookId, bookTitle, sectionTitle, correlationId})`. `leadingMarkerCandidate` is the run start when a run exists but began before the floor (HINT B), else -1.
 5. Finds the first result with `type === 'reference'`, maps its `id` back to the group's `rootCfi`.
-6. Fires the injected `DetectionTelemetry.onDetection()` observer with the full observation payload.
+6. Fires the injected `DetectionTelemetry.onDetection()` observer with the full observation payload (`source: 'model'`).
 7. Persists the result.
+
+When the model call throws, the observer is fired **too** (`source: 'failure'`, with the error's code / HTTP status and the section's full marker/group structure — the export used to hold only the failed section's prompt). A `GENAI_INVALID_RESPONSE` persists the enumerator shadow as the terminal answer, as before; a transient failure (a 503, a timeout, offline) marks the section `status: 'error'` for the 5-minute retry **and returns the enumerator shadow answer for this playback** when there is one, rather than `null`.
 
 ### Concurrent request dedup
 
@@ -491,10 +504,11 @@ Iterates groups in order; once `g.rootCfi === referenceStartCfi`, sets a flag an
 
 - `fractionFromEnd`: position relative to the last group — a float in (0, 1].
 - `enumeratorType` / `enumeratorValue`: which branch of `REFERENCE_ENUMERATOR_RE` matched.
+- `leadsWithMarker` / `leadsWithLinkedMarker`: whether a leading marker — and a leading marker WITH a link target — attributed to the group (the latter is what the linked-note-tail detector keys on).
 - Body (first 60% of groups) vs tail (last 40%) marker overlap: `bodyMarkerSet` ∩ `tailEnumeratorSet` measures how many numeric markers in the body correspond to enumerators in the tail, expressed as `setOverlapFraction`.
 - `longestTailEnumeratorRun`: the longest consecutive run of enumerator-matched groups in the tail.
 
-These computed features, along with the per-group and per-marker raw data, are written to the GenAI activity log via `genAI.addLog()` for offline threshold tuning.
+These computed features, along with the per-group and per-marker raw data, are written to the GenAI activity log via `genAI.addLog()` for offline threshold tuning — as a `'response'` entry for a model or local answer (`source`), and as an `'error'` entry carrying a `failure` description when the model call died, so a failed section is diagnosable from the export.
 
 ---
 

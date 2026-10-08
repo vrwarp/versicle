@@ -507,7 +507,7 @@ The `exportFile` utility handles the platform-specific share sheet (native share
 
 ## 8. Detection Telemetry (`src/lib/tts/detectionTelemetry.ts`)
 
-Reference-section detection ([32-domain-audio-tts-engine.md], [34-tts-content-pipeline.md]) runs the `ReferenceSectionDetector` which, when it completes a GenAI-backed detection, fires an injected `DetectionTelemetry` observer. The default implementation ([`src/lib/tts/detectionTelemetry.ts`](../../src/lib/tts/detectionTelemetry.ts)) translates the raw `DetectionObservation` into a structured `GenAILogEntry` and writes it to the `useGenAIStore` activity log.
+Reference-section detection ([32-domain-audio-tts-engine.md], [34-tts-content-pipeline.md]) runs the `ReferenceSectionDetector` which fires an injected `DetectionTelemetry` observer whenever it decides a boundary — by the model (`source: 'model'`) or by the local linked-note-tail detector (`source: 'leading-marker'`) — **and** whenever a model call fails (`source: 'failure'`, with a `failure` description: message, C10 code, HTTP status, retryable). The default implementation ([`src/lib/tts/detectionTelemetry.ts`](../../src/lib/tts/detectionTelemetry.ts)) translates the raw `DetectionObservation` into a structured `GenAILogEntry` — a `'response'` entry for an answer, an `'error'` entry for a failure — and writes it to the `useGenAIStore` activity log. Before the Oct 2026 fix set a failed section left nothing in the export but its prompt; now its full marker/group structure is there to diagnose with.
 
 ### Why an Injected Observer
 
@@ -523,9 +523,10 @@ The `onDetection` callback performs significant offline-analysis payload constru
 - `enumeratorValue`: the raw numeric value, if any.
 - `markerCount`: how many citation markers were attributed to this group.
 - `leadsWithMarker`: whether the group's leading segment has an attributed marker (the `leading` flag from marker attribution).
+- `leadsWithLinkedMarker`: the same, for a leading marker that also carries a link target — the note-head shape the local linked-note-tail detector keys on (a verse number leads but does not link).
 - `segmentCount`, `startCfi`, `endCfi`: structural bounds.
 
-**Per-marker details** (`markerDetail[]`): every citation marker with its full metadata plus the group index it was attributed to (`-1` for orphaned markers that fell outside all groups).
+**Per-marker details** (`markerDetail[]`): every citation marker with its full metadata (including `leading` and `targetHref`) plus the group index it was attributed to (`-1` for orphaned markers that fell outside all groups).
 
 **Body/tail overlap signal**: the function splits groups into a "body" (first 60%) and "tail" (last 40%), then computes how many normalized numeric markers in the body appear as enumerators at the start of tail groups. High `setOverlapFraction` is strong evidence that the tail is a bibliography that enumerates citations from the body. `longestTailEnumeratorRun` measures the longest consecutive run of enumerator-prefixed groups in the tail, a secondary signal.
 
@@ -533,14 +534,18 @@ The `onDetection` callback performs significant offline-analysis payload constru
 genAI.addLog({
     id: generateSecureId(),
     timestamp: Date.now(),
-    type: 'response',
+    type: source === 'failure' ? 'error' : 'response',
     method: 'detectReferenceStart',
+    correlationId,
     payload: {
-        bookId, sectionId,
+        bookId, sectionId, correlationId,
+        source,                      // 'model' | 'leading-marker' | 'failure'
+        failure,                     // { message, code?, status?, retryable? } — failures only
         groupCount: n, markerCount: markers.length,
         orphanMarkerCount: markerGroupIndex.filter(gi => gi === -1).length,
-        geminiCfi, detShadowCfi,
-        enumeratorCandidateIndex, markerDropoffIndex,
+        referenceStartCfi, referenceStartIndex, positionFraction,
+        detShadowCfi, enumeratorCandidateIndex,
+        leadingMarkerRun, leadingMarkerCandidateIndex, markerDropoffIndex,
         agreedWithHeuristic, justification,
         setOverlapFraction, longestTailEnumeratorRun,
         bodyMarkerSet: [...bodyMarkerSet],
@@ -549,6 +554,8 @@ genAI.addLog({
     },
 });
 ```
+
+`referenceStartIndex` is `-1` when the answer is "no reference section" and `null` when the model call failed; `leadingMarkerRun` is the trailing run of linked-leading-marker groups at any position (`{ start, length }` or `null`) and `leadingMarkerCandidateIndex` that run's start when it qualified as the local answer (else -1).
 
 ### Telemetry Flow
 

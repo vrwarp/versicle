@@ -26,6 +26,7 @@ import type {
     BookContentPort,
     SessionStore,
     PlaybackSessionRow,
+    ReferenceDetectionHints,
 } from './EngineContext';
 import type { TTSQueueItem } from '~types/tts';
 
@@ -59,7 +60,7 @@ export class FakeEngineContext implements EngineContext {
     readonly genAIConfigureCalls: Array<{ apiKey: string; model: string }> = [];
     readonly detectContentTypesCalls: Array<{
         nodes: { id: string; sampleText: string }[];
-        hints: { enumeratorCandidate: number };
+        hints: ReferenceDetectionHints;
         context?: { bookId?: string; bookTitle?: string; sectionTitle?: string; correlationId?: string };
     }> = [];
     readonly generateTableAdaptationsCalls: Array<{ nodes: { rootCfi: string }[]; thinkingBudget: number }> = [];
@@ -98,7 +99,7 @@ export class FakeEngineContext implements EngineContext {
         },
         detectContentTypes: async (
             nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
-            hints: { enumeratorCandidate: number },
+            hints: ReferenceDetectionHints,
             context?: { bookId?: string; bookTitle?: string; sectionTitle?: string; correlationId?: string },
         ) => {
             this.detectContentTypesCalls.push({ nodes, hints, context });

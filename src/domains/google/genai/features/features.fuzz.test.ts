@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { SeededRandom } from '@test/fuzz-utils';
 import { GenAIInvalidResponseError } from '../errors';
 import { MockGenAIClient } from '../MockGenAIClient';
+import type { GenAIClient, GenAIRequest } from '../contract';
 import { validateTocTitles, generateTocTitles } from './tocTitles';
 import {
   validateReferenceDetection,
@@ -56,7 +57,7 @@ describe('referenceDetection validation', () => {
           { id: '0', sampleText: 'a' },
           { id: '1', sampleText: 'b' },
         ],
-        { enumeratorCandidate: -1 },
+        { enumeratorCandidate: -1, leadingMarkerCandidate: -1 },
       ),
     ).rejects.toBeInstanceOf(GenAIInvalidResponseError);
   });
@@ -108,9 +109,9 @@ describe('referenceDetection validation', () => {
       response: { ...base, referenceStartIndex: -1 },
       delayMs: 0,
     });
-    const result = await detectReferenceSection(client, mkNodes(3), { enumeratorCandidate: -1 });
+    const result = await detectReferenceSection(client, mkNodes(3), { enumeratorCandidate: -1, leadingMarkerCandidate: -1 });
     expect(result.agreedWithHeuristic).toBeNull();
-    const hinted = await detectReferenceSection(client, mkNodes(3), { enumeratorCandidate: 1 });
+    const hinted = await detectReferenceSection(client, mkNodes(3), { enumeratorCandidate: 1, leadingMarkerCandidate: -1 });
     expect(hinted.agreedWithHeuristic).toBe(true);
   });
 
@@ -126,7 +127,7 @@ describe('referenceDetection validation', () => {
         { id: '1', sampleText: '[1] citation' },
         { id: '2', sampleText: '[2] citation' },
       ],
-      { enumeratorCandidate: 1 },
+      { enumeratorCandidate: 1, leadingMarkerCandidate: -1 },
     );
     expect(result.classifications.map((c) => c.type)).toEqual(['main', 'reference', 'reference']);
   });
@@ -277,5 +278,49 @@ describe('libraryMapping validation', () => {
       [{ bookId: 'book1', title: 'Test Book', author: 'Author', sourceFilename: 'other.epub' }],
     );
     expect(result).toEqual([{ readingListFilename: 'entry1.epub', libraryBookId: 'book1' }]);
+  });
+});
+
+/**
+ * HINT B carries the detector's linked-note-tail run when that run began too
+ * early in the section to be decided locally (the Oct 2026 export's fix set):
+ * the model must say whether the section is all notes or all linked verses.
+ */
+describe('regression: referenceDetection HINT B (linked note block)', () => {
+  const base = { justification: 'because', agreedWithHeuristic: true };
+  const mkNodes = (n: number): ReferenceDetectionNode[] =>
+    Array.from({ length: n }, (_, i) => ({ id: String(i), sampleText: `Narrative group ${i}.`, ...(i >= 2 ? { leadsWithMarker: true } : {}) }));
+
+  /** A client that records what it was asked, answering with a fixed structured response. */
+  function capturingClient(response: unknown) {
+    const requests: GenAIRequest<unknown>[] = [];
+    const client: GenAIClient = {
+      isConfigured: () => true,
+      generateText: async () => '',
+      generateStructured: async <T,>(request: GenAIRequest<T>) => {
+        requests.push(request as GenAIRequest<unknown>);
+        return request.validate(response);
+      },
+    };
+    return { client, requests };
+  }
+
+  it('renders the run as HINT B and requires the agree/disagree verdict', async () => {
+    const { client, requests } = capturingClient({ ...base, referenceStartIndex: 2 });
+    const result = await detectReferenceSection(client, mkNodes(10), { enumeratorCandidate: -1, leadingMarkerCandidate: 2 });
+    const prompt = String(requests[0].prompt);
+    expect(prompt).toContain('HINT B (linked note block): Group 2 begins a run of 8 groups');
+    expect(prompt).not.toContain('HINT A');
+    expect((requests[0].responseSchema as { required: string[] }).required).toContain('agreedWithHeuristic');
+    expect(result.agreedWithHeuristic).toBe(true);
+    expect(result.classifications.filter((c) => c.type === 'reference')).toHaveLength(8);
+  });
+
+  it('with neither hint the prompt carries no hint section and asks for no verdict', async () => {
+    const { client, requests } = capturingClient({ justification: 'none', referenceStartIndex: -1 });
+    const result = await detectReferenceSection(client, mkNodes(10), { enumeratorCandidate: -1, leadingMarkerCandidate: -1 });
+    expect(String(requests[0].prompt)).not.toContain('HINT');
+    expect((requests[0].responseSchema as { required: string[] }).required).not.toContain('agreedWithHeuristic');
+    expect(result.agreedWithHeuristic).toBeNull();
   });
 });

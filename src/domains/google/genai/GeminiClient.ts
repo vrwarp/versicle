@@ -11,6 +11,10 @@
  *    request/response shapes are SDK-identical — D14's migration note).
  *  - Rotation keeps the 429 retry with ONE models constant and a
  *    Fisher-Yates shuffle (GG-15's biased sort dies).
+ *  - An OVERLOADED model (503) or a gateway timeout rotates on too, and cools
+ *    that model's pool down so the next request skips it pre-network; with
+ *    rotation off a 503 gets one short same-model retry (the Oct 2026 export:
+ *    11 of 13 detection requests died on a head-model 503 thrown as terminal).
  *  - `validate` is applied to every structured response (GG-5); failures
  *    throw GENAI_INVALID_RESPONSE.
  *  - Logs are redacted (inlineData → {byteCount, hash}) BEFORE they reach
@@ -25,13 +29,16 @@
  */
 import { egress, retryAfterMs, type EgressFn } from '@kernel/net';
 import { msUntilNextPtDay, type QuotaGovernor } from '@kernel/quota';
+import { retryAfterMsOf } from '~types/errors';
 import {
   GenAIHttpError,
   GenAIInvalidResponseError,
   GenAINotConfiguredError,
   describeGenAIFailure,
   isModelUnavailable,
+  isOverloaded,
   isRetryableForRotation,
+  isTransientlyUnavailable,
 } from './errors';
 import { redactPayload, type GenAILogEntry, type GenAILogSink } from './logging';
 import { parseQuotaSignals } from './quotaSignals';
@@ -139,6 +146,25 @@ function estTokens(prompt: GenAIPrompt): number {
 /** Default cooldown when a 429 carries no usable `Retry-After` header or RetryInfo. */
 const DEFAULT_COOLDOWN_MS = 30_000;
 
+/**
+ * How long an OVERLOADED (503) or timed-out model sits out of rotation. On the
+ * Oct 2026 export gemini-3.8-flash answered 503 for sixteen hours, and every
+ * section's detection probed it first — spending one of its 20 daily requests
+ * and up to 32 s (or the full 60 s timeout, with the next section queued
+ * behind it) to learn the same thing again. Five minutes matches the
+ * detector's own error-retry spacing; a server `Retry-After` wins when sent.
+ */
+export const UNAVAILABLE_COOLDOWN_MS = 5 * 60_000;
+
+/**
+ * With rotation OFF there is no next model, so a 503 gets ONE same-model retry
+ * after this short pause before it is terminal — the server's own advice
+ * ("spikes in demand are usually temporary"). A timeout gets no retry: it
+ * already cost the full destination timeout, and a second minute of silence
+ * is not a "short" backoff.
+ */
+export const OVERLOADED_RETRY_DELAY_MS = 2_000;
+
 export interface GeminiClientDeps {
   getConfig: GenAIConfigProvider;
   /** Injected for tests; production uses the kernel gateway. */
@@ -153,6 +179,19 @@ export interface GeminiClientDeps {
   governor?: GenAIQuotaGovernor;
   /** Wall clock (injected for tests). */
   now?: () => number;
+  /** The pause before a same-model retry (injected for tests; production sleeps for real). */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/** The rotation-step log line: WHY the loop is moving past this model. */
+function rotationStepMessage(modelId: string, error: unknown): string {
+  if (isModelUnavailable(error)) {
+    return `Model ${modelId} is unavailable (retired or not enabled for this key). Retrying with next model...`;
+  }
+  if (isTransientlyUnavailable(error)) {
+    return `Model ${modelId} is overloaded or timed out (503 / NET_TIMEOUT); cooling it down. Retrying with next model...`;
+  }
+  return `Model ${modelId} out of quota (429 / cooldown backpressure). Retrying with next model...`;
 }
 
 /** Copy the usage fields the log records (drops anything the API adds later). */
@@ -236,6 +275,24 @@ export class GeminiClient implements GenAIClient {
       : [config.model];
   }
 
+  private sleep(ms: number): Promise<void> {
+    return this.deps.sleep
+      ? this.deps.sleep(ms)
+      : new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Cool a model's OWN rate pool down after it proved transiently unavailable,
+   * so the next request — the next section's detection, a TOC title, a table
+   * narration — skips it pre-network (the gateway acquire throws
+   * NetRateLimitedError, which rotation already steps over) instead of
+   * spending another request of its daily budget, and up to a timeout of
+   * latency, to collect the same 503. The server's Retry-After wins when sent.
+   */
+  private coolDownUnavailable(modelId: string, error: unknown): void {
+    this.deps.governor?.recordCooldown(retryAfterMsOf(error) ?? UNAVAILABLE_COOLDOWN_MS, modelId);
+  }
+
   private async executeWithRetry<T>(
     operation: (modelId: string) => Promise<T>,
     method: string,
@@ -251,38 +308,60 @@ export class GeminiClient implements GenAIClient {
     const models = this.modelsToTry();
     let lastError: unknown = null;
     for (const modelId of models) {
-      try {
-        return await operation(modelId);
-      } catch (error) {
-        lastError = error;
-        // Rotate on a server 429 OR a pre-network NET_RATE_LIMITED cooldown (a
-        // sibling model's 429 set the governor cooldown, so this model's gateway
-        // acquire backpressured before the network) — both leave the remaining
-        // models worth trying.
-        if (rotationEnabled && isRetryableForRotation(error)) {
-          // A retired/ungated model is ACTIONABLE — the rotation list needs
-          // editing — so it stays at 'error'. Stepping over a model that is
-          // merely out of quota is the expected steady state once the head of
-          // the list is spent for the day, and at ~5 entries per request it
-          // would evict everything worth reading from the capped ring buffer;
-          // that goes to 'debug'.
-          const unusable = isModelUnavailable(error);
-          this.log(
-            unusable ? 'error' : 'debug',
-            method,
-            {
-              message: unusable
-                ? `Model ${modelId} is unavailable (retired or not enabled for this key). Retrying with next model...`
-                : `Model ${modelId} out of quota (429 / cooldown backpressure). Retrying with next model...`,
-              model: modelId,
-              ...describeGenAIFailure(error),
-            },
-            context,
-          );
-          continue;
+      // With rotation OFF an overloaded model gets ONE same-model retry (see
+      // OVERLOADED_RETRY_DELAY_MS); with rotation ON moving to the next model
+      // is cheaper than waiting, and a timeout never earns a second wait.
+      let retriedOverloaded = false;
+      for (;;) {
+        try {
+          return await operation(modelId);
+        } catch (error) {
+          lastError = error;
+          // Rotate on a server 429, a pre-network NET_RATE_LIMITED cooldown (a
+          // sibling model's 429 set the governor cooldown, so this model's
+          // gateway acquire backpressured before the network), a retired
+          // model, or an overloaded / timed-out one — all leave the remaining
+          // models worth trying.
+          if (rotationEnabled && isRetryableForRotation(error)) {
+            if (isTransientlyUnavailable(error)) this.coolDownUnavailable(modelId, error);
+            // A retired/ungated model is ACTIONABLE — the rotation list needs
+            // editing — so it stays at 'error'. Stepping over a model that is
+            // merely out of quota or overloaded is the expected steady state
+            // once the head of the list is spent (or swamped) for the day,
+            // and at ~5 entries per request it would evict everything worth
+            // reading from the capped ring buffer; that goes to 'debug'.
+            const unusable = isModelUnavailable(error);
+            this.log(
+              unusable ? 'error' : 'debug',
+              method,
+              {
+                message: rotationStepMessage(modelId, error),
+                model: modelId,
+                ...describeGenAIFailure(error),
+              },
+              context,
+            );
+            break;
+          }
+          if (!rotationEnabled && !retriedOverloaded && isOverloaded(error)) {
+            retriedOverloaded = true;
+            this.log(
+              'debug',
+              method,
+              {
+                message: `Model ${modelId} is overloaded (503). Retrying once in ${OVERLOADED_RETRY_DELAY_MS} ms...`,
+                model: modelId,
+                ...describeGenAIFailure(error),
+              },
+              context,
+            );
+            await this.sleep(OVERLOADED_RETRY_DELAY_MS);
+            continue;
+          }
+          if (isTransientlyUnavailable(error)) this.coolDownUnavailable(modelId, error);
+          this.logTerminalFailure(method, modelId, error, context, 'Request failed');
+          throw error;
         }
-        this.logTerminalFailure(method, modelId, error, context, 'Request failed');
-        throw error;
       }
     }
     this.logTerminalFailure(
@@ -372,6 +451,12 @@ export class GeminiClient implements GenAIClient {
           dailyQuotaExhausted: signals.dailyQuotaExhausted,
           quotaIds: signals.quotaIds,
         };
+      } else if (response.status === 503) {
+        // Overloaded. Carry the server's Retry-After (when it sent one) so the
+        // cooldown in executeWithRetry can honor it; whether to retry here or
+        // move on to the next model is that loop's call, not this one's.
+        const headerMs = retryAfterMs(response, -1);
+        if (headerMs >= 0) quotaContext = { retryAfterMs: headerMs };
       }
       throw new GenAIHttpError(
         body.error?.message || `Gemini request failed: ${response.status}`,

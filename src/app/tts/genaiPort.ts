@@ -40,7 +40,7 @@ export function genAIConfigure(apiKey: string, model: string): void {
 /** Classify content groups (feature: referenceDetection). */
 export async function genAIDetectContentTypes(
   nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
-  hints: { enumeratorCandidate: number },
+  hints: { enumeratorCandidate: number; leadingMarkerCandidate: number },
   context?: { bookId?: string; bookTitle?: string; sectionTitle?: string; correlationId?: string },
 ): Promise<{
   classifications: { id: string; type: ContentType }[];
