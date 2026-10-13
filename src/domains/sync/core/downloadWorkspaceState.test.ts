@@ -32,6 +32,8 @@ const readProbe = (update: Uint8Array): unknown => {
 interface Recorder {
   destroys: number;
   connectCalls: Array<{ workspaceId: string; options: ConnectOptions }>;
+  /** The throwaway doc handed to the backend — must be destroyed on every arm. */
+  tempDocs: Y.Doc[];
 }
 
 const makeBackend = (
@@ -43,6 +45,7 @@ const makeBackend = (
     uid: 'unit',
     connect: (doc: Y.Doc, workspaceId: string, options: ConnectOptions): SyncConnection => {
       rec.connectCalls.push({ workspaceId, options });
+      rec.tempDocs.push(doc);
       let syncedCb: (() => void) | null = null;
       behavior(doc, () => syncedCb?.());
       return {
@@ -60,13 +63,20 @@ const makeBackend = (
 
 let rec: Recorder;
 let warnLogs: string[];
+let infoLogs: string[];
 let errorLogs: unknown[][];
 
+const SYNCED_LINE =
+  '[downloadWorkspaceState] Received sync complete event from temp workspace provider.';
+
 beforeEach(() => {
-  rec = { destroys: 0, connectCalls: [] };
+  rec = { destroys: 0, connectCalls: [], tempDocs: [] };
   warnLogs = [];
+  infoLogs = [];
   errorLogs = [];
-  vi.spyOn(console, 'info').mockImplementation(() => {});
+  vi.spyOn(console, 'info').mockImplementation((...a: unknown[]) => {
+    infoLogs.push(a.map(String).join(' '));
+  });
   vi.spyOn(console, 'warn').mockImplementation((...a: unknown[]) => {
     warnLogs.push(a.map(String).join(' '));
   });
@@ -76,6 +86,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -93,6 +104,9 @@ describe('downloadWorkspaceState — the handshake arm', () => {
 
     expect(readProbe(blob)).toBe('remote-state');
     expect(rec.destroys).toBe(1);
+    expect(infoLogs).toEqual([SYNCED_LINE]);
+    expect(rec.tempDocs).toHaveLength(1);
+    expect(rec.tempDocs[0].isDestroyed).toBe(true);
   });
 
   it('forwards the workspace id and BOTH provider tuning knobs to the backend', async () => {
@@ -124,6 +138,25 @@ describe('downloadWorkspaceState — the handshake arm', () => {
     expect(() => fireAgain()).not.toThrow();
     expect(readProbe(blob)).toBe('first');
     expect(rec.destroys).toBe(1);
+    // The duplicate is ignored outright — it is not even logged again.
+    expect(infoLogs).toEqual([SYNCED_LINE]);
+  });
+
+  it('clears the budget timer the moment the handshake lands', async () => {
+    vi.useFakeTimers();
+    const backend = makeBackend(rec, (doc, emitSynced) => {
+      seed(doc, 'remote-state');
+      queueMicrotask(emitSynced);
+    });
+
+    const blob = await downloadWorkspaceState(backend, 'ws_1', {
+      maxWaitTimeMs: 1,
+      maxUpdatesThreshold: 1,
+      timeoutMs: 5000,
+    });
+
+    expect(readProbe(blob)).toBe('remote-state');
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 
@@ -141,8 +174,12 @@ describe('downloadWorkspaceState — the timeout arm', () => {
 
     expect(readProbe(blob)).toBe('partial');
     expect(rec.destroys).toBe(1);
-    expect(warnLogs.some((l) => l.includes('timeout') && l.includes('ws_slow'))).toBe(true);
-    expect(warnLogs.some((l) => l.includes('Assuming empty or unreachable remote'))).toBe(true);
+    expect(warnLogs).toEqual([
+      '[downloadWorkspaceState] Workspace download timeout reached for ws_slow. ' +
+        'Assuming empty or unreachable remote.',
+    ]);
+    expect(infoLogs).toEqual([]);
+    expect(rec.tempDocs[0].isDestroyed).toBe(true);
   });
 
   it('an unreachable remote reads as an EMPTY update, not an error', async () => {
@@ -158,8 +195,10 @@ describe('downloadWorkspaceState — the timeout arm', () => {
   });
 
   it("onTimeout: 'reject' fails loudly instead of reading an unreachable remote as empty", async () => {
-    const backend = makeBackend(rec, (doc) => {
-      seed(doc, 'partial'); // synced never fires
+    let fireLate: () => void = () => undefined;
+    const backend = makeBackend(rec, (doc, emitSynced) => {
+      seed(doc, 'partial'); // synced never fires in time
+      fireLate = emitSynced;
     });
 
     await expect(
@@ -169,8 +208,13 @@ describe('downloadWorkspaceState — the timeout arm', () => {
         timeoutMs: 5,
         onTimeout: 'reject',
       })
-    ).rejects.toThrow('timed out after 5ms');
+    ).rejects.toThrow('Workspace download timed out after 5ms (no initial sync)');
     expect(rec.destroys).toBe(1);
+    expect(warnLogs).toEqual([]);
+
+    // A handshake that lands AFTER the rejection is dead: not logged, not acted on.
+    fireLate();
+    expect(infoLogs).toEqual([]);
   });
 
   it('clears the budget timer once the handshake lands (no late warning)', async () => {
@@ -191,7 +235,8 @@ describe('downloadWorkspaceState — the connect-failure arm', () => {
   const throwingBackend = (onDestroy?: () => void): SyncBackend =>
     ({
       uid: 'unit',
-      connect: () => {
+      connect: (doc: Y.Doc) => {
+        rec.tempDocs.push(doc);
         onDestroy?.();
         throw new Error('attach refused');
       },
@@ -245,6 +290,41 @@ describe('downloadWorkspaceState — the connect-failure arm', () => {
     ).rejects.toThrow('attach refused');
 
     expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it('a rejection clears the budget timer and destroys the temp doc', async () => {
+    vi.useFakeTimers();
+
+    await expect(
+      downloadWorkspaceState(throwingBackend(), 'ws_1', {
+        maxWaitTimeMs: 1,
+        maxUpdatesThreshold: 1,
+        timeoutMs: 5000,
+      })
+    ).rejects.toThrow('attach refused');
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(rec.tempDocs[0].isDestroyed).toBe(true);
+    expect(errorLogs).toEqual([
+      ['[downloadWorkspaceState]', 'Failed to connect temp provider:', expect.any(Error)],
+    ]);
+  });
+
+  it("'resolve' settles promptly too — it does not wait out the budget", async () => {
+    // Fake timers: the budget can only expire if the test advances the
+    // clock, which it never does — so the arm must resolve on its own.
+    vi.useFakeTimers();
+
+    const blob = await downloadWorkspaceState(throwingBackend(), 'ws_1', {
+      maxWaitTimeMs: 1,
+      maxUpdatesThreshold: 1,
+      timeoutMs: 5000,
+      onAttachError: 'resolve',
+    });
+
+    expect(readProbe(blob)).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(warnLogs).toEqual([]);
   });
 });
 
