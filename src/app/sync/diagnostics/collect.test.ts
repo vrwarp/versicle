@@ -307,6 +307,21 @@ describe('collectSyncDiagnostics', () => {
     expect(report.remote).toStrictEqual({ error: 'Error: remote probe timed out after 2001ms' });
   });
 
+  it('a remote probe that answers in time leaves no timeout timer behind', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    h.orchestrator = fakeOrchestrator();
+
+    let settled = false;
+    const pending = collectSyncDiagnostics({ remoteTimeoutMs: 5 }).finally(() => {
+      settled = true;
+    });
+    for (let i = 0; i < 100 && !settled; i++) await vi.advanceTimersByTimeAsync(1);
+    const report = await pending;
+
+    expect(report.remote).toStrictEqual({ workspaces: [], pendingWrites: { state: 'acknowledged' } });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('records a remote probe that fails as that failure', async () => {
     h.orchestrator = fakeOrchestrator({ probeRemoteDiagnostics: async () => { throw new Error('boom'); } });
 
