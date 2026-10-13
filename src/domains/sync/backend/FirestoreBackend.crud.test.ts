@@ -40,13 +40,23 @@ vi.mock('@lib/sync/firebase-config', () => ({
 
 vi.mock('y-cinder', () => ({
   FireProvider: class {
+    /** y-cinder's ObservableV2 surface, scripted: `on` records, `emit` fires. */
+    private readonly listeners = new Map<string, Array<(...args: unknown[]) => void>>();
+    destroys = 0;
     constructor(public readonly options: Record<string, unknown>) {
       h.ops.push('FireProvider');
       h.provider = this as unknown as Record<string, unknown>;
     }
-    on() {}
+    on(event: string, cb: (...args: unknown[]) => void) {
+      this.listeners.set(event, [...(this.listeners.get(event) ?? []), cb]);
+    }
     off() {}
-    destroy() {}
+    destroy() {
+      this.destroys += 1;
+    }
+    emit(event: string, ...args: unknown[]) {
+      for (const cb of this.listeners.get(event) ?? []) cb(...args);
+    }
   },
 }));
 
@@ -115,6 +125,15 @@ const metaPath = `users/${UID}/workspaces/${WS}`;
 const docPath = `users/${UID}/versicle/${WS}`;
 
 const backend = () => new FirestoreBackend(UID);
+
+/** The scripted y-cinder provider the last connect() constructed. */
+const provider = () =>
+  h.provider as unknown as {
+    emit: (event: string, ...args: unknown[]) => void;
+    destroys: number;
+    options: Record<string, unknown>;
+  };
+const CONNECT = { maxWaitTimeMs: 1, maxUpdatesThreshold: 1 };
 
 const notFound = (): Error & { code: string } =>
   Object.assign(new Error('not found'), { code: 'storage/object-not-found' });
@@ -503,42 +522,198 @@ describe('FirestoreBackend.connect', () => {
   it('refuses without a firebase app', () => {
     h.app = null;
 
-    expect(() => backend().connect({} as never, WS, { maxWaitTimeMs: 1, maxUpdatesThreshold: 1 })).toThrow(
-      'Firebase app not available'
+    expect(() => backend().connect({} as never, WS, CONNECT)).toThrow('Firebase app not available');
+  });
+
+  it('binds the provider to the workspace-scoped document path with the caller tuning', () => {
+    const ydoc = {} as never;
+
+    backend().connect(ydoc, WS, { maxWaitTimeMs: 250, maxUpdatesThreshold: 40 });
+
+    expect(h.ops).toEqual(['FireProvider']);
+    expect(provider().options).toEqual({
+      firebaseApp: h.app,
+      ydoc,
+      path: docPath,
+      maxWaitTime: 250,
+      maxUpdatesThreshold: 40,
+    });
+  });
+
+  it('forwards every normalized provider event onto the connection surface', () => {
+    const conn = backend().connect({} as never, WS, CONNECT);
+    const seen: Array<[string, unknown[]]> = [];
+    conn.on('synced', () => seen.push(['synced', []]));
+    conn.on('saved', (at) => seen.push(['saved', [at]]));
+    conn.on('connection-error', (e) => seen.push(['connection-error', [e]]));
+    conn.on('sync-failure', (e) => seen.push(['sync-failure', [e]]));
+    conn.on('save-rejected', (e) => seen.push(['save-rejected', [e]]));
+    conn.on('corrupted-document', (e) => seen.push(['corrupted-document', [e]]));
+    conn.on('epoch-changed', (e) => seen.push(['epoch-changed', [e]]));
+
+    // `sync(false)` is NOT a handshake; only `sync(true)` is `synced`.
+    provider().emit('sync', false);
+    expect(seen).toEqual([]);
+
+    provider().emit('sync', true);
+    provider().emit('saved', 1_700_000_000_000);
+    provider().emit('connection-error', { code: 'unavailable' });
+    provider().emit('sync-failure', { code: 'permission-denied' });
+    provider().emit('save-rejected', { code: 'document-too-large', sizeBytes: 9 });
+    provider().emit('corrupted-document', { docId: 'updates/u-9' });
+    provider().emit('epoch-changed', { previousEpoch: 3, epoch: 4 });
+    provider().emit('squashed', { epoch: 5 });
+
+    expect(seen).toEqual([
+      ['synced', []],
+      ['saved', [1_700_000_000_000]],
+      ['connection-error', [{ code: 'unavailable' }]],
+      ['sync-failure', [{ code: 'permission-denied' }]],
+      ['save-rejected', [{ code: 'document-too-large', sizeBytes: 9 }]],
+      ['corrupted-document', [{ docId: 'updates/u-9' }]],
+      ['epoch-changed', [{ epoch: 4, previousEpoch: 3, self: false }]],
+      ['epoch-changed', [{ epoch: 5, previousEpoch: 4, self: true }]],
+    ]);
+  });
+
+  it('leaves diagnostics breadcrumbs for the sync state and compaction failures', () => {
+    backend().connect({} as never, WS, CONNECT);
+    const quota = new Error('quota');
+
+    provider().emit('sync', true);
+    provider().emit('sync', false);
+    provider().emit('compaction-failed', { consecutiveFailures: 3, retryInMs: 500, error: quota });
+    provider().emit('compaction-failed', {});
+
+    expect(console.info).toHaveBeenCalledWith('[FirestoreBackend]', 'Provider sync state: synced');
+    expect(console.info).toHaveBeenCalledWith('[FirestoreBackend]', 'Provider sync state: not synced');
+    expect(console.warn).toHaveBeenNthCalledWith(
+      1,
+      '[FirestoreBackend]',
+      'Compaction failed (3 in a row; retry in 500ms)',
+      quota
+    );
+    expect(console.warn).toHaveBeenNthCalledWith(
+      2,
+      '[FirestoreBackend]',
+      'Compaction failed (? in a row; retry in ?ms)',
+      undefined
     );
   });
 
-  it('binds the provider to the workspace-scoped document path', () => {
-    backend().connect({} as never, WS, { maxWaitTimeMs: 1, maxUpdatesThreshold: 1 });
+  it('destroy() tears the provider down exactly once', () => {
+    const conn = backend().connect({} as never, WS, CONNECT);
 
-    expect(h.ops).toContain('FireProvider');
+    conn.destroy();
+    conn.destroy();
+
+    expect(provider().destroys).toBe(1);
+    expect(conn.describe?.()).toMatchObject({ destroyed: true });
   });
 
   it('describe() reports the provider state without driving it', () => {
-    const conn = backend().connect({} as never, WS, { maxWaitTimeMs: 1, maxUpdatesThreshold: 1 });
+    const before = Date.now();
+    const conn = backend().connect({} as never, WS, CONNECT);
+    const corrupted = Array.from({ length: 51 }, (_, i) => `d${i}`);
     Object.assign(h.provider!, {
       synced: true,
       epoch: 2,
-      _pendingUpdates: [new Uint8Array(3), new Uint8Array(4)],
-      _saveRetryCount: 1,
+      isCompacting: true,
+      _isDestroyed: false,
       _epochFenced: false,
-      _corruptedDocIds: new Set(['d1']),
+      _initialSyncInFlight: true,
+      // Only byte payloads count towards pendingBytes; every entry counts as an update.
+      _pendingUpdates: [new Uint8Array(3), new Uint8Array(4), 'not-bytes'],
+      _pendingSince: 1_700_000_000_000,
+      _inflightSave: Promise.resolve(),
+      _deferredUpdateBlobs: new Map([
+        ['b1', 1],
+        ['b2', 2],
+      ]),
+      _saveRetryCount: 1,
+      _syncRetryCount: 2,
+      _offlineRetryCount: 3,
+      _listenerRetryCount: 4,
+      _listenersAttachedAt: 1_700_000_000_500,
+      _unsubscribers: [() => undefined, () => undefined, () => undefined],
+      _corruptedDocIds: new Set(corrupted),
+      _compactionFailures: 5,
+      _compactionBackoffUntil: 1_700_000_001_000,
+      _cachedClockOffset: -42,
+      maxWaitTime: 1,
+      maxUpdatesThreshold: 1,
     });
 
-    expect(conn.describe?.()).toMatchObject({
+    const d = conn.describe?.();
+
+    expect(d).toEqual({
       transport: 'firestore',
-      path: `users/${UID}/versicle/${WS}`,
+      path: docPath,
+      connectedAt: expect.any(Number),
       destroyed: false,
       synced: true,
       epoch: 2,
-      pendingUpdates: 2,
-      pendingBytes: 7,
-      saveRetryCount: 1,
+      isCompacting: true,
+      providerDestroyed: false,
       epochFenced: false,
-      corruptedDocIds: ['d1'],
+      initialSyncInFlight: true,
+      pendingUpdates: 3,
+      pendingBytes: 7,
+      pendingSince: 1_700_000_000_000,
+      saveInFlight: true,
+      deferredUpdateBlobs: 2,
+      saveRetryCount: 1,
+      syncRetryCount: 2,
+      offlineRetryCount: 3,
+      listenerRetryCount: 4,
+      listenersAttachedAt: 1_700_000_000_500,
+      activeListeners: 3,
+      // Capped at 50 ids — the export must stay small.
+      corruptedDocIds: corrupted.slice(0, 50),
+      compactionFailures: 5,
+      compactionBackoffUntil: 1_700_000_001_000,
+      clockOffsetMs: -42,
+      maxWaitTime: 1,
+      maxUpdatesThreshold: 1,
     });
+    expect(d?.connectedAt as number).toBeGreaterThanOrEqual(before);
+    expect(d?.connectedAt as number).toBeLessThanOrEqual(Date.now());
+    expect(provider().destroys).toBe(0);
     conn.destroy();
     expect(conn.describe?.()).toMatchObject({ destroyed: true });
+  });
+
+  it('describe() on a bare provider reports absent fields as undefined and no save in flight — never throws', () => {
+    const conn = backend().connect({} as never, WS, CONNECT);
+    Object.assign(h.provider!, { _corruptedDocIds: ['not-a-set'], _deferredUpdateBlobs: new Set(['x']) });
+
+    expect(conn.describe?.()).toEqual({
+      transport: 'firestore',
+      path: docPath,
+      connectedAt: expect.any(Number),
+      destroyed: false,
+      saveInFlight: false,
+      // A Set counts like a Map; an array of ids is not the Set the provider keeps.
+      deferredUpdateBlobs: 1,
+      corruptedDocIds: undefined,
+      pendingUpdates: undefined,
+      pendingBytes: undefined,
+    });
+  });
+
+  it('describe() survives a provider whose getters throw', () => {
+    const conn = backend().connect({} as never, WS, CONNECT);
+    const boom = () => {
+      throw new Error('getter exploded');
+    };
+    Object.defineProperty(h.provider!, 'synced', { get: boom });
+    Object.defineProperty(h.provider!, '_pendingSince', { get: boom });
+    Object.assign(h.provider!, { epoch: 7 });
+
+    expect(conn.describe?.()).toMatchObject({ epoch: 7, destroyed: false });
+    expect(conn.describe?.()).toEqual(
+      expect.not.objectContaining({ synced: expect.anything(), pendingSince: expect.anything() })
+    );
   });
 });
 

@@ -10,6 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
+import { getRecentLogs } from '@lib/logger';
 import type { FirestoreSyncStatus } from '~types/sync';
 import type {
   ConnectOptions,
@@ -251,6 +252,33 @@ describe('ProviderConnection.attach — transport event normalization', () => {
     expect(harness.statuses).toEqual([]);
   });
 
+  it('the handshake is a log breadcrumb only — no status, no event', () => {
+    const conn = attach();
+    harness.infoLogs.length = 0;
+
+    conn.fire('synced');
+
+    expect(harness.infoLogs).toEqual(['[ProviderConnection] Initial sync complete for workspace: ws_1']);
+    expect(harness.statuses).toEqual([]);
+    expect(harness.events).toEqual([]);
+  });
+
+  it('a corrupted-document report is logged as an error with its payload — no status, no event', () => {
+    const conn = attach();
+
+    conn.fire('corrupted-document', { docId: 'updates/u-7' });
+
+    expect(harness.errorLogs).toEqual([
+      [
+        '[ProviderConnection]',
+        'Firestore reported a corrupted document (quarantined by the provider):',
+        { docId: 'updates/u-7' },
+      ],
+    ]);
+    expect(harness.statuses).toEqual([]);
+    expect(harness.events).toEqual([]);
+  });
+
   it('an epoch change reports the connection DOWN and republishes the epoch pair', () => {
     const conn = attach();
 
@@ -260,11 +288,10 @@ describe('ProviderConnection.attach — transport event normalization', () => {
     expect(harness.events).toEqual([
       { type: 'epoch-changed', epoch: 4, previousEpoch: 3, self: false },
     ]);
-    const line = harness.warnLogs.find((l) => l.includes('epoch'));
-    expect(line).toContain('moved to epoch 4');
-    expect(line).toContain('local epoch 3');
-    expect(line).toContain('Sync is fenced');
-    expect(line).not.toContain('squashed by this device');
+    expect(harness.warnLogs).toEqual([
+      '[ProviderConnection] Replicated document moved to epoch 4 (local epoch 3). ' +
+        'Sync is fenced until the local doc is rebuilt from the new snapshot.',
+    ]);
   });
 
   it('marks the log when THIS device ran the squash', () => {
@@ -364,16 +391,91 @@ describe('ProviderConnection.attach — connect failure', () => {
   });
 });
 
+describe('ProviderConnection.describe — the diagnostics snapshot', () => {
+  it('reports nothing attached before the first attach', () => {
+    expect(harness.provider.describe()).toEqual({
+      attached: false,
+      workspaceId: null,
+      attachedAt: null,
+      liveQuarantineObserver: false,
+      transport: null,
+    });
+  });
+
+  it('reports the attachment, the live observer, and a null transport when the connection has no describe()', () => {
+    const before = Date.now();
+    harness.provider.attach(backendFor(makeConnection()), 'ws_1', OPTS);
+
+    const d = harness.provider.describe();
+
+    expect(d).toEqual({
+      attached: true,
+      workspaceId: 'ws_1',
+      attachedAt: expect.any(Number),
+      liveQuarantineObserver: true,
+      transport: null,
+    });
+    expect(d.attachedAt as number).toBeGreaterThanOrEqual(before);
+    expect(d.attachedAt as number).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('forwards the transport describe() verbatim', () => {
+    const conn = { ...makeConnection(), describe: () => ({ transport: 'scripted', queued: 2 }) };
+    harness.provider.attach(backendFor(conn), 'ws_1', OPTS);
+
+    expect(harness.provider.describe().transport).toEqual({ transport: 'scripted', queued: 2 });
+  });
+
+  it('captures a throwing transport describe() instead of propagating it', () => {
+    const conn = {
+      ...makeConnection(),
+      describe: () => {
+        throw new Error('boom');
+      },
+    };
+    harness.provider.attach(backendFor(conn), 'ws_1', OPTS);
+
+    expect(harness.provider.describe()).toEqual({
+      attached: true,
+      workspaceId: 'ws_1',
+      attachedAt: expect.any(Number),
+      liveQuarantineObserver: true,
+      transport: { describeError: 'Error: boom' },
+    });
+  });
+
+  it('drops everything again after detach', () => {
+    harness.provider.attach(backendFor(makeConnection()), 'ws_1', OPTS);
+    harness.provider.detach();
+
+    expect(harness.provider.describe()).toEqual({
+      attached: false,
+      workspaceId: null,
+      attachedAt: null,
+      liveQuarantineObserver: false,
+      transport: null,
+    });
+  });
+});
+
 describe('ProviderConnection.detach', () => {
   it('destroys the connection, drops the attachment, and reports disconnected', () => {
     const conn = makeConnection();
     harness.provider.attach(backendFor(conn), 'ws_1', OPTS);
+
+    const ringBefore = getRecentLogs().length;
 
     harness.provider.detach();
 
     expect(conn.destroyed).toBe(1);
     expect(harness.provider.isAttached()).toBe(false);
     expect(harness.statuses.at(-1)).toBe('disconnected');
+    // The teardown breadcrumb lands in the diagnostics log ring (debug is
+    // below the console threshold, so the ring is where it is observable).
+    expect(getRecentLogs().slice(ringBefore)).toContainEqual(
+      expect.objectContaining({ ns: 'ProviderConnection', level: 'debug', msg: 'Provider destroyed' })
+    );
+    expect(harness.errorLogs).toEqual([]);
   });
 
   it('is idempotent — a second detach destroys nothing but still reports disconnected', () => {
@@ -388,10 +490,11 @@ describe('ProviderConnection.detach', () => {
     expect(harness.statuses).toEqual(['disconnected']);
   });
 
-  it('reports disconnected even when nothing was ever attached', () => {
+  it('reports disconnected even when nothing was ever attached — and destroys nothing', () => {
     harness.provider.detach();
 
     expect(harness.statuses).toEqual(['disconnected']);
+    expect(harness.errorLogs).toEqual([]);
   });
 
   it('a throwing destroy is logged but still clears the attachment and reports disconnected', () => {

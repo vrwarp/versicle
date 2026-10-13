@@ -12,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
 import type { User } from 'firebase/auth';
+import { getRecentLogs } from '@lib/logger';
 import { WorkspaceDeletedError } from '~types/errors';
 import type { WorkspaceMetadata } from '~types/workspace';
 import type { FirestoreSyncStatus } from '~types/sync';
@@ -26,6 +27,7 @@ const SCHEMA_VERSION = 6;
 
 let firebaseApp: object | null = { app: 1 };
 const onAuthStateChanged = vi.fn();
+const signOutWithGoogle = vi.fn(async (_auth: unknown): Promise<void> => undefined);
 
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (...args: unknown[]) => onAuthStateChanged(...args),
@@ -40,7 +42,7 @@ vi.mock('@lib/sync/firebase-config', () => ({
 
 vi.mock('@lib/sync/auth-helper', () => ({
   signInWithGoogle: async () => undefined,
-  signOutWithGoogle: async () => undefined,
+  signOutWithGoogle: (auth: unknown) => signOutWithGoogle(auth),
 }));
 
 // ── fixtures ───────────────────────────────────────────────────────────────
@@ -79,8 +81,29 @@ interface Harness {
   obsolete: number[];
   connectOptions: Array<Record<string, unknown>>;
   signIn: (u?: User | null) => Promise<void>;
-  logs: { warn: string[]; info: string[]; error: unknown[][] };
+  logs: {
+    warn: string[];
+    info: string[];
+    /**
+     * Debug lines since the harness was built, as `[ns] msg`. Debug is below
+     * the console threshold, so it is read from the logger's diagnostics ring.
+     */
+    debug: () => string[];
+    error: unknown[][];
+  };
 }
+
+const DEFAULT_CONFIG = { maxWaitFirestoreTime: 2000, maxUpdatesThreshold: 50 };
+/** The default tuning as the live/clean-sync connect options carry it. */
+const DEFAULT_CONFIG_AS_CONNECT = { maxWaitTimeMs: 2000, maxUpdatesThreshold: 50 };
+/** The temp-connection tuning of the diagnostics download/repair paths. */
+const DIAGNOSTIC_CONNECT = { maxWaitTimeMs: 2000, maxUpdatesThreshold: 1_000_000_000 };
+
+/** `ms` is a real elapsed duration, not a timestamp sum. */
+const elapsedMs = (ms: unknown): void => {
+  expect(ms).toBeGreaterThanOrEqual(0);
+  expect(ms).toBeLessThan(10_000);
+};
 
 const build = (
   over: {
@@ -96,7 +119,17 @@ const build = (
   const doc = new Y.Doc();
   let active: string | null =
     over.activeWorkspaceId === undefined ? 'ws_1' : over.activeWorkspaceId;
-  const logs = { warn: [] as string[], info: [] as string[], error: [] as unknown[][] };
+  const ringStart = getRecentLogs().length;
+  const logs = {
+    warn: [] as string[],
+    info: [] as string[],
+    debug: (): string[] =>
+      getRecentLogs()
+        .slice(ringStart)
+        .filter((r) => r.level === 'debug')
+        .map((r) => `[${r.ns}] ${r.msg}`),
+    error: [] as unknown[][],
+  };
 
   vi.spyOn(console, 'info').mockImplementation((...a: unknown[]) => logs.info.push(a.map(String).join(' ')));
   vi.spyOn(console, 'warn').mockImplementation((...a: unknown[]) => logs.warn.push(a.map(String).join(' ')));
@@ -201,9 +234,11 @@ const build = (
 beforeEach(() => {
   firebaseApp = { app: 1 };
   onAuthStateChanged.mockReset().mockReturnValue(() => undefined);
+  signOutWithGoogle.mockClear();
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -216,6 +251,9 @@ describe('SyncOrchestrator.start — the enablement gate', () => {
     expect(onAuthStateChanged).not.toHaveBeenCalled();
     expect(h.orchestrator.getAuthStatus()).toBe('signed-out');
     expect(h.events).toEqual([{ type: 'auth', status: 'signed-out', email: null }]);
+    expect(h.logs.info).toContain(
+      '[SyncOrchestrator] Sync disabled (firebaseEnabled flag off or not configured). Not starting.'
+    );
   });
 
   it('starts when the gate is open', async () => {
@@ -271,6 +309,7 @@ describe('SyncOrchestrator — auth state changes', () => {
     expect(h.orchestrator.getAuthStatus()).toBe('signed-in');
     expect(h.calls).toContain('setFirebaseEnabled:true');
     expect(h.calls).toContain('connect:ws_1');
+    expect(h.logs.info).toContain('[SyncOrchestrator] User signed in: uid-1@x');
   });
 
   it('auto-provisions "My Library" for a client with no workspace and none remote', async () => {
@@ -283,6 +322,10 @@ describe('SyncOrchestrator — auth state changes', () => {
 
     expect(h.calls).toContain('createWorkspace:My Library');
     expect(h.orchestrator.getActiveWorkspaceId()).toMatch(/^ws_/);
+    expect(h.logs.info).toContain('[SyncOrchestrator] No active workspace assigned. Querying remote...');
+    expect(h.logs.info).toContain(
+      '[SyncOrchestrator] Zero remote workspaces found. Auto-provisioning "My Library"...'
+    );
   });
 
   it('HALTS for user selection when several remote workspaces exist', async () => {
@@ -299,6 +342,9 @@ describe('SyncOrchestrator — auth state changes', () => {
     expect(h.orchestrator.getActiveWorkspaceId()).toBeNull();
     expect(h.calls.some((c) => c.startsWith('connect:'))).toBe(false);
     expect(h.calls).not.toContain('createWorkspace:My Library');
+    expect(h.logs.info).toContain(
+      '[SyncOrchestrator] 2 workspaces found. Halting connection until user selection.'
+    );
   });
 
   it('a signed-out state detaches the provider and reports signed-out', async () => {
@@ -309,6 +355,16 @@ describe('SyncOrchestrator — auth state changes', () => {
 
     expect(h.orchestrator.getAuthStatus()).toBe('signed-out');
     expect(h.orchestrator.getStatus()).toBe('disconnected');
+    expect(h.logs.info).toContain('[SyncOrchestrator] User signed out');
+  });
+
+  it('signOut goes through the auth helper', async () => {
+    const h = build();
+    await h.signIn();
+
+    await h.orchestrator.signOut();
+
+    expect(signOutWithGoogle).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -320,6 +376,7 @@ describe('SyncOrchestrator.connect — the pre-flight gates', () => {
 
     expect(h.orchestrator.getStatus()).toBe('disconnected');
     expect(h.calls.some((c) => c.startsWith('connect:'))).toBe(false);
+    expect(h.logs.info).toContain('[SyncOrchestrator] Sync halted: No active workspace explicitly selected.');
   });
 
   it('severs the local tie and throws for a TOMBSTONED workspace', async () => {
@@ -334,6 +391,7 @@ describe('SyncOrchestrator.connect — the pre-flight gates', () => {
       context: 'connect',
     });
     expect(h.orchestrator.getStatus()).toBe('disconnected');
+    expect(h.logs.warn).toContain('[SyncOrchestrator] Sync aborted: Workspace ws_1 is tombstoned.');
   });
 
   it('quarantines a workspace whose METADATA declares a future schema', async () => {
@@ -351,6 +409,22 @@ describe('SyncOrchestrator.connect — the pre-flight gates', () => {
   it('admits metadata at EXACTLY the supported version', async () => {
     const h = build({
       backend: { listWorkspaces: async () => [meta({ schemaVersion: SCHEMA_VERSION })] },
+    });
+
+    await h.orchestrator.connect('uid-1');
+
+    expect(h.obsolete).toEqual([]);
+    expect(h.calls).toContain('connect:ws_1');
+  });
+
+  it('matches the metadata row by workspace id, not by position', async () => {
+    const h = build({
+      backend: {
+        listWorkspaces: async () => [
+          meta({ workspaceId: 'ws_other', schemaVersion: SCHEMA_VERSION + 1 }),
+          meta({ workspaceId: 'ws_1', schemaVersion: SCHEMA_VERSION }),
+        ],
+      },
     });
 
     await h.orchestrator.connect('uid-1');
@@ -377,16 +451,34 @@ describe('SyncOrchestrator.connect — reconnect discipline', () => {
     await h.orchestrator.connect('uid-1');
 
     expect(h.calls.filter((c) => c.startsWith('connect:'))).toHaveLength(before);
+    expect(h.logs.debug()).toContain('[SyncOrchestrator] Already connected, skipping');
   });
 
-  it('RE-attaches when the firebase app instance changed underneath', async () => {
-    const h = build();
+  it('RE-attaches when the firebase app instance changed underneath, destroying the old connection first', async () => {
+    let connects = 0;
+    let destroyed = 0;
+    const h = build({
+      backend: {
+        connect: () => {
+          connects += 1;
+          return {
+            ...idleConnection(),
+            destroy: () => {
+              destroyed += 1;
+            },
+          };
+        },
+      },
+    });
     await h.orchestrator.connect('uid-1');
+    expect(destroyed).toBe(0);
 
     firebaseApp = { app: 2 };
     await h.orchestrator.connect('uid-1');
 
-    expect(h.calls.filter((c) => c.startsWith('connect:'))).toHaveLength(2);
+    expect(connects).toBe(2);
+    expect(destroyed).toBe(1);
+    expect(h.logs.debug()).toContain('[SyncOrchestrator] Firebase app changed, reconnecting...');
   });
 });
 
@@ -397,6 +489,23 @@ describe('SyncOrchestrator.connect — checkpoint, tuning and the metadata stamp
     await h.orchestrator.connect('uid-1');
 
     expect(h.calls).toContain('createAutomaticCheckpoint:pre-sync:86400000');
+    expect(h.logs.debug()).toContain('[SyncOrchestrator] Creating pre-sync checkpoint (if needed)...');
+    expect(h.logs.info).toContain('[SyncOrchestrator] Created pre-sync checkpoint #5');
+    expect(h.logs.debug()).not.toContain('[SyncOrchestrator] Skipped pre-sync checkpoint (recent one exists)');
+  });
+
+  it('notes a skipped checkpoint (a recent one exists) without claiming one', async () => {
+    const h = build({
+      deps: {
+        checkpoints: { createCheckpoint: async () => 1, createAutomaticCheckpoint: async () => null },
+      },
+    });
+
+    await h.orchestrator.connect('uid-1');
+
+    expect(h.logs.debug()).toContain('[SyncOrchestrator] Skipped pre-sync checkpoint (recent one exists)');
+    expect(h.logs.info.some((l) => l.includes('Created pre-sync checkpoint'))).toBe(false);
+    expect(h.calls).toContain('connect:ws_1');
   });
 
   it('a checkpoint failure never blocks the connect', async () => {
@@ -517,18 +626,25 @@ describe('SyncOrchestrator — the clean-sync fork', () => {
 
     expect(h.events.some((e) => e.type === 'clean-sync')).toBe(false);
     expect(h.calls).toContain('connect:ws_1');
+    expect(h.events).toContainEqual({ type: 'status', status: 'connecting' });
+    expect(h.logs.info).toContain('[SyncOrchestrator] Clean client detected. Checking for cloud data...');
+    expect(h.logs.info).toContain('[SyncOrchestrator] No cloud data found. Client is officially the first device.');
   });
 
   it('a clean client downloads, applies and then attaches', async () => {
     const remote = new Y.Doc();
     remote.getMap('library').set('probe', 'from-cloud');
     const update = Y.encodeStateAsUpdate(remote);
+    const connects: Array<{ workspaceId: string; opts: Record<string, unknown> }> = [];
     const h = build({
       deps: cleanDeps,
       backend: {
         probeHasData: async () => true,
-        connect: (doc, workspaceId) => {
-          if (workspaceId === 'ws_1') Y.applyUpdate(doc, update);
+        connect: (doc, workspaceId, opts) => {
+          connects.push({ workspaceId, opts: { ...opts } });
+          // Only the FIRST connection (the temp doc) carries cloud data; the
+          // live attach must not be what populates the live doc.
+          if (connects.length === 1) Y.applyUpdate(doc, update);
           return syncedConnection();
         },
       },
@@ -541,6 +657,60 @@ describe('SyncOrchestrator — the clean-sync fork', () => {
     expect(h.events.filter((e) => e.type === 'clean-sync').map((e) => (e as { phase: string }).phase)).toEqual(
       ['started', 'applied']
     );
+    expect(connects).toEqual([
+      { workspaceId: 'ws_1', opts: DEFAULT_CONFIG_AS_CONNECT },
+      { workspaceId: 'ws_1', opts: DEFAULT_CONFIG_AS_CONNECT },
+    ]);
+    expect(h.orchestrator.getStatus()).toBe('connected');
+    expect(h.logs.info).toContain('[SyncOrchestrator] Cloud data found. Initiating temporary Y.Doc sync...');
+    expect(h.logs.info).toContain('[SyncOrchestrator] Applying downloaded cloud data to main Y.Doc...');
+    expect(h.logs.info).toContain('[SyncOrchestrator] Clean sync complete. Connecting main provider...');
+  });
+
+  it('applies cloud data at EXACTLY the supported version', async () => {
+    const remote = new Y.Doc();
+    remote.getMap('meta').set('schemaVersion', SCHEMA_VERSION);
+    remote.getMap('library').set('probe', 'same-version');
+    const update = Y.encodeStateAsUpdate(remote);
+    let n = 0;
+    const h = build({
+      deps: cleanDeps,
+      backend: {
+        probeHasData: async () => true,
+        connect: (doc) => {
+          if (n++ === 0) Y.applyUpdate(doc, update);
+          return syncedConnection();
+        },
+      },
+    });
+
+    await h.orchestrator.connect('uid-1');
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(h.obsolete).toEqual([]);
+    expect(h.doc.getMap('library').get('probe')).toBe('same-version');
+  });
+
+  it('a temp-connection attach failure reads as an EMPTY remote (legacy clean-sync semantics)', async () => {
+    let n = 0;
+    const h = build({
+      deps: cleanDeps,
+      backend: {
+        probeHasData: async () => true,
+        connect: () => {
+          if (n++ === 0) throw new Error('temp attach refused');
+          return idleConnection();
+        },
+      },
+    });
+
+    await h.orchestrator.connect('uid-1');
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(h.events.filter((e) => e.type === 'clean-sync').map((e) => (e as { phase: string }).phase)).toEqual(
+      ['started', 'applied']
+    );
+    expect(h.orchestrator.getStatus()).toBe('connected');
   });
 
   it('QUARANTINES cloud data from the future — nothing is applied', async () => {
@@ -565,6 +735,9 @@ describe('SyncOrchestrator — the clean-sync fork', () => {
     expect(h.obsolete).toEqual([SCHEMA_VERSION + 1]);
     expect(h.doc.getMap('library').get('probe')).toBeUndefined();
     expect(h.events.some((e) => e.type === 'clean-sync' && e.phase === 'applied')).toBe(false);
+    expect(h.logs.warn).toContain(
+      '[SyncOrchestrator] Clean-sync quarantine: cloud data is schema v7 > supported v6. Nothing was applied.'
+    );
   });
 
   it('reports a failed clean sync without leaving the caller hanging', async () => {
@@ -582,6 +755,27 @@ describe('SyncOrchestrator — the clean-sync fork', () => {
 
     expect(h.orchestrator.getStatus()).toBe('error');
     expect(h.events).toContainEqual({ type: 'clean-sync', phase: 'failed' });
+    expect(h.logs.error).toContainEqual(['[SyncOrchestrator]', 'Failed clean sync:', expect.any(Error)]);
+  });
+
+  it('a clean sync that blows up OUTSIDE its own guard is still reported as an error', async () => {
+    // A status subscriber that throws on `connecting` fails performCleanSync
+    // before its try block — the detached promise's catch must still land.
+    const h = build({ deps: cleanDeps });
+    const boom = new Error('subscriber exploded');
+    let armed = true;
+    h.orchestrator.onStatusChange((status) => {
+      if (status === 'connecting' && armed) {
+        armed = false;
+        throw boom;
+      }
+    });
+
+    await h.orchestrator.connect('uid-1');
+    await new Promise((r) => setTimeout(r, 5));
+
+    expect(h.logs.error).toContainEqual(['[SyncOrchestrator]', 'Clean sync failed:', boom]);
+    expect(h.orchestrator.getStatus()).toBe('error');
   });
 });
 
@@ -729,6 +923,8 @@ describe('SyncOrchestrator — status fan-out and getters', () => {
   });
 
   it('stop() detaches, clears subscribers and reports disconnected', async () => {
+    const unsubscribeAuth = vi.fn();
+    onAuthStateChanged.mockReturnValue(unsubscribeAuth);
     const h = build();
     await h.signIn();
     const seen: FirestoreSyncStatus[] = [];
@@ -739,6 +935,13 @@ describe('SyncOrchestrator — status fan-out and getters', () => {
 
     expect(h.orchestrator.getStatus()).toBe('disconnected');
     // The callbacks were cleared as part of stop, AFTER the detach status.
+    expect(seen).toEqual(['disconnected']);
+    expect(unsubscribeAuth).toHaveBeenCalledTimes(1);
+    expect(h.logs.debug()).toContain('[SyncOrchestrator] Orchestrator stopped');
+
+    // Cleared for real: a later status change reaches nobody.
+    h.orchestrator.severObsoleteConnection();
+    expect(h.orchestrator.getStatus()).toBe('disconnected');
     expect(seen).toEqual(['disconnected']);
   });
 });
@@ -787,6 +990,27 @@ describe('SyncOrchestrator.getConnectedArtifactBackend', () => {
     expect(h.orchestrator.getConnectedArtifactBackend()).toBeNull();
   });
 
+  it('is null when connected and signed in but the active workspace was cleared', async () => {
+    let active: string | null = 'ws_1';
+    const h = build({
+      deps: {
+        syncState: {
+          getActiveWorkspaceId: () => active,
+          setActiveWorkspaceId: (id) => {
+            active = id;
+          },
+          setFirebaseEnabled: () => undefined,
+        },
+      },
+    });
+    await h.signIn();
+    expect(h.orchestrator.getConnectedArtifactBackend()).not.toBeNull();
+
+    active = null;
+
+    expect(h.orchestrator.getConnectedArtifactBackend()).toBeNull();
+  });
+
   it('reports the bound backend and workspace when fully live', async () => {
     const h = build();
     await h.signIn();
@@ -799,8 +1023,39 @@ describe('SyncOrchestrator.getConnectedArtifactBackend', () => {
 });
 
 describe('SyncOrchestrator diagnostics (read-only export surface)', () => {
+  const detachedProvider = {
+    attached: false,
+    workspaceId: null,
+    attachedAt: null,
+    liveQuarantineObserver: false,
+    transport: null,
+  };
+
+  it('is a complete, null-safe snapshot before anything started', () => {
+    const h = build();
+
+    expect(h.orchestrator.getDiagnostics()).toEqual({
+      started: false,
+      status: 'disconnected',
+      authStatus: 'loading',
+      uid: null,
+      email: null,
+      activeWorkspaceId: 'ws_1',
+      backendUid: null,
+      mockBackend: false,
+      firebaseAppName: null,
+      firebaseAppMatchesCurrent: null,
+      config: DEFAULT_CONFIG,
+      debounceOverrideMs: 0,
+      currentSchemaVersion: SCHEMA_VERSION,
+      provider: detachedProvider,
+    });
+  });
+
   it('reports the live connection, including the transport describe()', async () => {
+    firebaseApp = { name: 'app-one' };
     const h = build({
+      deps: { debounceOverrideMs: () => 7, config: { maxUpdatesThreshold: 9 } },
       backend: {
         connect: () => ({ ...idleConnection(), describe: () => ({ transport: 'scripted', pendingUpdates: 3 }) }),
       },
@@ -808,18 +1063,63 @@ describe('SyncOrchestrator diagnostics (read-only export surface)', () => {
     await h.signIn();
 
     const d = h.orchestrator.getDiagnostics();
-    expect(d).toMatchObject({
+    expect(d).toEqual({
       started: true,
       status: 'connected',
       authStatus: 'signed-in',
       uid: 'uid-1',
+      email: 'uid-1@x',
       activeWorkspaceId: 'ws_1',
       backendUid: 'uid-1',
+      mockBackend: false,
+      firebaseAppName: 'app-one',
+      firebaseAppMatchesCurrent: true,
+      config: { maxWaitFirestoreTime: 2000, maxUpdatesThreshold: 9 },
+      debounceOverrideMs: 7,
+      currentSchemaVersion: SCHEMA_VERSION,
       provider: {
         attached: true,
         workspaceId: 'ws_1',
+        attachedAt: expect.any(Number),
+        liveQuarantineObserver: true,
         transport: { transport: 'scripted', pendingUpdates: 3 },
       },
+    });
+    // A copy of the config, never the live object.
+    (d.config as Record<string, unknown>).maxUpdatesThreshold = -1;
+    expect(h.orchestrator.getDiagnostics().config).toEqual({ maxWaitFirestoreTime: 2000, maxUpdatesThreshold: 9 });
+  });
+
+  it('flags a firebase app that was swapped underneath the live connection', async () => {
+    firebaseApp = { name: 'app-one' };
+    const h = build();
+    await h.signIn();
+
+    firebaseApp = { name: 'app-two' };
+
+    expect(h.orchestrator.getDiagnostics()).toMatchObject({
+      firebaseAppName: 'app-one',
+      firebaseAppMatchesCurrent: false,
+    });
+  });
+
+  it('records no firebase app when the attach failed', async () => {
+    firebaseApp = { name: 'app-one' };
+    const h = build({
+      backend: {
+        connect: () => {
+          throw new Error('offline');
+        },
+      },
+    });
+
+    await h.orchestrator.connect('uid-1');
+
+    expect(h.orchestrator.getDiagnostics()).toMatchObject({
+      status: 'error',
+      firebaseAppName: null,
+      firebaseAppMatchesCurrent: null,
+      provider: detachedProvider,
     });
   });
 
@@ -831,7 +1131,7 @@ describe('SyncOrchestrator diagnostics (read-only export surface)', () => {
     expect(h.orchestrator.getDiagnostics()).toMatchObject({
       started: false,
       status: 'disconnected',
-      provider: { attached: false, workspaceId: null, transport: null },
+      provider: detachedProvider,
     });
   });
 
@@ -876,13 +1176,34 @@ describe('SyncOrchestrator diagnostics (read-only export surface)', () => {
     const remote = await h.orchestrator.probeRemoteDiagnostics();
 
     expect(listOpts).toEqual([{ includeDeleted: true }]);
-    expect(remote).toMatchObject({
+    expect(remote).toEqual({
       uid: 'uid-1',
       activeWorkspaceId: 'ws_1',
-      workspaces: { ok: true, value: [{ workspaceId: 'ws_1' }, { workspaceId: 'ws_dead', deletedAt: 5 }] },
-      alive: { ok: true, value: true },
-      hasData: { ok: true, value: true },
+      workspaces: {
+        ok: true,
+        value: [meta(), meta({ workspaceId: 'ws_dead', deletedAt: 5 })],
+        ms: expect.any(Number),
+      },
+      alive: { ok: true, value: true, ms: expect.any(Number) },
+      hasData: { ok: true, value: true, ms: expect.any(Number) },
       pendingWrites: { state: 'stuck', ms: 8000 },
+    });
+    for (const probe of [remote.workspaces, remote.alive, remote.hasData]) {
+      elapsedMs((probe as { ms: number }).ms);
+    }
+  });
+
+  it('probeRemoteDiagnostics skips the per-workspace probes without an active workspace', async () => {
+    const h = build({ activeWorkspaceId: null });
+    await h.signIn(); // one remote workspace → halts for selection, nothing active
+
+    expect(await h.orchestrator.probeRemoteDiagnostics()).toEqual({
+      uid: 'uid-1',
+      activeWorkspaceId: null,
+      workspaces: { ok: true, value: [meta()], ms: expect.any(Number) },
+      alive: null,
+      hasData: null,
+      pendingWrites: null,
     });
   });
 
@@ -896,29 +1217,106 @@ describe('SyncOrchestrator diagnostics (read-only export surface)', () => {
 
     const remote = await h.orchestrator.probeRemoteDiagnostics(20);
 
-    expect(remote.alive).toMatchObject({ ok: false, error: 'Error: denied (code=permission-denied)' });
-    expect(remote.hasData).toMatchObject({ ok: false, error: expect.stringContaining('timed out after 20ms') });
-    expect(remote.workspaces).toMatchObject({ ok: true });
+    expect(remote.alive).toEqual({
+      ok: false,
+      error: 'Error: denied (code=permission-denied)',
+      ms: expect.any(Number),
+    });
+    expect(remote.hasData).toEqual({
+      ok: false,
+      error: 'Error: probeHasData timed out after 20ms',
+      ms: expect.any(Number),
+    });
+    expect(remote.workspaces).toEqual({ ok: true, value: [meta()], ms: expect.any(Number) });
+    elapsedMs((remote.alive as { ms: number }).ms);
+    elapsedMs((remote.hasData as { ms: number }).ms);
+  });
+
+  it('probeRemoteDiagnostics labels each timed-out probe by name', async () => {
+    const hang = () => new Promise<never>(() => undefined);
+    const h = build();
+    await h.signIn();
+    h.backend.listWorkspaces = hang;
+    h.backend.isWorkspaceAlive = hang;
+    h.backend.probeHasData = hang;
+    vi.useFakeTimers();
+
+    const pending = h.orchestrator.probeRemoteDiagnostics(20);
+    await vi.advanceTimersByTimeAsync(20);
+    const remote = await pending;
+
+    expect(remote).toEqual({
+      uid: 'uid-1',
+      activeWorkspaceId: 'ws_1',
+      workspaces: { ok: false, error: 'Error: listWorkspaces timed out after 20ms', ms: expect.any(Number) },
+      alive: { ok: false, error: 'Error: isWorkspaceAlive timed out after 20ms', ms: expect.any(Number) },
+      hasData: { ok: false, error: 'Error: probeHasData timed out after 20ms', ms: expect.any(Number) },
+      pendingWrites: null,
+    });
+  });
+
+  it('probeRemoteDiagnostics clears every probe budget timer once the probes settle', async () => {
+    const h = build();
+    await h.signIn();
+    vi.useFakeTimers();
+
+    const remote = await h.orchestrator.probeRemoteDiagnostics(5000);
+
+    expect(remote).toMatchObject({ workspaces: { ok: true }, alive: { ok: true }, hasData: { ok: true } });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('probeRemoteDiagnostics tolerates a probe that rejects with no error object, or throws synchronously', async () => {
+    const h = build();
+    await h.signIn();
+    h.backend.isWorkspaceAlive = () => Promise.reject(undefined);
+    h.backend.probeHasData = () => {
+      throw new Error('sync boom');
+    };
+
+    const remote = await h.orchestrator.probeRemoteDiagnostics(20);
+
+    expect(remote.alive).toEqual({ ok: false, error: 'undefined', ms: expect.any(Number) });
+    expect(remote.hasData).toEqual({ ok: false, error: 'Error: sync boom', ms: expect.any(Number) });
+  });
+
+  it('probeRemoteDiagnostics caps the pending-writes budget at 8s, below the caller budget', async () => {
+    const budgets: number[] = [];
+    const h = build({
+      backend: {
+        probePendingWrites: async (timeoutMs) => {
+          budgets.push(timeoutMs);
+          return { state: 'acknowledged' as const, ms: 1 };
+        },
+      },
+    });
+    await h.signIn();
+
+    await h.orchestrator.probeRemoteDiagnostics(20000);
+    await h.orchestrator.probeRemoteDiagnostics(20);
+
+    expect(budgets).toEqual([8000, 20]);
   });
 
   it('downloadRemoteStateForDiagnostics returns the remote doc state via a temp connection', async () => {
-    const connectArgs: Array<{ workspaceId: string; threshold: number }> = [];
+    const connectArgs: Array<{ workspaceId: string; opts: Record<string, unknown> }> = [];
     const h = build();
     await h.signIn();
     h.backend.connect = (tempDoc, workspaceId, opts) => {
-      connectArgs.push({ workspaceId, threshold: opts.maxUpdatesThreshold });
+      connectArgs.push({ workspaceId, opts: { ...opts } });
       tempDoc.getMap('library').set('remote-book', 1);
       return syncedConnection();
     };
 
     const r = await h.orchestrator.downloadRemoteStateForDiagnostics(1000);
 
-    expect(r.ok).toBe(true);
+    expect(r).toEqual({ ok: true, workspaceId: 'ws_1', update: expect.any(Uint8Array), ms: expect.any(Number) });
+    elapsedMs(r.ms);
     const probe = new Y.Doc();
     Y.applyUpdate(probe, (r as { update: Uint8Array }).update);
     expect(probe.getMap('library').get('remote-book')).toBe(1);
     // The live connection is untouched; the temp one never forces compaction.
-    expect(connectArgs).toEqual([{ workspaceId: 'ws_1', threshold: 1_000_000_000 }]);
+    expect(connectArgs).toEqual([{ workspaceId: 'ws_1', opts: DIAGNOSTIC_CONNECT }]);
     expect(h.orchestrator.getDiagnostics()).toMatchObject({ status: 'connected' });
   });
 
@@ -927,33 +1325,110 @@ describe('SyncOrchestrator diagnostics (read-only export surface)', () => {
     await h.signIn();
     h.backend.connect = () => idleConnection();
 
-    expect(await h.orchestrator.downloadRemoteStateForDiagnostics(10)).toMatchObject({
+    const r = await h.orchestrator.downloadRemoteStateForDiagnostics(10);
+
+    expect(r).toEqual({
       ok: false,
-      error: expect.stringContaining('timed out after 10ms'),
+      error: 'Error: Workspace download timed out after 10ms (no initial sync)',
+      ms: expect.any(Number),
     });
+    elapsedMs(r.ms);
+  });
+
+  it('downloadRemoteStateForDiagnostics reports an attach failure as an error, not an empty remote', async () => {
+    const h = build();
+    await h.signIn();
+    h.backend.connect = () => {
+      throw new Error('attach refused');
+    };
+
+    const r = await h.orchestrator.downloadRemoteStateForDiagnostics(1000);
+
+    expect(r).toEqual({ ok: false, error: 'Error: attach refused', ms: expect.any(Number) });
+    elapsedMs(r.ms);
   });
 
   it('downloadRemoteStateForDiagnostics needs a signed-in user', async () => {
-    expect(await build().orchestrator.downloadRemoteStateForDiagnostics()).toMatchObject({
+    expect(await build().orchestrator.downloadRemoteStateForDiagnostics()).toEqual({
       ok: false,
       error: 'not signed in',
+      ms: 0,
+    });
+  });
+
+  it('downloadRemoteStateForDiagnostics needs an active workspace', async () => {
+    const h = build({ activeWorkspaceId: null });
+    await h.signIn();
+
+    expect(await h.orchestrator.downloadRemoteStateForDiagnostics()).toEqual({
+      ok: false,
+      error: 'no active workspace',
+      ms: 0,
     });
   });
 
   it('repairUploadMissing needs a signed-in user', async () => {
-    expect(await build().orchestrator.repairUploadMissing()).toMatchObject({ ok: false, error: 'not signed in' });
+    expect(await build().orchestrator.repairUploadMissing()).toEqual({ ok: false, error: 'not signed in', ms: 0 });
+  });
+
+  it('repairUploadMissing needs an active workspace', async () => {
+    const h = build({ activeWorkspaceId: null });
+    await h.signIn();
+
+    expect(await h.orchestrator.repairUploadMissing()).toEqual({ ok: false, error: 'no active workspace', ms: 0 });
   });
 
   it('repairUploadMissing runs against the active workspace on the live doc', async () => {
+    const connectArgs: Array<{ workspaceId: string; opts: Record<string, unknown> }> = [];
     const h = build();
     await h.signIn();
-    h.backend.connect = () => syncedConnection();
+    h.backend.connect = (_doc, workspaceId, opts) => {
+      connectArgs.push({ workspaceId, opts: { ...opts } });
+      return syncedConnection();
+    };
 
     // The scripted cloud is empty and the live doc holds one edit: the
     // repair finds the cloud behind and uploads it (the scripted
     // connection never acks, so the upload itself times out).
     h.doc.getMap('library').set('b1', 1);
     const r = await h.orchestrator.repairUploadMissing(50);
-    expect(r).toMatchObject({ ok: false, error: expect.stringContaining('Repair upload timed out') });
+
+    expect(r).toEqual({ ok: false, error: 'Error: Repair upload timed out after 50ms', ms: expect.any(Number) });
+    elapsedMs(r.ms);
+    expect(connectArgs).toEqual([{ workspaceId: 'ws_1', opts: DIAGNOSTIC_CONNECT }]);
+    expect(h.orchestrator.getDiagnostics()).toMatchObject({ status: 'connected' });
+  });
+
+  it('repairUploadMissing reports the uploaded repair when the temp connection acks it', async () => {
+    const h = build();
+    await h.signIn();
+    h.doc.getMap('library').set('b1', 1);
+    let savedCb: ((at: number) => void) | null = null;
+    h.backend.connect = (tempDoc) => {
+      tempDoc.on('update', (_u: Uint8Array, origin: unknown) => {
+        if (origin !== 'cloud') setTimeout(() => savedCb?.(Date.now()), 0);
+      });
+      return {
+        on: (event, cb) => {
+          if (event === 'synced') setTimeout(() => (cb as () => void)(), 0);
+          if (event === 'saved') savedCb = cb as (at: number) => void;
+        },
+        off: () => undefined,
+        destroy: () => undefined,
+      };
+    };
+
+    const r = await h.orchestrator.repairUploadMissing(1000);
+
+    expect(r).toEqual({
+      ok: true,
+      uploaded: true,
+      bytes: expect.any(Number),
+      clientsBehind: [{ client: h.doc.clientID, cloud: 0, local: 1 }],
+      cloudPendingBefore: null,
+      cloudPendingAfter: null,
+      ms: expect.any(Number),
+    });
+    expect((r as { bytes: number }).bytes).toBeGreaterThan(0);
   });
 });
