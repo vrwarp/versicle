@@ -253,6 +253,35 @@ body {
 }
 
 
+/* Safe-area insets (iPad/iPhone home-screen app chrome).
+   index.html declares `viewport-fit=cover`, so on iOS/iPadOS the page is laid
+   out edge-to-edge and WebKit reports the system chrome (status bar, home
+   indicator, rounded corners) through env(safe-area-inset-*). These custom
+   properties are the ONE place the app reads them: everything pinned to a
+   viewport edge (the .main_layout shell, the fixed control-bar/toast/sheet
+   overlays, the reader's fixed-height column) offsets by them. Desktop and
+   Android resolve the env() fallbacks to 0px (the Capacitor safe-area plugin
+   keeps the Android WebView inset natively — capacitor.config.ts pins
+   initialViewportFitCover: false — so env() is 0 there too). */
+:root {
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
+
+/* iPadOS home-screen apps draw the status bar (and, on iPadOS 26+, the window
+   control that lives in that row) OVER the page while the reported inset can
+   still be 0 (WebKit bug 301994 family — the inset is not a reliable signal
+   on its own, so bars are sized as base + inset, never inset alone). The
+   iPad status bar is 24px (20px on older models); keep at least that much
+   clearance in standalone mode. src/app/boot/standaloneChrome.ts sets the
+   attribute before first paint; iPhone is excluded on purpose (its default
+   opaque status bar reserves its own space). */
+html[data-standalone-platform="ipados"] {
+  --safe-area-inset-top: max(env(safe-area-inset-top, 0px), 24px);
+}
+
 .main_layout {
   padding-top: var(--safe-area-inset-top);
   padding-right: var(--safe-area-inset-right);

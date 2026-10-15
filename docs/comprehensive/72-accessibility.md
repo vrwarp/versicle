@@ -300,7 +300,7 @@ The `<header>` element in [ReaderChrome.tsx](../../src/components/reader/shell/R
 <div
   role="region"
   aria-label="Quick actions"
-  className="fixed bottom-8 left-0 right-0 z-40 …"
+  className="fixed bottom-[calc(2rem+var(--safe-area-inset-bottom))] left-[var(--safe-area-inset-left)] right-[var(--safe-area-inset-right)] z-40 …"
 >
 ```
 

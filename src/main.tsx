@@ -9,6 +9,7 @@ import { useTTSSettingsStore } from './store/useTTSSettingsStore';
 import { useTTSPlaybackStore } from './store/useTTSPlaybackStore';
 import { useAnnotationStore } from './store/useAnnotationStore';
 import { useReaderUIStore } from './store/useReaderUIStore';
+import { markStandalonePlatform } from './app/boot/standaloneChrome';
 
 // The legacy `window.useTTSStore` shim (playback reads + play/pause for the
 // verification specs) met its named P9 deadline: the specs read
@@ -35,6 +36,10 @@ declare global {
     __ttsWorkerHandleTest?: () => Promise<{ engineName: string; voicesIsArray: boolean; ready: boolean }>;
   }
 }
+
+// Home-screen display hints BEFORE the first render: src/index.css keys the
+// iPad status-bar clearance on the attribute this sets (no layout jump).
+markStandalonePlatform();
 
 // Typed E2E test API (window.__versicleTest): flushPersistence/resetApp.
 // DEV + E2E builds only (Dockerfile.verification sets VITE_E2E=true); the

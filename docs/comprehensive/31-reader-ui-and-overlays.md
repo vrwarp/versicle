@@ -546,7 +546,7 @@ The `useHistoryHighlights` hook implements a state machine to avoid updating the
 
 **Source:** [src/components/reader/ContentAnalysisLegend.tsx](../../src/components/reader/ContentAnalysisLegend.tsx)
 
-A developer/debug panel that renders only when `isDebugModeEnabled` is set in `useGenAIStore`. It is a fixed-position panel at `bottom-20 left-4 z-50` showing:
+A developer/debug panel that renders only when `isDebugModeEnabled` is set in `useGenAIStore`. It is a fixed-position panel at `bottom-[calc(5rem+var(--safe-area-inset-bottom))] left-[calc(1rem+var(--safe-area-inset-left))] z-50` showing:
 
 - Actions (reprocess book, view content analysis report).
 - A CFI debugger input that calls `engine.display(cfi)` and `engine.selectRange(cfi)` on change.
@@ -615,7 +615,7 @@ If CFI resolution fails (stale corpus vs re-rendered content), the section-level
 
 **Source:** [src/components/reader/ReaderControlBar.tsx](../../src/components/reader/ReaderControlBar.tsx)
 
-Mounted in `RootLayout` (outside the reader route), fixed at `bottom-8` with `z-40`. Which variant renders is decided by `resolvePillVariant` ([src/store/compassMachine.ts](../../src/store/compassMachine.ts)) from two layers:
+Mounted in `RootLayout` (outside the reader route), fixed `2rem + var(--safe-area-inset-bottom)` above the viewport bottom with `z-40` (the inset keeps it clear of the iOS home indicator — see [PWA → Safe-area insets](61-pwa-and-service-worker.md#safe-area-insets-ios-ipados-home-screen-apps)). Which variant renders is decided by `resolvePillVariant` ([src/store/compassMachine.ts](../../src/store/compassMachine.ts)) from two layers:
 
 1. **Interaction** — the compass machine's current mode (`annotation`, `vocab-triage`, `audio-triage`). A live interaction always wins; each mode carries its payload (selection or annotation), so a mode without the data it needs is unrepresentable.
 2. **Ambient** — when the machine is `idle`, `deriveAmbientVariant` picks the resting pill from the surrounding conditions.
@@ -743,7 +743,7 @@ The History tab mounts `ReadingHistoryPanel` with `trigger={historyTick}` (bumpe
 ```mermaid
 graph LR
     Z50["z-50: AnnotationMarkerOverlay,\nAnnotationList sidebar,\nSearchPanel sidebar,\nTOCPanel sidebar,\nContentAnalysisLegend"]
-    Z40["z-40: ReaderControlBar\n(bottom-8 pill region),\nAudioPill (compact)"]
+    Z40["z-40: ReaderControlBar\n(fixed bottom pill region),\nAudioPill (compact)"]
     Z10["z-10: AnnotationMarkerOverlay\ncontainer (within epub portal)"]
     Zbase["base: ReaderViewport,\nepub.js iframe container"]
     Zabs["z-50 absolute: ReaderChrome\nimmersive exit button"]
@@ -756,7 +756,7 @@ graph LR
     Zabs --> Z50
 ```
 
-All sidebars use `absolute inset-y-0 left-0` with a high z-index (50) to overlay the viewport. The control bar uses `fixed bottom-8` at z-40 — below sidebars but above the viewport content. The epub.js overlay portals are z-indexed within the epub container coordinate space (not the main document z-index stack).
+All sidebars use `absolute inset-y-0 left-0` with a high z-index (50) to overlay the viewport. The control bar uses `fixed bottom-[calc(2rem+var(--safe-area-inset-bottom))]` at z-40 — below sidebars but above the viewport content. The epub.js overlay portals are z-indexed within the epub container coordinate space (not the main document z-index stack).
 
 ---
 

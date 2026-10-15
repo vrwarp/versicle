@@ -92,7 +92,7 @@ export const ReaderShell: React.FC = () => {
         <ReaderCommandsProvider commands={controller.commands} engine={controller.engine}>
             <div
                 data-testid="reader-view"
-                className="flex flex-col h-screen bg-background text-foreground relative"
+                className="flex flex-col h-[calc(100vh-var(--safe-area-inset-top)-var(--safe-area-inset-bottom))] bg-background text-foreground relative"
                 onClick={() => {
                     useReaderUIStore.getState().dispatchCompass({ type: 'OUTSIDE_TAP' });
                 }}

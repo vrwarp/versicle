@@ -353,7 +353,7 @@ export const ReaderControlBar: React.FC = () => {
             <div
                 role="region"
                 aria-label="Quick actions"
-                className="fixed bottom-8 left-0 right-0 z-40 px-4 pointer-events-none flex justify-center"
+                className="fixed bottom-[calc(2rem+var(--safe-area-inset-bottom))] left-[var(--safe-area-inset-left)] right-[var(--safe-area-inset-right)] z-40 px-4 pointer-events-none flex justify-center"
             >
                 <div
                     className="pointer-events-auto w-full max-w-md"

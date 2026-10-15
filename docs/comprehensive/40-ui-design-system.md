@@ -468,7 +468,7 @@ The host separates error toasts from non-error toasts into two ARIA live regions
 
 Both regions are **always in the DOM, even when empty** — this is the standard ARIA live-region practice. A region created simultaneously with its content is unreliable across screen readers; the region must exist before the content is inserted.
 
-Position: `fixed bottom-20 left-1/2 -translate-x-1/2 z-[100]`. The `bottom-20` (80px) clearance keeps toasts above the reader control bar pill.
+Position: `fixed bottom-[calc(5rem+var(--safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-[100]`. The 5rem (80px) clearance keeps toasts above the reader control bar pill; the inset term keeps both clear of the iOS home indicator (see [PWA → Safe-area insets](61-pwa-and-service-worker.md#safe-area-insets-ios-ipados-home-screen-apps)).
 
 ### useToastStore
 
