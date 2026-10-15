@@ -129,6 +129,51 @@ feed the OS shell. `mask-icon.svg` was intentionally omitted from `includeAssets
 cannot be mechanically derived from the raster logo (Phase 8 RC-11 deviation,
 recorded in the phase doc follow-ups).
 
+### Safe-area insets (iOS/iPadOS home-screen apps)
+
+`index.html` declares `viewport-fit=cover`. In a home-screen app WebKit then
+lays the page out edge-to-edge and reports the system chrome — the iPad status
+bar (24px; the iPadOS 26+ window control sits in that row), the home indicator,
+rounded corners — through `env(safe-area-inset-*)`. Without `cover` the inset
+is always `0`, which is how the iPad app ended up with the status bar drawn over
+the header buttons.
+
+The app reads the insets in exactly one place, `src/index.css`:
+
+```css
+:root {
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  /* …right/bottom/left… */
+}
+html[data-standalone-platform="ipados"] {
+  --safe-area-inset-top: max(env(safe-area-inset-top, 0px), 24px);
+}
+```
+
+Every surface pinned to a viewport edge offsets by those properties: the
+`.main_layout` shell padding in `RootLayout`, the reader's fixed-height column
+(`100vh` minus the vertical insets — the same `h-screen` basis as before), the fixed `ReaderControlBar` pill and
+`ToastHost`, and the `Sheet` panels (positioned inside the safe area rather than
+padded, because consumers override padding). Desktop browsers and the Android
+WebView resolve the fallbacks to `0px`, so nothing moves there.
+
+The second rule is the **iPad standalone floor**. The reported inset is not a
+reliable signal on its own (WebKit bug 301994 family: a standalone app can be
+drawn under the bar while `env()` reports `0`), so bars are sized as *base +
+inset*, never inset alone. [`src/app/boot/standaloneChrome.ts`](../../src/app/boot/standaloneChrome.ts)
+sets `data-standalone-platform="ipados"` synchronously from `main.tsx` (before
+the first render — no layout jump) when the display mode is standalone on an
+iPad (desktop-class Safari UA with `maxTouchPoints > 1`, or the legacy iPad
+UA). iPhone is excluded on purpose: its default opaque status bar reserves its
+own space. The E2E coverage is the "ipad standalone safe areas" journey in
+`verification/test_journey_responsive.spec.ts`, which injects the insets iPadOS
+reports through the same custom properties.
+
+Known residual: in iPadOS 26+ *windowed* mode (window resized away from full
+screen) the window controls overlay the page's top-leading corner and no CSS
+environment variable describes them (the Window Controls Overlay API is not
+implemented on iPadOS); only full-screen mode is covered.
+
 ### Build-time CI check (Check 5)
 
 [`scripts/check-worker-chunk.mjs`](../../scripts/check-worker-chunk.mjs) runs Check 5

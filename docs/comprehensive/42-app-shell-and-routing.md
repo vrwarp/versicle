@@ -115,7 +115,7 @@ return (
 - `role="status" aria-live="polite"` for info and success toasts.
 - `role="alert" aria-live="assertive"` for error toasts.
 
-These regions are **always present in the DOM** even when no toasts are active. This is required for screen-reader reliability: live regions created together with their content are unreliable across assistive technologies. The regions are positioned `fixed bottom-20 left-1/2 -translate-x-1/2 z-[100]`.
+These regions are **always present in the DOM** even when no toasts are active. This is required for screen-reader reliability: live regions created together with their content are unreliable across assistive technologies. The regions are positioned `fixed bottom-[calc(5rem+var(--safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-[100]` (the inset term keeps them clear of the iOS home indicator).
 
 The store itself (`useToastStore`) deduplicates toasts by message key, so the repeated `SWUpdatePrompt` flip is idempotent. Toasts with `duration: Infinity` persist until explicitly dismissed or until an action is taken.
 

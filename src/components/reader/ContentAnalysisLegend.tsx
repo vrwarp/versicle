@@ -262,7 +262,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ en
     if (!isDebugModeEnabled) return null;
 
     return (
-        <div className="fixed bottom-20 left-4 z-50 bg-background/95 backdrop-blur-sm border rounded-lg shadow-lg p-3 text-xs w-72 max-h-[80vh] overflow-y-auto flex flex-col gap-3 transition-all duration-300">
+        <div className="fixed bottom-[calc(5rem+var(--safe-area-inset-bottom))] left-[calc(1rem+var(--safe-area-inset-left))] z-50 bg-background/95 backdrop-blur-sm border rounded-lg shadow-lg p-3 text-xs w-72 max-h-[80vh] overflow-y-auto flex flex-col gap-3 transition-all duration-300">
             <div className="flex items-center justify-between border-b pb-2">
                 <button
                     onClick={() => setIsExpanded(!isExpanded)}

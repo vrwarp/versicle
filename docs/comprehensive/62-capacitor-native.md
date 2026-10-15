@@ -180,10 +180,15 @@ shadowApplication.setComponentNameAndServiceForBindService(
 
 ### `SafeArea` config
 
-The safe-area plugin injects CSS variables (`--safe-area-inset-*`) so the React UI
-can account for notches and navigation bars. Both options are `false` here: Versicle
-does not dynamically respond to viewport-fit cover changes, and the initial cover is
-not forced on.
+Since v5 the safe-area plugin no longer injects CSS variables: it is a polyfill
+for Android WebViews older than Chromium 140, where `env(safe-area-inset-*)` is
+wrong in edge-to-edge mode. With both options `false` the plugin treats the page
+as *not* `viewport-fit=cover` (regardless of the `viewport-fit=cover` that
+`index.html` declares for iOS) and pads the WebView itself, so on Android the
+`env()` values resolve to `0px` and the UI never has to offset anything. The
+app-side insets (`--safe-area-inset-*` in `src/index.css`, derived from `env()`
+with a `0px` fallback) are therefore an iOS/iPadOS concern — see
+[PWA & Service Worker → Safe-area insets](61-pwa-and-service-worker.md#safe-area-insets-ios-ipados-home-screen-apps).
 
 ---
 
@@ -253,7 +258,7 @@ cache path.
 | `@jofr/capacitor-media-session` | `MediaSession` | Lock-screen controls, notification transport |
 | `@capacitor-community/text-to-speech` | `TextToSpeech` | Android system TTS engine |
 | `@capacitor/app` | `App` | Back-button events, `exitApp()` |
-| `@capacitor-community/safe-area` | `SafeArea` | CSS inset variables for notch/nav-bar |
+| `@capacitor-community/safe-area` | `SafeArea` | System-bar inset polyfill for old Android WebViews |
 | `@capgo/capacitor-social-login` | `SocialLogin` | Google Sign-In via Credential Manager |
 | `@capawesome-team/capacitor-android-battery-optimization` | `BatteryOptimization` | Battery optimisation prompt |
 | `@capacitor/filesystem` | `Filesystem` | File read/write in Cache/Data directories |
