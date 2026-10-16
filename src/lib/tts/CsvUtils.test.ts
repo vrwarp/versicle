@@ -182,7 +182,7 @@ Line 2","Replacement",false`;
             { id: '1', original: 'Line 1\nLine 2', replacement: 'R', isRegex: false, matchType: 'ignore_case', created: 0 }
         ];
         const csv = LexiconCSV.generate(rules);
-        // Note: The new parser/generator might handle this differently, but for now we expect a single string containing the newline
+        // A newline inside a field is emitted verbatim within the quoted field
         expect(csv).toContain('"Line 1\nLine 2","R",ignore_case,false');
     });
 
@@ -226,8 +226,8 @@ item1`;
         it('should return all lines if header mismatch (treat as no header)', () => {
              const csv = `SomethingElse
 item1`;
-             // If header provided doesn't match, it assumes first line is data?
-             // Logic: lines.shift() ONLY IF matches.
+             // A header that doesn't match is treated as data: parse() shifts
+             // the first line only when it matches.
              const result = SimpleListCSV.parse(csv, 'Header');
              expect(result).toEqual(['SomethingElse', 'item1']);
         });

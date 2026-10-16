@@ -2,9 +2,10 @@
  * Verifies that the CompassPill scrubber (background progress bar) stays in sync
  * with TTS chapter position, not the global book reading percentage.
  *
- * Regression: commit 6d9c4c35 removed the `!hasQueueItems` guard when passing
- * `progress` to CompassPill from ReaderControlBar, causing the scrubber to always
- * show the frozen global book percentage instead of the live TTS chapter position.
+ * Regression guard: ReaderControlBar only overrides CompassPill's `progress` with
+ * the global book percentage when `!hasQueueItems`. Without that guard the
+ * scrubber would always show the frozen global book percentage instead of the
+ * live TTS chapter position.
  */
 import { test, expect } from "./utils";
 import { resetApp, ensureLibraryWithBook, navigateToChapter, captureScreenshot, waitForTtsState, waitForReaderReady } from "./utils";
@@ -144,8 +145,7 @@ test("scrubber shows book reading progress when TTS queue is empty", async ({ pa
   // unlike the cover's one-item "no text" filler (the poll below clears it to
   // reach the queue-empty branch; a load arriving after the poll would flip the
   // scrubber back). The poll then waits for the reading session to record > 0%
-  // progress (committed in a time window); its timeout covers the fixed 3s
-  // dwell that used to sit here.
+  // progress (committed in a time window).
   // We do NOT press ArrowRight here: some epub.js paginated builds emit a
   // `relocated` event with percentage=0 on the first render of the new page,
   // which overwrites the valid chapter percentage before the real value is
@@ -161,14 +161,8 @@ test("scrubber shows book reading progress when TTS queue is empty", async ({ pa
   // straight from it (ReaderControlBar: `if (!hasQueueItems) progress = book%`),
   // so this drives the real production code path. The clear happens inside the
   // poll below so a late engine snapshot re-push is re-cleared until the DOM
-  // settles on the book %.
-  //
-  // (Historically this test asserted against the queue WITHOUT clearing it and
-  // passed only vacuously: reading progress was recorded as 0% because the
-  // locations registry generated too slowly to resolve a percentage within the
-  // dwell, so `toBeCloseTo(0, 0)` held trivially. Faster locations generation
-  // now records a real non-zero percentage, exposing that the queue-empty
-  // branch was never actually reached.)
+  // settles on the book %. (Asserting without clearing the queue would never
+  // reach the queue-empty branch.)
   await page.waitForFunction(
     () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

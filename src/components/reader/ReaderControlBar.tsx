@@ -1,13 +1,12 @@
 /**
- * ReaderControlBar — the THIN variant router over the dissolved CompassPill
- * (Phase 8 §C): each variant is its own feature component (reader/pills/*,
- * sync/SyncAlertPill, chinese/VocabTriageCard). Which variant renders is
- * decided by `resolvePillVariant` (store/compassMachine.ts): the compass
- * interaction state wins when one is in flight, otherwise the ambient
- * conditions gathered here pick the resting pill. The `key={variant}`
- * remount is GONE (a11y item 8): variants morph by re-render, and the
- * router restores focus into the new pill when a morph would otherwise
- * drop it on <body>.
+ * ReaderControlBar — the THIN variant router for the floating pill: each
+ * variant is its own feature component (reader/pills/*, sync/SyncAlertPill,
+ * chinese/VocabTriageCard). Which variant renders is decided by
+ * `resolvePillVariant` (store/compassMachine.ts): the compass interaction
+ * state wins when one is in flight, otherwise the ambient conditions
+ * gathered here pick the resting pill. Variants morph by re-render (no
+ * `key={variant}` remount), and the router restores focus into the new pill
+ * when a morph would otherwise drop it on <body>.
  */
 import React, { useEffect, useRef } from 'react';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
@@ -54,7 +53,6 @@ function readerIframeHasActiveSelection(): boolean {
 }
 
 export const ReaderControlBar: React.FC = () => {
-    // Correctly using the store-based toast
     const showToast = useToastStore(state => state.showToast);
     const navigate = useNavigate();
 
@@ -107,9 +105,9 @@ export const ReaderControlBar: React.FC = () => {
 
     // Select the current book if active
     const currentBook = useBookChrome(currentBookId);
-    // useBookPercentage applies the same fallback logic as getProgress() (most-recent
-    // across devices, with isValidProgress guard), so the scrubber always reflects
-    // the best available progress rather than just the current-device entry.
+    // useBookPercentage applies the same fallback logic as getProgress() (valid
+    // local entry, then most-recent valid entry across devices, then local), so the
+    // scrubber always reflects the best available progress.
     const currentBookPercentage = useBookPercentage(currentBookId);
 
     const isReaderActive = !!currentBookId;
@@ -119,7 +117,7 @@ export const ReaderControlBar: React.FC = () => {
     // selection-owning mode always carries its payload.
     const selection = compassOwnsSelection(compass) ? compass.selection : null;
 
-    // THE routing decision (§C): interaction mode wins; otherwise the ambient
+    // THE routing decision: interaction mode wins; otherwise the ambient
     // conditions pick the resting pill (see compassMachine.ts for the table).
     const variant: PillVariant | null = resolvePillVariant(compass, {
         showSyncAlert: !!showSyncAlert,
@@ -130,7 +128,7 @@ export const ReaderControlBar: React.FC = () => {
         hasQueueItems,
     });
 
-    // Focus management on variant morph (a11y item 8): if keyboard focus
+    // Focus management on variant morph: if keyboard focus
     // lived inside the pill and the morph unmounted that control, move
     // focus to the new pill's first control instead of dropping it on
     // <body>. The flag is event-driven (focus/blur on the region); a blur
@@ -218,8 +216,7 @@ export const ReaderControlBar: React.FC = () => {
                 }
                 break;
             case 'play':
-                // Play from selection (reader command registry — the
-                // callbacks-in-store path died with Phase 6 §5a)
+                // Play from selection (via the reader command registry)
                 if (selection?.cfiRange) {
                     const commands = readerCommandsRegistry.get();
                     if (commands) {
@@ -289,8 +286,8 @@ export const ReaderControlBar: React.FC = () => {
             case 'audio-triage':
                 return <AudioTriagePill />;
             case 'vocab-triage':
-                // Phase 6 PR-11 home: the chinese feature card (the IDB
-                // dictionary import is gated on THIS card opening).
+                // The chinese feature card (the IDB dictionary import is
+                // gated on THIS card opening).
                 return <VocabTriageCard text={selection?.text || ''} />;
             case 'sync-alert':
                 return (
@@ -347,9 +344,9 @@ export const ReaderControlBar: React.FC = () => {
     return (
         <>
             {/* role="region": the pill is the one piece of shell content
-                outside the route's landmarks — naming it a landmark closes
-                the last P0 'region' finding on the reader surface (the axe
-                spec asserts the rule as fixed; Phase 8 §C/§K ratchet). */}
+                outside the route's landmarks — naming it a landmark keeps
+                axe's 'region' rule clean on the reader surface (the axe
+                spec asserts that rule stays absent). */}
             <div
                 role="region"
                 aria-label="Quick actions"

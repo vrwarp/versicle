@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * ReaderControlBar — the variant ROUTER over the Phase 8 §C pill feature
- * components. Renders the REAL pills against mocked stores: the routing
- * priorities, annotation action plumbing and navigation are the unit under
- * test. Absorbs (rule 8) the sync-alert/summary assertions of the deleted
+ * ReaderControlBar — the variant ROUTER over the pill feature components.
+ * Renders the REAL pills against mocked stores: the routing priorities,
+ * annotation action plumbing and navigation are the unit under test.
+ * Absorbs (rule 8) the sync-alert/summary assertions of the deleted
  * ui/CompassPill.test.tsx + ui/CompassPill_Accessibility.test.tsx, and
- * pins the §C focus-survives-morph regression (a11y item 8 — the
- * key={variant} remount is gone).
+ * pins the focus-survives-morph regression (variants morph by re-render,
+ * with no key={variant} remount).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -24,7 +24,7 @@ const {
   return {
     mockUseBookChrome: vi.fn(),
     // The progress-joined projection. The bar must NOT reach for it — see the
-    // "app-wide subscriptions" regression block.
+    // "progress-only write" regression block.
     mockUseBookJoin: vi.fn(),
     mockUseLastReadBook: vi.fn(),
     mockUsePercentage: vi.fn(),
@@ -70,7 +70,7 @@ vi.mock('@store/useReadingStateStore', () => ({
   ),
   useBookPercentage: (bookId: any) => mockUsePercentage(bookId),
   useCurrentDevicePercentage: (bookId: any) => mockUsePercentage(bookId),
-  // Tripwire: the progress-OBJECT selector the bar must never reach for again.
+  // Tripwire: the progress-OBJECT selector the bar must never reach for.
   // It returns a usable entry rather than throwing, so a component that calls
   // it still renders its percentage — the test then fails on the CALL, which is
   // the thing that costs a re-render, not on a crash.
@@ -181,7 +181,7 @@ describe('ReaderControlBar', () => {
       status: 'stopped',
       currentIndex: 0,
     }));
-    // Popover state moved to the ephemeral reader UI store (popover-desync hotfix).
+    // Popover state lives in the ephemeral reader UI store.
     mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState()));
     mockUseReadingStateStore.mockImplementation((selector: any) => selector({ progress: {} }));
     mockUseReadingStateStore.getState = vi.fn().mockReturnValue({
@@ -208,10 +208,9 @@ describe('ReaderControlBar', () => {
   });
 
   it('renders the triage pill with its payload in audio-triage mode', () => {
-    // Under the pre-machine model an 'audio-triage' variant could exist
-    // without its target annotation and rendered NOTHING (the old
-    // stale-variant regression). The machine makes that unrepresentable:
-    // audio-triage always carries the bookmark it reviews.
+    // The compass machine makes an 'audio-triage' mode without its target
+    // annotation unrepresentable: audio-triage always carries the bookmark
+    // it reviews.
     mockUseReaderUIStore.mockImplementation((selector: any) => selector(readerUIState({
       compass: {
         mode: 'audio-triage',
@@ -449,12 +448,11 @@ describe('ReaderControlBar', () => {
 
   /**
    * perf: the bar is mounted app-wide (RootLayout), so every subscription it
-   * holds costs on every route. It used to hold five progress-derived
-   * subscriptions, two of them full `useBook` joins (reading-list scan
-   * included) whose results are a NEW object on every progress write — so a
-   * page turn, and even a background-TTS tick on the library route, re-rendered
-   * the whole pill twice over. It now takes the chrome projections and plain
-   * percentage numbers.
+   * holds costs on every route. Progress-derived subscriptions — above all
+   * full `useBook` joins (reading-list scan included), whose results are a
+   * NEW object on every progress write — would re-render the whole pill on
+   * every page turn, and even on a background-TTS tick on the library route.
+   * So the bar takes the chrome projections and plain percentage numbers.
    */
   describe('regression: a progress-only write does not re-render the control bar', () => {
     it('never subscribes to the progress-joined book projection', () => {

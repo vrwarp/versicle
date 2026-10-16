@@ -1,14 +1,13 @@
 /**
- * ReadingSessionRecorder — reading-history + progress recording, extracted
- * from the shell's inline onLocationChange/panic-save logic (Phase 6 §6,
- * prep/phase6-reader-engine.md PR-6).
+ * ReadingSessionRecorder — reading-history + progress recording for the
+ * reader: relocation events become store writes, and the unmount panic save
+ * closes out the final segment.
  *
- * SERIALIZED (the D6 fix, its own commit after the verbatim extraction):
- * recordings run on a per-book FIFO — one in flight, the rest queued as
- * plain data — with a monotonic sequence number. The legacy code launched
- * one async pass per relocation (two `snapCfiToSentence` awaits, then the
- * store write), so a slow snap for relocation N could commit AFTER N+1 and
- * leave `currentCfi` pointing backwards. Now:
+ * SERIALIZED: recordings run on a per-book FIFO — one in flight, the rest
+ * queued as plain data — with a monotonic sequence number. One async pass per
+ * relocation (two `snapCfiToSentence` awaits, then the store write) would let
+ * a slow snap for relocation N commit AFTER N+1 and leave `currentCfi`
+ * pointing backwards. So:
  *
  *  - commits happen strictly in event order (FIFO pump),
  *  - `flushSync()` drains everything still queued/in flight synchronously
@@ -18,39 +17,38 @@
  *    DROPPED (it was committed by flushSync; the late duplicate dies).
  *
  * Dwell durations and the previous-range label are captured AT EVENT TIME
- * (the legacy async body read them synchronously before its first await),
- * so queueing never inflates a dwell or mislabels a range.
+ * (synchronously, before the first await), so queueing never inflates a dwell
+ * or mislabels a range.
  *
- * COALESCED (perf, P-mem): every commit used to issue its own
- * `store.updateReadingSession`, and the progress store is a CRDT — Yjs is
- * append-only, so each write leaves permanent Y.Doc growth (tombstones and
- * delete-set ranges survive `encodeStateAsUpdate`). Measured against the real
- * vendored middleware that is ~65 bytes per page turn, which compounds into
- * cold-boot `Y.applyUpdate` hydration of 22ms at 500 turns → 283ms at 40k, a
- * per-write scoped-diff cost of 0.57ms → 2.49ms, and a document the user
- * carries and syncs forever. Commits now land in a {@link COMMIT_WINDOW_MS}
- * window and issue ONE store write per window: the updates concatenate in
- * event order and the LAST event's `currentCfi`/`percentage` win, which is
- * exactly what the store would have ended up with.
+ * COALESCED: a store write per commit is costly, because the progress store
+ * is a CRDT — Yjs is append-only, so each write leaves permanent Y.Doc growth
+ * (tombstones and delete-set ranges survive `encodeStateAsUpdate`). Measured
+ * against the real vendored middleware that is ~65 bytes per page turn, which
+ * compounds into cold-boot `Y.applyUpdate` hydration of 22ms at 500 turns →
+ * 283ms at 40k, a per-write scoped-diff cost of 0.57ms → 2.49ms, and a
+ * document the user carries and syncs forever. Commits therefore land in a
+ * {@link COMMIT_WINDOW_MS} window and issue ONE store write per window: the
+ * updates concatenate in event order and the LAST event's
+ * `currentCfi`/`percentage` win, which is exactly what per-commit writes would
+ * have ended up with.
  *
  * Durability is the constraint, not the cadence. The window is drained:
- *  - by {@link ReadingSessionRecorder.flushSync} (unmount panic save), whose
- *    semantics are otherwise unchanged;
+ *  - by {@link ReadingSessionRecorder.flushSync} (unmount panic save);
  *  - by {@link ReadingSessionRecorder.flushPending}, which the owner wires to
  *    `visibilitychange` → hidden and `pagehide` — the only signals a mobile
- *    background kill reliably delivers — and which drains the FIFO too, so it
- *    is strictly more durable than the un-coalesced code was at that instant;
+ *    background kill reliably delivers — and which drains the FIFO too, so
+ *    nothing queued or in flight is left behind at that instant;
  *  - by `dispose()`, before the recorder goes quiet.
  * The window's own timer never outlives disposal, and while a window is open
  * the no-op CFI guard compares against ITS position rather than the store's,
- * so the guard behaves exactly as it did when every commit wrote through.
+ * so the guard behaves as if every commit wrote through.
  *
- * Single-sourced per §6: the `'Chapter'` placeholder filter and the ONE
- * `buildUpdates({snap})` pass both the live path and flushSync use.
+ * Single-sourced: the `'Chapter'` placeholder filter and the ONE
+ * `buildUpdates({snap})` pass are used by both the live path and flushSync.
  *
  * Store access is injected (deps.store) so this module satisfies the
- * domains-no-store boundary; the shell wires the real
- * useReadingStateStore actions.
+ * domains-no-store boundary; the reader controller (`useReaderController`)
+ * wires the real useReadingStateStore actions.
  */
 import { generateCfiRange, snapCfiToSentence, type CfiRangeResolver } from '@kernel/cfi';
 import { createLogger } from '@lib/logger';
@@ -106,10 +104,10 @@ export interface ReadingSessionRecorderDeps {
     ): void;
   };
   /**
-   * Panic-save context (the legacy `panicSaveState` ref, injected): the
-   * store-synced section title + view mode, read at recording/flush time —
-   * the title can drift after the last relocation via the TOC-preference
-   * sync effect, so it is read live rather than remembered per event.
+   * Panic-save context (injected): the store-synced section title + view
+   * mode, read at recording/flush time — the title can drift after the last
+   * relocation via the TOC-preference sync effect, so it is read live rather
+   * than remembered per event.
    */
   getContext: () => { title: string | null; viewMode: 'paginated' | 'scrolled' };
   /** Fires when a previous-range history entry was recorded (history tick). */
@@ -131,8 +129,8 @@ export interface ReadingSessionRecorderDeps {
 const COMMIT_WINDOW_MS = 5_000;
 
 /**
- * The `'Chapter'` placeholder filter — single-sourced (§6: it was
- * string-matched independently in the live path and the panic save).
+ * The `'Chapter'` placeholder filter — single-sourced so the live path and
+ * the panic save agree on it.
  */
 function isPlaceholderLabel(label: string | undefined): boolean {
   return label === 'Chapter';
@@ -146,9 +144,9 @@ interface QueuedRecording {
   previous: { start: string; end: string } | null;
   /** Dwell on the previous segment, measured AT EVENT TIME. */
   previousDurationMs: number;
-  /** Title for the previous range, captured AT EVENT TIME (legacy timing). */
+  /** Title for the previous range, captured AT EVENT TIME. */
   previousTitle: string | null;
-  /** Resolver captured at event time (legacy read engineRef synchronously). */
+  /** Resolver captured at event time. */
   resolver: SessionResolver | null;
 }
 
@@ -178,9 +176,9 @@ export class ReadingSessionRecorder {
   constructor(private readonly deps: ReadingSessionRecorderDeps) {}
 
   /**
-   * Initializes the previous-location tracker without recording (legacy
-   * step 1 of onLocationChange — it ran even when the import-jump check
-   * subsequently skipped the save). Idempotent.
+   * Initializes the previous-location tracker without recording. The
+   * controller calls it on every relocation, even when the import-jump check
+   * subsequently skips the save. Idempotent.
    */
   prime(location: EngineLocation, at: number): void {
     if (this.disposed) return;
@@ -194,14 +192,12 @@ export class ReadingSessionRecorder {
   }
 
   /**
-   * Records one relocation. Mirrors the legacy onLocationChange body:
-   * initialize-previous, no-op guard against the saved CFI, async
-   * previous-range snapping + atomic session update, then the synchronous
-   * previous-location advance.
+   * Records one relocation: initialize-previous, no-op guard against the
+   * saved CFI, async previous-range snapping + atomic session update, then
+   * the synchronous previous-location advance.
    *
-   * @returns false when the no-op guard skipped the event (the legacy code
-   * also skipped the section-title update in that case — the shell mirrors
-   * that on a false return).
+   * @returns false when the no-op guard skipped the event (the controller
+   * also skips the section-title update on a false return).
    */
   onRelocated(e: SessionEvent): boolean {
     if (this.disposed) return false;
@@ -214,14 +210,13 @@ export class ReadingSessionRecorder {
     // Prevent infinite loop if CFI hasn't changed (handled in store
     // usually, but double check). An open window holds a position that HAS
     // been committed but not yet written through, so it answers this instead
-    // of the store — which keeps the guard identical to the write-through
-    // behavior it replaced.
+    // of the store — which keeps the guard equivalent to write-through.
     const savedCfi = this.pendingCommit ? this.pendingCommit.currentCfi : this.deps.store.getCurrentCfi() || '';
     if (e.location.startCfi === savedCfi) return false;
 
-    // Capture everything the recording needs AT EVENT TIME (the legacy
-    // async body read all of this synchronously before its first await):
-    // previous segment, its dwell, its label, the live resolver.
+    // Capture everything the recording needs AT EVENT TIME (synchronously,
+    // before any await): previous segment, its dwell, its label, the live
+    // resolver.
     const previous = this.previous
       ? { start: this.previous.start, end: this.previous.end }
       : null;
@@ -277,7 +272,7 @@ export class ReadingSessionRecorder {
 
     const windowMs = this.deps.commitWindowMs ?? COMMIT_WINDOW_MS;
     if (windowMs <= 0) {
-      // Coalescing disabled: write through exactly as the legacy path did.
+      // Coalescing disabled: write through per commit.
       if (historyAppended) this.deps.onHistoryRecorded?.();
       this.deps.store.updateReadingSession(
         this.deps.bookId,
@@ -372,18 +367,17 @@ export class ReadingSessionRecorder {
    * Unmount panic save: drains every recording still queued or in flight
    * SYNCHRONOUSLY without snapping (raw ranges — the book may already be
    * torn down mid-unmount; the late async completion of the in-flight item
-   * is dropped by the seq guard), then writes the legacy final segment.
+   * is dropped by the seq guard), then writes the final panic segment.
    */
   flushSync(): void {
     // 1. Drain the queue (snap=false). The in-flight recording (if any)
     //    has not committed yet — commit it here; its async completion will
     //    be stale and drop. Then issue the coalescing window, so the store
-    //    write lands BEFORE the final panic segment, exactly as the
-    //    write-through commits did.
+    //    write lands BEFORE the final panic segment.
     this.drainQueue();
     this.flushWindow();
 
-    // 2. Legacy final-segment panic save (verbatim semantics).
+    // 2. Final-segment panic save.
     if (!this.previous) return;
     const now = this.deps.now ?? Date.now;
 
@@ -411,17 +405,17 @@ export class ReadingSessionRecorder {
   dispose(): void {
     // A window holds positions that ALREADY committed and have simply not
     // been written through yet — dropping them would lose the user's place,
-    // so it is issued before the recorder goes quiet. (The shell calls
+    // so it is issued before the recorder goes quiet. (The controller calls
     // flushSync first, so this is normally a no-op.)
     this.flushWindow();
     this.disposed = true;
     // Anything still queued or in flight must not write post-dispose
-    // (flushSync, called first by the shell, already drained it).
+    // (flushSync, called first by the controller, already drained it).
     this.pending = [];
     this.committedSeq = this.seqCounter;
   }
 
-  /** Does the previous segment qualify for a history entry? (verbatim) */
+  /** Does the previous segment qualify for a history entry? */
   private previousQualifies(item: QueuedRecording): boolean {
     if (!item.previous) return false;
     const isScroll = item.e.viewMode === 'scrolled';
@@ -447,7 +441,7 @@ export class ReadingSessionRecorder {
     return { range: generateCfiRange(start, end), type, label };
   }
 
-  /** The current-range entry (always appended; legacy keeps its raw label). */
+  /** The current-range entry (always appended; keeps its raw label). */
   private currentEntry(item: QueuedRecording): SessionUpdateEntry {
     const currentRange = generateCfiRange(item.e.location.startCfi, item.e.location.endCfi);
     const currentType: ReadingEventType = item.e.viewMode === 'scrolled' ? 'scroll' : 'page';
@@ -455,8 +449,8 @@ export class ReadingSessionRecorder {
   }
 
   /**
-   * ONE recording pass (§6 `recordSession({snap})`): previous range when it
-   * qualifies (sentence-snapped on the live path), then the current range.
+   * ONE recording pass: previous range when it qualifies (sentence-snapped
+   * when `opts.snap`), then the current range.
    */
   private async buildUpdates(
     item: QueuedRecording,
@@ -492,7 +486,7 @@ export class ReadingSessionRecorder {
     return { updates, historyAppended };
   }
 
-  /** The snap=false pass (flushSync drain): raw previous range, sync. */
+  /** The snap=false pass (drainQueue): raw previous range, sync. */
   private buildUpdatesSync(item: QueuedRecording): {
     updates: SessionUpdateEntry[];
     historyAppended: boolean;

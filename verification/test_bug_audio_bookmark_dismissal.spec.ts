@@ -57,8 +57,8 @@ test('Audio Bookmark Dismissal Test', async ({ page }) => {
   await expect(page.getByTestId('compass-pill-triage')).toBeVisible({ timeout: 5000 });
 
   // Click the reading content itself (container center → epub iframe). The
-  // engine forwards iframe clicks to the reader's dismiss handler. The old
-  // (10,10) corner click now lands on the left PageTurnRail, which swallows
+  // engine forwards iframe clicks to the reader's dismiss handler. A (10,10)
+  // corner click would land on the left page-turn rail, which swallows
   // the click (stopPropagation) and turns a page instead of dismissing.
   await page.getByTestId('reader-iframe-container').click();
   await expect(page.getByTestId('compass-pill-triage')).not.toBeVisible({ timeout: 5000 });

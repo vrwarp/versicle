@@ -19,11 +19,11 @@ import { runCrdtMigrationsOnDoc } from '@app/migrations';
 import { getDeviceId } from '@lib/device-id';
 
 /**
- * Per-store flip suite (phase2-fork-surgery.md §2.6, the F.1 re-run): as each
- * store flips to merge-defaults + scopedDiff, this suite re-runs the
- * fixture-hydration matrix through THAT STORE'S registry def — the per-store
- * rewrite of contract case A.5 (legacy replace-with-delete), which
- * fixtures-hydration.test.ts keeps pinned for the raw legacy options.
+ * Per-store flip suite (phase2-fork-surgery.md §2.6): re-runs the
+ * fixture-hydration matrix through EACH STORE'S registry def
+ * (merge-defaults + scopedDiff) — the per-store rewrite of contract case A.5
+ * (replace-with-delete), which fixtures-hydration.test.ts keeps pinned for the
+ * raw default options.
  *
  * Mirror stores replicate defineSyncedStore's wiring against per-fixture
  * docs (the real app stores are bound to the provider's singleton yDoc and
@@ -75,9 +75,9 @@ const prefsDefaults = {
   libraryLayout: 'grid',
   libraryFilterMode: 'all',
   librarySortOrder: 'last_read',
-  // activeContext left syncedKeys in Phase 8 §J (route state now) — the
-  // fixture docs still carry the key; the regression block below pins that
-  // the husk neither hydrates nor propagates.
+  // activeContext is not a synced key (it is route state) — the fixture
+  // docs still carry it; the regression block below pins that the husk
+  // neither hydrates nor propagates.
   forceTraditionalChinese: false,
   showPinyin: false,
   pinyinSize: 100,
@@ -85,7 +85,7 @@ const prefsDefaults = {
     en: { fontSize: 100, lineHeight: 1.5 },
     zh: { fontSize: 120, lineHeight: 1.8 },
   } as Record<string, { fontSize: number; lineHeight: number }>,
-  // Phase 7 §H (privacy D2): per-book AI consent map (additive synced key).
+  // Per-book AI consent map (additive synced key).
   aiConsent: {} as Record<string, boolean>,
 };
 interface PrefsState extends Record<string, unknown> {
@@ -177,9 +177,8 @@ describe('flip wave 3: preferences (scope rebind + merge-defaults + scopedDiff)'
       const doc = loadDoc(5);
       await runCrdtMigrationsOnDoc(doc, { createCheckpoint: async () => 1 });
 
-      // "Device B" is an old client flipping its view context — pre-P8 this
-      // propagated and flipped device A's UI too (RC-10). It must not patch
-      // device A's store anymore.
+      // "Device B" is an old client flipping its view context; that write
+      // must not patch device A's store.
       const storeA = bindWithDef<PrefsState>(doc, scopedTo(DEVICE_A), prefsCreator);
       expect('activeContext' in storeA.getState()).toBe(false);
 
@@ -289,7 +288,7 @@ describe('flip wave 4: books / library (merge-defaults + scopedDiff)', () => {
     doc.getMap('library').set('__schemaVersion', 5);
 
     const store = bindWithDef<LibState>(doc, LIBRARY_STORE_DEF, creator);
-    // The FirestoreSyncManager clean-client check, post-canary-deletion:
+    // A clean-client check (empty library) needs no fallback:
     expect(Object.keys(store.getState().books).length === 0).toBe(true);
   });
 });

@@ -48,7 +48,7 @@ export const RecoverySettingsTab: React.FC<RecoverySettingsTabProps> = ({
         setIsRestoring(true);
         setStatus("Restoring...");
         try {
-            // pauseSync (§D7 inversion): sever live cloud sync before the wipe.
+            // pauseSync: injected handle that severs live cloud sync before the wipe.
             await CheckpointService.restoreCheckpoint(inspectingCheckpoint.id, {
                 pauseSync: stopSyncConnections,
             });

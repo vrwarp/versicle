@@ -1,8 +1,7 @@
 /**
  * ZIP expansion for batch import — cancellable, with read-progress
- * (Phase 7 PR-L1; moved from `lib/batch-ingestion.ts` and given an
- * `AbortSignal`: entries are decompressed one at a time with an abort check
- * and a main-thread yield between them).
+ * (entries are decompressed one at a time with an abort check and a
+ * main-thread yield between them).
  */
 // The jszip runtime module loads lazily inside the exported helpers —
 // jszip (~96KB min) otherwise rides the eager LibraryView graph (via the
@@ -56,7 +55,7 @@ function readArchiveWithProgress(file: File, onProgress: (percent: number) => vo
  * holding every extracted EPUB of the archive in memory at once.
  */
 export interface ZipEpubEntry {
-  /** The entry's basename (nested paths are flattened, as before). */
+  /** The entry's basename (nested paths are flattened). */
   name: string;
   /** Inflate this entry into a File. Intended to be called once. */
   read(): Promise<File>;

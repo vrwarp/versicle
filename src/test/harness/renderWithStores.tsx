@@ -1,11 +1,11 @@
 /**
  * renderWithStores: render a component against the REAL Zustand stores.
  *
- * Replaces the "mock 8 store modules to render one dialog" pattern
- * (its descendant lives in src/app/settings/SettingsShell.test.tsx): instead of
- * `vi.mock`, each store is seeded through its real `setState` — including
- * action overrides (spies) — and automatically reset to its module-load
- * initial state when the test finishes.
+ * Use it instead of the "mock 8 store modules to render one dialog" pattern
+ * (see src/app/settings/SettingsShell.test.tsx for usage): each store is
+ * seeded through its real `setState` — including action overrides (spies) —
+ * and automatically reset to its module-load initial state when the test
+ * finishes.
  *
  * Yjs-backed stores share the singleton Y.Doc; resetting the store resets
  * the doc state it owns (see ./stores.ts). Tests that need a private fresh

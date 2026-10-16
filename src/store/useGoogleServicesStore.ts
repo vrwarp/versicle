@@ -2,15 +2,14 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 /**
- * Google services UI state (Phase 7 §G).
+ * Google services UI state.
  *
  * `connectedServices` is a "has connected before" HINT — it drives
  * reconnect-vs-first-connect copy only and is NEVER an authorization claim
  * (tokens are memory-only in GoogleAuthClient; after a reload the cache is
  * empty while this list still names the service). It is mirrored by the
  * GoogleAuthClient connect/disconnect hooks wired in
- * src/app/google/wireGoogle.ts; token FAILURES deliberately do not touch it
- * (the pre-Phase-7 force-disconnect-on-any-error is gone — GG-2).
+ * src/app/google/wireGoogle.ts; token FAILURES deliberately do not touch it.
  */
 interface GoogleServicesState {
     connectedServices: string[];

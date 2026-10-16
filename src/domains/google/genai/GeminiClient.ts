@@ -1,31 +1,28 @@
 /**
- * GeminiClient (Phase 7 §H) — the production GenAIClient over the Gemini
- * REST API, routed through `NetworkGateway.egress('gemini', …)`.
+ * GeminiClient — the production GenAIClient over the Gemini REST API, routed
+ * through `NetworkGateway.egress('gemini', …)`.
  *
- * Design points (each reversing a verified finding):
+ * Design points:
  *  - Config read PER CALL from the injected provider (GG-8: no mutable
- *    singleton fields — the TTS pipeline's hardcoded configure() clobber is
- *    structurally impossible).
+ *    singleton fields, so no caller can clobber the live model selection).
  *  - REST instead of the deprecated @google/generative-ai SDK (the SDK
  *    accepts no fetch injection, so it could not route through the gateway;
  *    request/response shapes are SDK-identical — D14's migration note).
- *  - Rotation keeps the 429 retry with ONE models constant and a
- *    Fisher-Yates shuffle (GG-15's biased sort dies).
+ *  - Rotation retries a 429 on the next model of ONE models constant
+ *    ({@link GENAI_ROTATION_MODELS}, iterated in order).
  *  - An OVERLOADED model (503) or a gateway timeout rotates on too, and cools
  *    that model's pool down so the next request skips it pre-network; with
- *    rotation off a 503 gets one short same-model retry (the Oct 2026 export:
- *    11 of 13 detection requests died on a head-model 503 thrown as terminal).
+ *    rotation off a 503 gets one short same-model retry.
  *  - `validate` is applied to every structured response (GG-5); failures
  *    throw GENAI_INVALID_RESPONSE.
  *  - Logs are redacted (inlineData → {byteCount, hash}) BEFORE they reach
  *    the injected sink (privacy D3).
  *  - EVERY terminal outcome is logged: a request entry is always followed by
  *    a response entry or an error entry carrying the failure's code, HTTP
- *    status and quota context (the Jul–Sep 2026 export showed 26% of
- *    detection requests with no logged outcome — non-429 HTTP errors,
- *    rotation-off 429s and pre-network refusals all used to throw silently).
- *    Response entries also carry the serving model, latency and the API's
- *    token usage so an export can be evaluated offline.
+ *    status and quota context — non-429 HTTP errors, rotation-off 429s and
+ *    pre-network refusals are never thrown silently. Response entries also
+ *    carry the serving model, latency and the API's token usage so an export
+ *    can be evaluated offline.
  */
 import { egress, retryAfterMs, type EgressFn } from '@kernel/net';
 import { msUntilNextPtDay, type QuotaGovernor } from '@kernel/quota';
@@ -70,7 +67,7 @@ const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
  *  5-6. The two stable 500-RPD lite models: the workhorses that serve ~88% of
  *       the day.
  *  7-9. Preview and deprecating models LAST. Google retires models on its own
- *       schedule, and a retired model answers 404, not 429. Rotation now treats
+ *       schedule, and a retired model answers 404, not 429. Rotation treats
  *       that as continuable (see isModelUnavailable), but keeping anything with
  *       a shutdown date below the workhorses means even a failure mode the
  *       predicate does NOT cover costs only the last 60 requests of the day
@@ -147,12 +144,13 @@ function estTokens(prompt: GenAIPrompt): number {
 const DEFAULT_COOLDOWN_MS = 30_000;
 
 /**
- * How long an OVERLOADED (503) or timed-out model sits out of rotation. On the
- * Oct 2026 export gemini-3.8-flash answered 503 for sixteen hours, and every
- * section's detection probed it first — spending one of its 20 daily requests
- * and up to 32 s (or the full 60 s timeout, with the next section queued
- * behind it) to learn the same thing again. Five minutes matches the
- * detector's own error-retry spacing; a server `Retry-After` wins when sent.
+ * How long an OVERLOADED (503) or timed-out model sits out of rotation. An
+ * overloaded model tends to stay that way, so without a cooldown every
+ * section's detection would probe it first — spending one of its daily
+ * requests and up to the full 60 s destination timeout (with the next section
+ * queued behind it) to learn the same thing again. Five minutes matches the
+ * detector's own error-retry spacing (RETRY_DELAY in ReferenceSectionDetector);
+ * a server `Retry-After` wins when sent.
  */
 export const UNAVAILABLE_COOLDOWN_MS = 5 * 60_000;
 
@@ -172,9 +170,8 @@ export interface GeminiClientDeps {
   /** Activity-log sink (entries arrive pre-redacted). */
   onLog?: GenAILogSink;
   /**
-   * The AI-API rate/spend limiter. Optional: when absent the client behaves
-   * exactly as before, with no quota accounting (the rotation tests construct
-   * it without one).
+   * The AI-API rate/spend limiter. Optional: when absent the client does no
+   * quota accounting (the rotation tests construct it without one).
    */
   governor?: GenAIQuotaGovernor;
   /** Wall clock (injected for tests). */
@@ -267,7 +264,7 @@ export class GeminiClient implements GenAIClient {
     this.log(failure.aborted ? 'debug' : 'error', method, { message, model: modelId, ...failure }, context);
   }
 
-  /** Model list per call: rotation shuffles the constant; else the config model. */
+  /** Model list per call: the rotation constant, in order; else the config model. */
   private modelsToTry(): string[] {
     const config = this.deps.getConfig();
     return config.rotationEnabled

@@ -65,24 +65,6 @@
         "tailwindcss",
         "tw-animate-css"
       ]
-    },
-    // Vendored forks (packages/*/PROVENANCE.md): src/ stays diff-minimal
-    // against upstream by design — unused upstream exports are NOT pruned
-    // (same policy as the eslint ignore block). The first-party contract
-    // suites in test/contract ARE analyzed.
-    "packages/y-cinder": {
-      // src/** ignored as vendored fork source (this also makes the
-      // @firebase/* unlisted-dependency findings moot: upstream y-fire
-      // imports the scoped subpackages of the `firebase` umbrella peer).
-      // src/merge-worker.ts is NOT an orphan — it is bundled into
-      // generated/merge-worker-blob.ts by the fork's scripts/bundle-worker.js
-      // (see src/merge-utils.ts header) — but ignored with the rest of src.
-      "ignore": ["src/**", "test/unit/**", "test/utils/**"]
-    },
-    // (y-idb and zustand-middleware-yjs need no ignores: their vendored
-    // src/ resolves through package.json exports and knip's hint engine
-    // confirmed nothing is reported there.)
-    "packages/y-idb": {},
-    "packages/zustand-middleware-yjs": {}
+    }
   }
 }

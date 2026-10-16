@@ -32,8 +32,8 @@ describe('TTSCache', () => {
     });
 
     it('golden key: byte-identical to the pre-5a (text|voiceId|pitch=1) format', async () => {
-      // Phase 5a deleted the vestigial always-defaulted `pitch` parameter. The hash
-      // input keeps the legacy `|1` slot so EXISTING cache entries still hit. This is
+      // The vestigial always-defaulted `pitch` parameter is gone from the signature.
+      // The hash input keeps its `|1` slot so EXISTING cache entries still hit. This is
       // the precomputed SHA-256 of 'Hello|voice1|1' — if this assertion fails, every
       // user's audio cache silently misses. Do not "clean up" the trailing slot.
       const key = await cache.generateKey('Hello', 'voice1');

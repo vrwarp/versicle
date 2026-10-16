@@ -1,12 +1,11 @@
 /**
- * Row-schema round-trip tests (Phase 3 D4, exit criteria of PR P3-5).
+ * Row-schema round-trip tests.
  *
  * The schemas are loose envelopes with strict required keys: a row written
  * by ANY past build must parse, parse output must be deep-equal to the
  * input (passthrough — validation never mutates persisted data), and rows
  * missing identity/required fields must fail. This is the bit-compatibility
- * proof for the format-free rows/ PR: nothing is rewritten, reshaped, or
- * stripped.
+ * proof: nothing is rewritten, reshaped, or stripped.
  */
 import { describe, it, expect } from 'vitest';
 import {

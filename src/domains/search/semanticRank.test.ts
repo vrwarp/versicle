@@ -1,8 +1,8 @@
 /**
- * semanticRank stamp-mismatch suite (Increment F §8.2): the READ path degrades
+ * semanticRank stamp-mismatch suite (design §8.2): the READ path degrades
  * the whole book to regex-only ([]) when the embedded row's {model, dims, quant}
  * no longer matches the live config — vectors are NEVER converted (incompatible
- * spaces). The pre-existing extractionVersion guard is covered alongside, and a
+ * spaces). The extractionVersion guard is covered alongside, and a
  * MATCHING stamp proves the guard is the cause (the query embed still fires).
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -17,8 +17,8 @@ const DIMS = 4;
 /**
  * A one-section embedded row view (typed-array views, as the repo hands over).
  * `chunkOffsets` optionally stamps the chunk with PERSISTED charStart/charEnd
- * (cleanup #10b — new rows); omitted → a LEGACY row that falls back to
- * re-segmentation on the read path.
+ * (rows the indexer wrote with offsets); omitted → a LEGACY row that falls back
+ * to re-segmentation on the read path.
  */
 function embeddedRow(
   stamp: Pick<EmbeddedRowView, 'model' | 'dims' | 'quant'>,

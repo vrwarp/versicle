@@ -1,7 +1,6 @@
 /**
- * Typed Google-auth errors (Phase 7 §G; C10 codes GOOGLE_*). These replace
- * the `error.message.includes('is not connected')` substring taxonomy that
- * was scattered across the Drive scanner and boot tasks (GG-7).
+ * Typed Google-auth errors (C10 codes GOOGLE_*), so callers branch on the
+ * error class / `code` instead of matching message substrings (GG-7).
  */
 import { AppError } from '~types/errors';
 

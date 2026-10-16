@@ -3,14 +3,13 @@
  * inside the same LibraryView shell as My Library / Notes / Search (the header
  * dropdown switches between them).
  *
- * This is the promoted form of the old DriveImportDialog: same index-backed
- * instant search, same manual re-scan, same pre-import preview sheet — but with
- * the room a page affords. Two things it gains from the page treatment:
+ * It offers index-backed instant search, a manual re-scan and a pre-import
+ * preview sheet, with the room a page affords. Two things the page treatment
+ * brings:
  *
- *  - **Infinite scroll.** The dialog capped the unsearched list at the first 50
- *    entries; here the whole index is reachable, paged in as the sentinel
- *    scrolls into range so a multi-thousand-file Drive folder never mounts at
- *    once.
+ *  - **Infinite scroll.** The whole index is reachable, paged in as the
+ *    sentinel scrolls into range so a multi-thousand-file Drive folder never
+ *    mounts at once.
  *  - **The library's own grid/list views.** Cover art and verified
  *    title/author come from the Drive preview cache (R4/R7), which is what
  *    makes a cover grid worth rendering at all — rows without a cached preview
@@ -23,8 +22,7 @@
  * shelf raises the library's own ReplaceBookDialog and, on confirmation,
  * re-imports with `{ overwrite: true }` (the orchestrator's Replace path, which
  * keeps the existing book's progress, notes and tags). Reporting that case as
- * "Failed to import" — which is what the retired dialog and this view both did
- * — named no cause and left the user no way through.
+ * "Failed to import" would name no cause and leave the user no way through.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';

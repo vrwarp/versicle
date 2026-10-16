@@ -22,14 +22,11 @@ export interface WorkspaceMetadata {
  * Migration status state machine.
  * Stored in localStorage to survive page reloads.
  *
- * `STAGED` (Phase 4, phase4-sync-strangler.md §D4) is the commit point of
- * the crash-resumable staged workspace switch: the verified remote blob is
- * durably in `versicle-yjs-staging` and the boot interceptor's STAGED arm
- * applies main ← staging (idempotent — a crash anywhere in apply re-enters
- * the arm) before transitioning to `AWAITING_CONFIRMATION`. The addition is
- * purely additive: `AWAITING_CONFIRMATION`/`RESTORING_BACKUP` semantics are
- * untouched, so an old client mid-switch across an app update still
- * resolves.
+ * `STAGED` is the commit point of the crash-resumable staged workspace
+ * switch: the verified remote blob is durably in `versicle-yjs-staging` and
+ * the boot interceptor's STAGED arm applies main ← staging (idempotent — a
+ * crash anywhere in apply re-enters the arm) before transitioning to
+ * `AWAITING_CONFIRMATION`.
  */
 type MigrationStatus =
     | 'STAGED'
@@ -45,13 +42,13 @@ export interface SyncMigrationState {
     targetWorkspaceId?: string;
     backupCheckpointId?: number;
     /**
-     * The workspace that was active when the switch started (additive,
-     * Phase 4): a rollback (`RESTORING_BACKUP`) restores the pre-switch
-     * Yjs data, so the boot interceptor also reverts `activeWorkspaceId`
-     * to this — without it the legacy modal-rollback left the id pointing
-     * at the TARGET workspace while the data was the previous workspace's
-     * (old-data-into-new-workspace bleed on the next connect). States
-     * written by pre-P4-5 clients lack the field and keep legacy behavior.
+     * The workspace that was active when the switch started: a rollback
+     * (`RESTORING_BACKUP`) restores the pre-switch Yjs data, so the boot
+     * interceptor also reverts `activeWorkspaceId` to this — without it the id
+     * would keep pointing at the TARGET workspace while the data is the
+     * previous workspace's (old data bleeding into the new workspace on the
+     * next connect). Optional: when absent (states persisted by older
+     * clients), the rollback leaves `activeWorkspaceId` untouched.
      */
     previousWorkspaceId?: string;
 }

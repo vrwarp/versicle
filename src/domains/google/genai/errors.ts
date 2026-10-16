@@ -1,5 +1,5 @@
 /**
- * Typed GenAI errors (Phase 7 §H; C10 codes GENAI_*).
+ * Typed GenAI errors (C10 codes GENAI_*).
  */
 import { AppError, NetRateLimitedError } from '~types/errors';
 
@@ -84,11 +84,8 @@ export function isOverloaded(error: unknown): boolean {
  * A transient "no answer from this model" failure: it is {@link isOverloaded},
  * or the gateway's per-destination timeout fired before a reply arrived
  * (`NET_TIMEOUT`, branched on the C10 code because the error may have been
- * revived across a worker boundary without its subclass). The Oct 2026
- * activity-log export showed 11 of 13 reference-detection requests dying on a
- * 503 from the head rotation model and one on the 60 s timeout — each thrown
- * as terminal while eight untried models sat below it, and each re-sent to the
- * same overloaded model five minutes later, for sixteen hours.
+ * revived across a worker boundary without its subclass). Treating either as
+ * terminal would strand the untried models further down the rotation chain.
  */
 export function isTransientlyUnavailable(error: unknown): boolean {
   if (isOverloaded(error)) return true;
@@ -132,8 +129,7 @@ export function isRetryableForRotation(error: unknown): boolean {
  * gateway refusals (NET_RATE_LIMITED, NET_CONSENT_REQUIRED, NET_OFFLINE),
  * caller aborts, and plain network errors alike. It is what the activity log
  * records for a TERMINAL failure, so an exported log can say WHY a request
- * died instead of leaving a request entry with no outcome at all (the
- * Jul–Sep 2026 export had 74 such entries, 26% of all detection attempts).
+ * died instead of leaving a request entry with no outcome at all.
  */
 export interface GenAIFailureDescription {
   error: string;

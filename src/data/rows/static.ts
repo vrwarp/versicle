@@ -1,7 +1,6 @@
 /**
  * Row schemas for the STATIC domain stores (`static_manifests`,
- * `static_resources`, `static_structure`) — Phase 3, D4 in
- * plan/overhaul/prep/phase3-storage-gateway.md.
+ * `static_resources`, `static_structure`).
  *
  * zod is the single source of truth for the PERSISTED shapes; the `*Row`
  * types are the row types the repos speak. They are written as plain type
@@ -11,9 +10,9 @@
  * Compile-time drift guards at the bottom keep schema ⇄ row type ⇄ domain
  * interface from drifting.
  *
- * Posture (D4 rules):
+ * Posture:
  * - `z.looseObject` at the envelope: unknown fields written by other builds
- *   pass through untouched (forward compatibility, same stance as the P0
+ *   pass through untouched (forward compatibility, same stance as the
  *   backup envelope).
  * - Strict required keys: a row missing its identity/required fields fails.
  * - Binary fields via `z.custom`: WebKit's IDB structured clone cannot store
@@ -21,8 +20,8 @@
  *   written by pre-normalization builds may still hold a Blob. BOTH are
  *   valid persisted states (which is why these schemas accept the union even
  *   where the `~types` interface still says `Blob`).
- * - Validation runs at untrusted ingress only (backup restore, the android
- *   payload read) — never on the hot read/write path.
+ * - Validation runs at untrusted ingress (backup restore) and on the
+ *   Drive-preview cache read — never on the other hot read/write paths.
  */
 import { z } from 'zod';
 import type {
@@ -63,7 +62,7 @@ export const staticManifestRowSchema = z.looseObject({
   description: z.string().optional(),
   isbn: z.string().optional(),
   fileHash: z.string(),
-  /** SHA-256 content identity (Phase 7); absent on pre-P7 manifests. */
+  /** SHA-256 content identity; absent on manifests written before it existed. */
   contentHash: z.string().optional(),
   fileSize: z.number(),
   totalChars: z.number(),

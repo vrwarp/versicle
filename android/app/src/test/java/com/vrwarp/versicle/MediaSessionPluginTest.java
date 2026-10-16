@@ -71,9 +71,6 @@ public class MediaSessionPluginTest {
         
         // Internal service binding in the plugin is difficult to mock fully in Robolectric test integration
         // checking that the plugin instance is valid is sufficient for now.
-        // plugin.setMetadata(call);
-        
-        // verify(call).resolve();
     }
 
     @Test
@@ -87,8 +84,5 @@ public class MediaSessionPluginTest {
         data.put("playbackState", "playing");
         when(call.getData()).thenReturn(data);
         when(call.getString("playbackState")).thenReturn("playing");
-
-        // plugin.setPlaybackState(call);
-        // verify(call).resolve();
     }
 }

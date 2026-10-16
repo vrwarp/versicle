@@ -35,8 +35,8 @@ describe('useSyncStore', () => {
     });
 
     /**
-     * F6b: wireSyncEvents calls this on EVERY committed save, so an unfiltered
-     * stamp meant a blocking JSON.stringify + localStorage.setItem per save.
+     * wireSyncEvents calls this on EVERY committed save, so an unfiltered
+     * stamp would mean a blocking JSON.stringify + localStorage.setItem per save.
      * The only reader (SyncPulseIndicator's tooltip) formats it as a short
      * time, so a one-second coalescing window is invisible.
      */

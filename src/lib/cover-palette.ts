@@ -38,7 +38,7 @@ function distRGBSq(c1: Color, c2: Color): number {
 }
 
 function extractRegionColor(pixels: Pixel[], anchor: Point): Color {
-    // 1. Pre-calculate weights (1.5f exponent)
+    // 1. Pre-calculate weights (1.5 exponent)
     for (const p of pixels) {
         const dist = Math.sqrt(Math.pow(p.x - anchor.x, 2) + Math.pow(p.y - anchor.y, 2));
         p.weight = 1.0 / (1.0 + Math.pow(dist, 1.5));
@@ -121,12 +121,8 @@ export async function extractCoverPalette(blob: Blob): Promise<{ palette: number
         ctx.drawImage(bitmap, 0, 0, size, size);
         const imgData = ctx.getImageData(0, 0, size, size).data;
 
-        // Define regions (Indices in 4x4 block grid, each block is 4px)
-        // 16x16 px total.
-        // We can just iterate pixels directly.
-        // Regions:
-        // TL: Blocks (0,0), (1,0), (0,1) -> rects: (0,0,8,4), (0,4,4,4)
-        // Or simpler: Assign each pixel (x,y) to list of regions it belongs to.
+        // Define regions over a 4x4 block grid (each block is 4px; 16x16 px
+        // total). Each pixel (x,y) is assigned to every region it belongs to.
 
         const regions: { pixels: Pixel[], anchor: Point }[] = [
             { pixels: [], anchor: { x: 0, y: 0 } },       // TL (Index 0)

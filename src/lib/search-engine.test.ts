@@ -2,10 +2,8 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { SearchEngine } from './search-engine';
 
 /**
- * The legacy `search()` shape ({href, excerpt}, silent 50-cap) died with the
- * reader-side SearchSession adoption; these suites scan through
- * `searchDetailed` — the per-occurrence results carry the same href/excerpt
- * fields the historical assertions pin.
+ * Scans through `searchDetailed`; the per-occurrence results carry the
+ * href/excerpt fields most assertions below pin.
  */
 const search = (engine: SearchEngine, bookId: string, query: string) =>
     engine.searchDetailed(bookId, query).results;
@@ -158,12 +156,6 @@ describe('SearchEngine', () => {
         expect(results[1].href).toBe('chap2.html');
     });
 
-    // The old "zero-width RegExp match" test was deleted in the Phase 7
-    // search consolidation (PR-0c): the engine scans with String#indexOf, so
-    // the test mocked a global the engine never touches and asserted nothing
-    // (`toBeDefined` on an array) — a vacuous pin (search.md Debt list;
-    // phase7-library-google.md PR-0c).
-
     describe('regression: edge placement and unicode (absorbed from search-engine.comprehensive.test.ts)', () => {
         it('handles bracketed/braced literals as plain text', () => {
             const text = 'This has a (parenthesis) and a [bracket] and a {brace}.';
@@ -189,8 +181,8 @@ describe('SearchEngine', () => {
         });
 
         it('finds matches after length-changing lowercase mappings when context absorbs the drift', () => {
-            // "İ" (U+0130) lowercases to "i̇" (2 code units) — small drifts stay
-            // inside the ±40-char excerpt window.
+            // "İ" (U+0130) lowercases to "i̇" (2 code units); matching runs against
+            // the original string, so the length change cannot shift the match.
             engine.indexBook('unicode', [{ id: '1', href: 'unicode.html', text: 'AİB matching text' }]);
             const results = search(engine, 'unicode', 'matching');
             expect(results).toHaveLength(1);
@@ -200,11 +192,10 @@ describe('SearchEngine', () => {
 
     describe('regression: case-fold excerpt misalignment (pinned broken at PR-0c; FIXED by PR-S2)', () => {
         it('keeps the match inside the excerpt even when length-changing characters precede it', () => {
-            // 45 × "İ" lowercase to 90 code units. The old lowercase-then-slice
-            // scan found the match at the LOWERCASED index (+45 drift) and
-            // sliced the original string there, losing the match from its own
-            // excerpt — pinned as documented-current-behavior at the entry
-            // gate. PR-S2's original-string matching flips this deliberately.
+            // 45 × "İ" lowercase to 90 code units. A lowercase-then-slice scan
+            // would find the match at the LOWERCASED index (+45 drift) and slice
+            // the original string there, losing the match from its own excerpt.
+            // Matching against the original string keeps it.
             const text = 'İ'.repeat(45) + 'target';
             engine.indexBook('turkish', [{ id: '1', href: 'i.html', text }]);
 
@@ -424,9 +415,8 @@ describe('SearchEngine', () => {
             const duration = performance.now() - start;
 
             expect(results).toHaveLength(0);
-            // Generous CI budget — the old file logged the number and asserted
-            // nothing. An indexOf scan of 2M chars sits well under 100ms; a
-            // 3s breach means the scan went accidentally quadratic.
+            // Generous CI budget: a literal scan of 2M chars sits well under
+            // 100ms; a 3s breach means the scan went accidentally quadratic.
             expect(duration).toBeLessThan(3000);
         });
     });

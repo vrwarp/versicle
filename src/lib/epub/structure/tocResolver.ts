@@ -4,7 +4,7 @@
  *
  * epub.js stores nav hrefs verbatim and only ever resolves against the OPF's
  * directory, so a nav document in a subfolder (`Text/toc.xhtml` linking
- * `../Text/ch1.xhtml`) produced a TOC whose every click failed. Here each
+ * `../Text/ch1.xhtml`) would yield a TOC whose every click fails. Here each
  * href is tried against a ladder of interpretations and rewritten to the
  * exact spine href (+ fragment) epub.js expects; entries that cannot land in
  * the spine are kept and flagged `unresolved` so the UI can grey them out.

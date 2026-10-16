@@ -1,16 +1,12 @@
 /**
- * Import-flow characterization (Phase 7; entry gate PR-0a → cutover PR-L2).
+ * Import-flow characterization: the single-import, batch, restore,
+ * ghost-adoption and reprocess flows exercised through the ImportOrchestrator
+ * with the persistence seam injected. The batch path runs ghost matching and
+ * registers reading-list entries just like the single-import path.
  *
- * Written at the phase entry gate against the legacy `useLibraryStore`
- * workflows; now exercises the SAME flows through the ImportOrchestrator
- * with the persistence seam injected. Two assertions that pinned P0-era
- * GAPS flipped DELIBERATELY in the cutover commit (marked inline): the
- * batch path now runs ghost matching and registers reading-list entries.
- *
- * Absorbs (ledger rows 10–11): BookImportService.test.ts (restore
- * fingerprint verification → the acceptance cases below; the id-rewrite
- * assertions live in import/persist.test.ts) and batch-ingestion.test.ts
- * (per-file accounting; ZIP expansion pins live here + import/zip).
+ * Also pins restore fingerprint verification (the acceptance cases below),
+ * per-file batch accounting and ZIP expansion (here + import/zip.test.ts);
+ * the id-rewrite assertions live in import/persist.test.ts.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import JSZip from 'jszip';
@@ -120,7 +116,7 @@ describe('import flows characterization', () => {
         title: 'Title of test.epub',
         percentage: 0,
         status: 'to-read',
-        // Phase 7 §D: the FK is written at registration time.
+        // The FK is written at registration time.
         bookId: 'id-test_epub',
       });
 
@@ -279,8 +275,7 @@ describe('import flows characterization', () => {
       expect(useBookStore.getState().books['id-a_epub']?.sourceFilename).toBe('a.epub');
       expect(useBookStore.getState().books['id-b_epub']?.sourceFilename).toBe('b.epub');
 
-      // FLIPPED P0 PIN (entry gate pinned "no reading-list entries on the
-      // batch path"; PR-L2 closes the gap deliberately — phase7 doc §B):
+      // The batch path registers reading-list entries (with the bookId FK) too:
       expect(useReadingListStore.getState().entries['a.epub']).toMatchObject({ bookId: 'id-a_epub' });
       expect(useReadingListStore.getState().entries['b.epub']).toMatchObject({ bookId: 'id-b_epub' });
       expect(useLibraryStore.getState().isImporting).toBe(false);
@@ -381,7 +376,7 @@ describe('import flows characterization', () => {
           bookId: 'b1',
           title: 'T',
           author: 'A',
-          fileHash: storedFileHash, // pre-P7 manifest: no contentHash
+          fileHash: storedFileHash, // legacy manifest: no contentHash
           fileSize: 1,
           totalChars: 1,
           schemaVersion: 3,
@@ -479,7 +474,7 @@ describe('import flows characterization', () => {
   });
 
   describe('ghost restore from cloud (ContentMissing -> Drive)', () => {
-    // The ghost the user sees in the screenshot: synced inventory metadata,
+    // The ghost the user sees in ContentMissingDialog: synced inventory metadata,
     // NO local content (=> no static metadata). Its sourceFilename is the
     // ORIGINAL import name, which differs from the Drive filename -- the dialog
     // surfaced the cloud match via fuzzy title-containment, not an exact name.
@@ -509,8 +504,8 @@ describe('import flows characterization', () => {
       );
       seedGhost();
 
-      // The fix downloads the blob then calls restore(book.id, file) -- the
-      // same bookId-targeted path "Select File" already uses.
+      // ContentMissingDialog downloads the blob then calls restore(book.id, file)
+      // -- the same bookId-targeted path "Select File" uses.
       await orchestrator.restore('ghost-1', driveFile());
 
       // Exactly one inventory entry: the binary attached to the existing ghost.
@@ -527,10 +522,10 @@ describe('import flows characterization', () => {
       const { orchestrator } = makeOrchestrator({}, { meta: cloudMeta });
       seedGhost();
 
-      // What ContentMissingDialog used to do: hand the downloaded File to the
-      // generic importer with onDuplicate:'replace' (no bookId). It re-discovers
-      // the target by filename (!= sourceFilename => miss) then by exact
-      // title+author (subtitle differs => miss), so it imports a NEW book.
+      // Handing the downloaded File to the generic importer with
+      // onDuplicate:'replace' (no bookId) re-discovers the target by filename
+      // (!= sourceFilename => miss) then by exact title+author (subtitle
+      // differs => miss), so it imports a NEW book.
       const result = await orchestrator.importFile(driveFile(), { onDuplicate: 'replace' });
 
       expect(result.status).toBe('imported'); // a brand-new book, not 'replaced'

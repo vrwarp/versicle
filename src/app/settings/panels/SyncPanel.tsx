@@ -1,8 +1,7 @@
 /**
- * Sync & Cloud settings panel (Phase 8 §B): self-contained wiring for the
- * presentational SyncSettingsTab. Handlers (device rename self-healing,
- * Firebase sign-in/out, config clear) moved verbatim from the deleted
- * GlobalSettingsDialog.
+ * Sync & Cloud settings panel: self-contained wiring for the presentational
+ * SyncSettingsTab. Handlers: device rename self-healing, Firebase
+ * sign-in/out, config clear.
  */
 import React, { useState } from 'react';
 import { useSyncStore } from '@store/useSyncStore';
@@ -63,7 +62,8 @@ const SyncPanel: React.FC = () => {
             fontSize: prefs.fontSize,
             ttsVoiceURI: activeProfile?.voiceId ?? null,
             ttsRate: activeProfile?.rate ?? 1.0,
-            // Profile pitch died in the 5b settings split.
+            // TTS profiles no longer carry a pitch (nothing applies it); the
+            // DeviceProfile field is a fixed value.
             ttsPitch: 1.0
           };
           useDeviceStore.getState().registerCurrentDevice(currentDeviceId, profile, name);

@@ -1,14 +1,16 @@
 /**
- * artifactSweeper suite (Artifact Lane Phase D cloud TTL/quota GC): drives the
- * PURE runArtifactSweep core with injected fakes.
+ * artifactSweeper suite (cloud TTL/quota GC): drives the PURE
+ * runArtifactSweep core with injected fakes.
  *
- * Pins (see GUARDRAILS):
+ * Pins (see plan/shared-ai-cache-design.md §2.7):
  *  - invokes sweepArtifacts with the configured ttlMs/now/budget;
  *  - a SILENT no-op when getBackend() returns null (no backend → no throw);
  *  - a thrown sweepArtifacts is best-effort (logged + swallowed, no throw).
  *
- * Policy is driven entirely against the mock; the real cloud delete/sweep
- * round-trip stays CI-PENDING (syncBackendContract.emulator.test.ts).
+ * Policy is driven entirely against fakes; the real cloud delete/sweep
+ * round-trip is covered by the emulator-gated suite
+ * (src/lib/sync/syncBackendContract.emulator.test.ts), which auto-skips
+ * without emulators.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {

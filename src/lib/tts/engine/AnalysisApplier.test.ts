@@ -1,11 +1,9 @@
 /**
- * AnalysisApplier unit suite (Phase 5b decomposition) — fake-driven, ZERO
- * vi.mock. Carries the named regression block for the deleted
- * AudioPlayerService_ReactiveSubscription.test.ts (absorption ledger row 7):
- * the reactive contentAnalysis subscription applies masks/adaptations on
- * success rows for the ACTIVE section only, deduplicated on the analysis
- * timestamp; parity P14/P15/P16 pin the same behavior end-to-end on both
- * transports.
+ * AnalysisApplier unit suite — fake-driven, ZERO vi.mock. The regression
+ * block pins the reactive contentAnalysis subscription: it applies
+ * masks/adaptations on success rows for the ACTIVE section only,
+ * deduplicated on the analysis timestamp; parity P14/P15/P16 pin the same
+ * behavior end-to-end on both transports.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AnalysisApplier } from './AnalysisApplier';

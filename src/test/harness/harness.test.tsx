@@ -77,7 +77,7 @@ describe('captureToasts', () => {
         duration: 5000,
       });
       expect(capture.toasts[2]?.key).toBe('sync.cleanSync.applied');
-      // the real store still received the calls (queued, Phase 8 §D)
+      // the real store still received the calls (queued)
       expect(useToastStore.getState().toasts.map((t) => t.message)).toEqual([
         'first',
         'second',

@@ -1,13 +1,12 @@
 /**
- * PR-L1 exit pins for the unified extractor (phase7-library-google.md §A):
+ * Pins for the unified extractor:
  *  - depth:'metadata' short-circuits before the offscreen render;
  *  - preamble reuse means the ghost probe's compression/palette work is
  *    never repeated by the full pass (call-count spies);
  *  - `signal` aborts as CancellationError;
  *  - searchText/inventory are extractor outputs (perceptualPalette +
- *    language restored to the inventory item, D4).
- * Behavior parity of the legacy delegates stays pinned by
- * `src/lib/ingestion.test.ts` (re-pointed, not weakened).
+ *    language carried on the inventory item).
+ * Further extraction behavior is pinned by `src/lib/ingestion.test.ts`.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import imageCompression from 'browser-image-compression';
@@ -141,8 +140,8 @@ describe('extractBook', () => {
           href: 'chapter1.html',
           title: 'Mock Chapter 1',
           text: 'Chapter Content.',
-          // sectionTextHash is stamped at import (Increment C §3): cheapHash of
-          // the UTF-8 bytes of the section text.
+          // sectionTextHash is stamped at import: cheapHash of the UTF-8 bytes
+          // of the section text.
           sectionTextHash: cheapHash(new TextEncoder().encode('Chapter Content.').buffer),
         },
       ],
@@ -176,7 +175,7 @@ describe('regression: nav doc in subfolder + undeclared cover', () => {
   /**
    * The user-reported book (InDesign → Sigil export) had its nav in `Text/`
    * with `../Text/` hrefs and no cover markers: every TOC click failed and
-   * the library showed the "Aa" placeholder. The preamble now reads the
+   * the library showed the "Aa" placeholder. The preamble reads the
    * package through epub.js's own archive and resolves both.
    */
   const fixture = MALFORMED_EPUB_FIXTURES.find((f) => f.name === 'nav-subfolder-undeclared-cover')!;

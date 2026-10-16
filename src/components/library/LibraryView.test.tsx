@@ -51,7 +51,7 @@ vi.mock('@store/useToastStore', () => ({
     useToastStore: vi.fn(),
 }));
 
-// Phase 7: workflows moved off the store — mock the shared controller.
+// Import/restore/offload workflows live on the shared controller — mock it.
 const { mockImportFile } = vi.hoisted(() => ({
     mockImportFile: vi.fn().mockResolvedValue({ status: 'imported', bookId: 'x' }),
 }));
@@ -338,10 +338,10 @@ describe('LibraryView', () => {
 });
 
 /**
- * F4: the grid/list element arrays and the filter+sort pass are consumed ONLY
- * under `context === 'library'`, but used to be computed for /notes, /search
- * and /drive as well — an N-element BookCard tree plus an O(N log N) collator
- * sort allocated and thrown away on every `books` identity change.
+ * The grid/list element arrays and the filter+sort pass are consumed ONLY
+ * under `context === 'library'`; computing them for /notes, /search and
+ * /drive would allocate an N-element BookCard tree plus an O(N log N)
+ * collator sort and throw it away on every `books` identity change.
  *
  * The probe is the real store value both per-book passes touch: the filter
  * reads `staticMetadata[id]` once per book (under the "On Device" filter) and

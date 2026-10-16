@@ -3,26 +3,25 @@
  *  ONE-TIME READING-LIST `bookId` LINKER — CRDT MIGRATION v8
  * ════════════════════════════════════════════════════════════════════════
  *
- * Phase 7 §D (phase7-library-google.md): `ReadingListEntry.bookId` is the FK
- * to the library inventory, written at registration time for every NEW
- * entry since the ImportOrchestrator cutover. EXISTING entries are linked by
- * this one-time doc transform: exact `sourceFilename` join first, then the
- * `generateMatchKey` fuzzy join (entity-resolution demoted from render-time
- * joiner to one-time linker).
+ * `ReadingListEntry.bookId` is the FK to the library inventory, written at
+ * registration time for every new entry (ImportOrchestrator). EXISTING
+ * entries are linked by this one-time doc transform: exact `sourceFilename`
+ * join first, then the `generateMatchKey` fuzzy join (entity-resolution is a
+ * one-time linker here, not a render-time joiner).
  *
- * Registered as `{ from: 7, to: 8 }` in src/app/migrations.ts — the rule-4
- * post-merge step behind the P6 chain's v7. The version bump is what makes
- * the FK safe: pre-v8 clients rebuild whole entry objects on edit
- * (useReadingListStore.ts addEntry/upsertEntry spread fresh literals) and
- * would silently DROP the unknown `bookId` field, so the standing
- * quarantine machinery (middleware pill + the P4 doc-level layers) locks
- * them out of a v8 workspace. Coverage: the F.3 fixture matrix (all eras →
- * v8, incl. the captured era-7 doc) + the F.2 v7-stack-vs-v8-doc
- * two-client case in src/store/__tests__/crdt-contract/migrations.test.ts.
- * Renumbering note: husk-clearing + `library.__schemaVersion` dual-write
- * retirement + activeContext husk pruning is v9 (P9).
+ * Registered as `{ from: 7, to: 8 }` in src/app/migrations.ts. The version
+ * bump is what makes the FK safe: pre-v8 clients rebuild whole entry objects
+ * on edit (useReadingListStore.ts addEntry/upsertEntry spread fresh literals)
+ * and would silently DROP the unknown `bookId` field, so the standing
+ * quarantine machinery (middleware pill + the doc-level layers) locks them
+ * out of a v8 workspace. Coverage: the F.3 fixture matrix (all eras, incl.
+ * the captured era-7 doc) + the F.2 v7-stack-vs-v8-doc two-client case in
+ * src/store/__tests__/crdt-contract/migrations.test.ts.
+ * Husk-clearing + `library.__schemaVersion` dual-write retirement +
+ * activeContext husk pruning is the separate v8 → v9 step
+ * (clearHusksAndRetireDualWrite in src/app/migrations.ts).
  *
- * Transform discipline (the F.3 pattern from the v6 work): deterministic
+ * Transform discipline (the F.3 pattern): deterministic
  * (sorted iteration), idempotent (copy-if-absent), additive (no destructive
  * op) — hence LWW-safe under concurrent migration by multiple clients.
  */
@@ -51,8 +50,7 @@ const str = (value: unknown): string => {
 export function linkReadingListEntries(doc: Y.Doc): void {
   const entriesRoot = doc.getMap('reading-list').get('entries');
   // The inventory binds to Y.Map 'library', key 'books' (useBookStore
-  // LIBRARY_STORE_DEF) — pinned by the F.3 captured-fixture matrix, which
-  // caught this transform's original 'books'-map read as a latent no-op.
+  // LIBRARY_STORE_DEF) — pinned by the F.3 captured-fixture matrix.
   const booksRoot = doc.getMap('library').get('books');
   if (!(entriesRoot instanceof Y.Map) || !(booksRoot instanceof Y.Map)) return;
 

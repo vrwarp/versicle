@@ -1,13 +1,13 @@
 /**
- * S.3 + apply primitives — YjsSnapshotService contract
- * (plan/overhaul/prep/phase3-storage-gateway.md §Test plan "S", PR P3-11).
+ * YjsSnapshotService contract.
  *
  * The end-to-end backup round-trip (S.1) lives in
  * src/lib/BackupService.roundtrip.test.ts and the checkpoint ordering pins
- * (S.2) in src/lib/sync/CheckpointService.test.ts — this suite covers the
- * primitives in isolation: capture/apply round-trip through fake-indexeddb,
- * validateSnapshot's reject set, durability of applySnapshot's resolution,
- * and that the write goes through the exclusive IDB write gate.
+ * (S.2) in src/domains/sync/checkpoints/CheckpointService.test.ts — this
+ * suite covers the primitives in isolation: capture/apply round-trip through
+ * fake-indexeddb, validateSnapshot's reject set (S.3), durability of
+ * applySnapshot's resolution, and that the write goes through the exclusive
+ * IDB write gate.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import * as Y from 'yjs';

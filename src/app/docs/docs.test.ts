@@ -1,5 +1,5 @@
 /**
- * The generated-docs drift gate (Phase 9 docs item; master plan §4 rule 10).
+ * The generated-docs drift gate (master plan §4 rule 10).
  *
  * Two jobs:
  *  1. COMPLETENESS — the authored maps in registryDocs.ts must match the

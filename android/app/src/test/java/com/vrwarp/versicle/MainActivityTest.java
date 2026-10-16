@@ -54,7 +54,7 @@ public class MainActivityTest {
 
         // Fix for MediaSessionService binding in Robolectric
         // The MediaSessionPlugin attempts to bind to MediaSessionService on load because
-        // foregroundService is set to "always" in capacitor.config.json.
+        // foregroundService is set to "always" in capacitor.config.ts.
         // We need to provide a binder for Robolectric to return.
 
         // Use Robolectric to build the service so it has a valid Context attached

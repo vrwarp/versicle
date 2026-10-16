@@ -8,8 +8,8 @@ import { drain, replicate } from './helpers';
  * Fork contract suite — merge-over-declared-defaults hydration
  * (phase2-fork-surgery.md §2.2, §3 cases C.1–C.8). The fix for finding D2:
  * with `hydration: 'merge-defaults'`, a top-level inbound DELETE is
- * suppressed iff the key is one of the store's declared defaults. Default
- * option value ('replace') stays the legacy replace-with-delete behavior
+ * suppressed iff the key is one of the store's declared defaults. The
+ * default option value ('replace') is the replace-with-delete behavior
  * pinned by contract case A.5 in hydration.test.ts.
  */
 
@@ -37,7 +37,7 @@ const creator = (set: (fn: (s: LibState) => Partial<LibState>) => void): LibStat
 /**
  * A v4-era doc: `books` present, NO `fontProfiles` (the exact shape that made
  * the v4→v5 backfill migration necessary). Built through a v4-era-shaped
- * store (plain strings, the post-fb96dd97 encoding).
+ * store (plain strings, the `disableYText` encoding).
  */
 const v4StyleDoc = async (
   books: Record<string, { title: string }> = { b1: { title: 'Moby Dick' } },
@@ -184,7 +184,7 @@ describe('contract C.4 — the fontProfiles scenario end-to-end', () => {
       b2: { title: '紅樓夢' },
     });
     // …and the newly-declared default survived — the class of wipe the
-    // v4→v5 migration (yjs-provider.ts fontProfiles backfill) existed for.
+    // v4→v5 migration (src/app/migrations.ts fontProfiles backfill) existed for.
     expect(store.getState().fontProfiles).toEqual(RICH_DEFAULTS);
   });
 });
@@ -215,7 +215,7 @@ describe('contract C.6 — merge-defaults combined with syncedKeys against an ol
     doc.transact(() => {
       const popover = new Y.Map();
       popover.set('x', 12);
-      doc.getMap('lib').set('popover', popover); // pre-hotfix junk key
+      doc.getMap('lib').set('popover', popover); // stale junk key from an older client
     });
 
     const store = createStore<LibState>()(
@@ -234,9 +234,8 @@ describe('contract C.6 — merge-defaults combined with syncedKeys against an ol
 
 describe('contract C.7 — backfill of a retained default to the doc (§2.2 interplay)', () => {
   it('legacy full diff: the NEXT outbound flush of any key backfills the retained default', async () => {
-    // Pinned as the pre-scopedDiff behavior; the lazy-backfill variant is
-    // pinned in scoped-diff.test.ts (the contract once both features are on,
-    // since they ship together — phase2-fork-surgery.md §2.2 last paragraph).
+    // Pinned as the full-diff (no scopedDiff) behavior; with scopedDiff the
+    // backfill is lazier (phase2-fork-surgery.md §2.2 last paragraph).
     const doc = await v4StyleDoc();
     const store = createStore<LibState>()(
       yjs(doc, 'lib', creator, { hydration: 'merge-defaults', disableYText: true }),

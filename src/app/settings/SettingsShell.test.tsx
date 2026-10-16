@@ -1,8 +1,8 @@
 /**
- * Settings surface suite (Phase 8 §B): SettingsShell + registry + panels.
+ * Settings surface suite: SettingsShell + registry + panels.
  *
- * Absorbs (test-absorption ledger, rule 8) the suites of the deleted
- * GlobalSettingsDialog god file:
+ * Absorbs (test-absorption ledger, plan/overhaul/README.md §4 rule 8) the
+ * suites of the deleted GlobalSettingsDialog god file:
  *  - GlobalSettingsDialog.predictability.test.tsx →
  *    describe('regression: settings panels are unmount-safe …')
  *  - GlobalSettingsDialog.test.tsx 'regression: wipe-all-data' →
@@ -162,7 +162,7 @@ describe('SettingsShell', () => {
     expect(screen.getByTestId('home')).toBeInTheDocument();
   });
 
-  // Regression: opening settings from a book used to unmount the reader and
+  // Regression: opening settings from a book must not unmount the reader and
   // drop the "This Book" lexicon scope. Nesting settings under /read/:id keeps
   // the reader mounted; the shell must keep tab hops and close within that base.
   it('nested under the reader: tab activation stays under /read/:id/settings', async () => {
@@ -237,9 +237,9 @@ describe('TTSPanel (absorbed: GlobalSettingsDialog Piper wiring)', () => {
 });
 
 describe('regression: settings panels are unmount-safe (absorbed: GlobalSettingsDialog predictability)', () => {
-  // The dialog used to fire async work (piper voice-readiness probe,
-  // checkpoint listing) whose resolution after unmount threw state updates
-  // at dead components. The ignore-flag discipline moved into the panels.
+  // Panels fire async work (piper voice-readiness probe, checkpoint listing)
+  // whose resolution after unmount must not throw state updates at dead
+  // components; each panel guards with an ignore flag.
   it('TTSPanel: checkVoiceDownloaded resolving after unmount does not throw', async () => {
     let voiceResolver: ((ready: boolean) => void) | undefined;
     audioCommands.checkVoiceDownloaded.mockImplementation(
@@ -295,10 +295,10 @@ describe('regression: settings panels are unmount-safe (absorbed: GlobalSettings
 });
 
 describe('regression: wipe-all-data — Clear All Data must route through wipeAllData (absorbed)', () => {
-  // "Clear All Data" used to hand-enumerate IDB stores and call
-  // localStorage.clear(), silently leaving the entire versicle-yjs database
-  // (all user data) behind. The data panel must delegate to wipeAllData().
-  // Phase 8 §D: confirmation flows through the accessible ConfirmDialog —
+  // "Clear All Data" must not hand-enumerate IDB stores and call
+  // localStorage.clear(), which would silently leave the entire versicle-yjs
+  // database (all user data) behind. The data panel must delegate to
+  // wipeAllData(). Confirmation flows through the accessible ConfirmDialog —
   // the ConfirmHost is rendered beside the panel exactly as App.tsx mounts
   // it above the router gate.
   const renderDataPanel = () =>

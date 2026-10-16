@@ -1,12 +1,11 @@
 /**
- * SectionQueueBuilder — the PURE queue-building half of the strangled
- * AudioContentPipeline (Phase 5c; phase5-tts-strangler.md §5c.2):
+ * SectionQueueBuilder — the PURE queue builder:
  * `(sentences, settings, options) → {queue, title}`. No ports, no side
  * effects — the HOST (PlaybackController) fetches content, resolves the
  * title, and writes the reader UI; this module only transforms.
  *
  * The empty-section filler is deterministic and keyed by book language
- * (./emptySectionMessages — the randomized English NO_TEXT_MESSAGES died).
+ * (./emptySectionMessages).
  */
 import { TextSegmenter } from './TextSegmenter';
 import type { SentenceNode } from '~types/tts-content';

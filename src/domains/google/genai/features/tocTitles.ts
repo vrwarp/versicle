@@ -1,13 +1,12 @@
 /**
- * Smart-TOC title generation (Phase 7 §H feature module): prompt + zod
- * response schema + input-membership validation in ONE place. Prompt text
- * ported verbatim from the legacy GenAIService.generateTOCForBatch
- * (including the non-English translate instruction — a named keeper).
+ * Smart-TOC title generation (GenAI feature module): prompt + zod response
+ * schema + input-membership validation in ONE place. The prompt includes a
+ * non-English translate instruction.
  *
  * Membership clamp (GG-5): entries echoing ids outside the input set are
- * DROPPED (legacy consumers silently ignored unknown ids via Map lookup —
- * dropping preserves that tolerance while keeping hallucinated ids out of
- * the result); shape breaches throw GENAI_INVALID_RESPONSE.
+ * DROPPED (callers look titles up by id, so unknown ids are ignorable;
+ * dropping keeps hallucinated ids out of the result); shape breaches throw
+ * GENAI_INVALID_RESPONSE.
  */
 import { z } from 'zod';
 import { GenAIInvalidResponseError } from '../errors';

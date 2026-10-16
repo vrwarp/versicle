@@ -4,8 +4,7 @@ import * as Y from 'yjs';
  * Shared helpers for the fork contract suite (phase2-fork-surgery.md §3).
  *
  * Tests use REAL Y.Docs and two-doc replication via
- * Y.encodeStateAsUpdate/Y.applyUpdate — no mocks (the pattern of the absorbed
- * src/store/zustand-middleware-yjs-undefined.test.ts).
+ * Y.encodeStateAsUpdate/Y.applyUpdate — no mocks.
  */
 
 /**

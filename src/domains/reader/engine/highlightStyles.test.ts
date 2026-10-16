@@ -1,10 +1,8 @@
 /**
- * highlightStyles is the single registry for highlight rendering, and its
- * whole purpose is that the emitted CSS and style objects stay
- * byte-identical to the three sources it consolidated. That makes it a
+ * highlightStyles is the single registry for highlight rendering, and the
+ * emitted CSS and style objects are meant to stay stable. That makes it a
  * characterization module: anything that changes a colour, an opacity or a
- * blend mode is a visible regression in the reader, and nothing was
- * asserting on the output.
+ * blend mode is a visible regression in the reader.
  */
 import { describe, expect, it } from 'vitest';
 import {

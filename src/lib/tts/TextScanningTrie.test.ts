@@ -28,16 +28,13 @@ describe('TextScanningTrie', () => {
         });
 
         it('respects boundaries (must be preceded by space/punctuation/start)', () => {
-            expect(trie.matchesEnd('Hammer.')).toBeNull(); // "mer." ends with "r." but "Mr." is not matched? No wait, "Mr."
-            // "Hammer." ends in "r.", but we inserted "Mr.".
-            // "Hammer." does NOT end in "Mr.".
+            // "Hammer." ends in "r.", but "Mr." is not a suffix of it.
+            expect(trie.matchesEnd('Hammer.')).toBeNull();
         });
 
         it('respects boundaries (boundary check logic)', () => {
-            // "Dr." is not in trie, "Mr." is.
-            // "MMr." -> should match?
-            // The boundary check in matchesEnd checks if char before match is whitespace/punctuation/start.
-            // If text is "AMr.", match start is at index 1 ('M'). prev char is 'A'. Not boundary. Should fail.
+            // matchesEnd requires the char before the match to be whitespace/punctuation/start.
+            // In "AMr." the match starts at index 1 ('M') and the previous char 'A' is not a boundary.
             expect(trie.matchesEnd('AMr.')).toBeNull();
             expect(trie.matchesEnd(' Mr.')).toBe('Mr.');
         });

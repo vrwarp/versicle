@@ -1,9 +1,7 @@
 /**
- * TaskSequencer invariant suite (Phase 5b-PR3; phase5-tts-strangler.md §5b.3).
- *
- * Extends the original FIFO/error-isolation suite with the epoch-cancellation
- * semantics, and carries the named regression blocks for the per-bug files it
- * absorbed (absorption ledger rows 2/4/5/15):
+ * TaskSequencer invariant suite: FIFO/error isolation plus the
+ * epoch-cancellation semantics, and the named regression blocks for the
+ * per-bug files it absorbed (absorption ledger rows 2/4/5/15):
  *   - TaskSequencer_Predictability.test.ts  → describe('regression: TaskSequencer_Predictability')
  *   - AudioPlayerService_Concurrency.test.ts → describe('regression: AudioPlayerService_Concurrency')
  *   - AudioPlayerService_Critical.test.ts    → describe('regression: AudioPlayerService_Critical')
@@ -204,8 +202,8 @@ describe('TaskSequencer', () => {
     });
 
     describe('regression: AudioPlayerService_Concurrency', () => {
-        // The deleted suite drove rapid jumpTo/play/stop through the full
-        // engine and asserted the FINAL state — i.e. exactly the sequencer
+        // The engine-level counterpart drove rapid jumpTo/play/stop through the
+        // full engine and asserted the FINAL state — i.e. exactly the sequencer
         // guarantees re-stated at engine level: serialized FIFO execution and
         // last-command-wins. Those guarantees are pinned here directly; the
         // engine-level routing (jumpTo plays the selected item, stop broadcasts

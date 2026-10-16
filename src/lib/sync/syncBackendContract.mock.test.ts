@@ -1,10 +1,8 @@
 /**
  * SyncBackend contract (C3) run against the REAL `MockBackend`
- * (src/domains/sync/backend/MockBackend.ts) — P4-2 collapsed the original
- * localStorage-mirroring harness to thin adapters over the extracted
- * backend, exactly as the P0 skeleton planned. The storage-key semantics
- * formerly duplicated here now live in (and are pinned through) the
- * backend itself.
+ * (src/domains/sync/backend/MockBackend.ts) — the harness is a set of thin
+ * adapters over the backend, whose storage-key semantics are pinned through
+ * the backend itself.
  */
 import { MockBackend, clearMockArtifacts } from '@domains/sync/backend/MockBackend';
 import { MockFireProvider } from '@domains/sync/backend/MockFireProvider';
@@ -72,7 +70,7 @@ function makeHarness(): SyncBackendContractHarness {
 
     probeHasData: (workspaceId) => backend.probeHasData(workspaceId),
 
-    // The production delete semantics (P4-6 honest delete): tombstone
+    // The production delete semantics (honest delete): tombstone
     // first, then purge — exactly what WorkspaceService.delete runs.
     deleteWorkspace: async (workspaceId) => {
       await backend.tombstoneWorkspace(workspaceId);
@@ -87,14 +85,14 @@ function makeHarness(): SyncBackendContractHarness {
       backend.putArtifact(workspaceId, relPath, bytes, meta),
     headArtifact: (workspaceId, relPath) => backend.headArtifact(workspaceId, relPath),
     getArtifact: (workspaceId, relPath) => backend.getArtifact(workspaceId, relPath),
-    // Phase D lifecycle/GC — straight delegation (the mock collapses HEAD doc +
-    // blob, so blob-survival is pinned only on the emulator path).
+    // Lifecycle/GC — straight delegation (the mock collapses HEAD doc +
+    // blob, so blob-survival is pinned by FirestoreBackend.purge.test.ts).
     deleteArtifactHead: (workspaceId, relPath) =>
       backend.deleteArtifactHead(workspaceId, relPath),
     sweepArtifacts: (workspaceId, opts) => backend.sweepArtifacts(workspaceId, opts),
 
     // The mock's residual surface is its one snapshot blob per workspace plus
-    // an artifact-lane HEAD doc (the embedCache residual the H-3 fix sweeps).
+    // an artifact-lane HEAD doc (the embedCache residual the purge sweeps).
     seedResiduals: async (workspaceId) => {
       MockFireProvider.injectSnapshot(
         `users/${UID}/versicle/${workspaceId}`,

@@ -133,7 +133,7 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, engine, onNavigat
         if (readingSessions.length > 0) {
             rawItems = readingSessions.map(processSession);
         } else if (completedRanges.length > 0) {
-            // Legacy fallback: deduplicate by label
+            // Legacy fallback: ranges only (no session metadata); grouped by label below
             rawItems = completedRanges.map(processLegacyRange);
         } else {
             return [];

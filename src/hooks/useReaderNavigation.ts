@@ -23,14 +23,11 @@ interface UseReaderNavigationProps {
 /**
  * Reader-area wheel + touch navigation (scrolled mode).
  *
- * Phase 8 §E: the KEYBOARD half of this hook — one of the two overlapping
- * window keydown registries, including the P0 interim TTS-status
- * predicate ("Interim mitigation until the Phase 8
- * KeyboardShortcutService replaces both") — was deleted. Page-turn keys
- * are now `useReaderPageTurnShortcuts` registrations on the
- * KeyboardShortcutService (src/app/shortcuts/), where scope stacking
- * replaces the cross-registry peeking; the engine's iframe keydown stream
- * feeds the same service via `useReaderEngineKeyBridge`.
+ * Keyboard page-turns are not handled here: they are
+ * `useReaderPageTurnShortcuts` registrations on the KeyboardShortcutService
+ * (src/app/shortcuts/), where scope stacking arbitrates between handlers;
+ * the engine's iframe keydown stream feeds the same service via
+ * `useReaderEngineKeyBridge`.
  */
 export function useReaderNavigation({
     readerViewMode,

@@ -47,8 +47,8 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
 
     /**
      * Directory names under `app_webview` dropped by the debug-only store reset. "Service Worker"
-     * holds the registration DB *and* the ScriptCache that serves sw.js; "HTTP Cache" is what the
-     * old `new WebView(this).clearCache(true)` call cleared.
+     * holds the registration DB *and* the ScriptCache that serves sw.js; "HTTP Cache" is the
+     * WebView's HTTP cache.
      */
     private static final String[] RESETTABLE_WEBVIEW_STORES = { "Service Worker", "HTTP Cache" };
 
@@ -99,7 +99,7 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
      * `cap sync`-ed sw.js is re-read from the APK assets instead of being served out of
      * Chromium's ScriptCache (which otherwise keeps the old precache serving stale content).
      *
-     * Both guards are load-bearing — this used to run unconditionally on every launch:
+     * Both guards are load-bearing — running it unconditionally on every launch is unsafe:
      *
      * 1. **First activity in the process only.** The process routinely outlives the Activity:
      *    `App.exitApp()` is `Activity.finish()`, which does not end the process, and Android
@@ -110,8 +110,8 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
      *    no dialog on that launch, and works on the next one because the crash finally cleared
      *    the stale process.
      * 2. **Only after the APK actually changed.** The point is a post-`cap sync` reinstall, which
-     *    is exactly what moves `PackageInfo.lastUpdateTime`. Doing it every launch also forced a
-     *    full service-worker re-register plus re-precache on every cold start, and walked the
+     *    is exactly what moves `PackageInfo.lastUpdateTime`. Doing it every launch would also force
+     *    a full service-worker re-register plus re-precache on every cold start, and walk the
      *    whole `app_webview` tree on the main thread before the activity was even created.
      */
     private void resetWebViewStoresIfReinstalled() {
@@ -129,9 +129,7 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
             prefs.edit().putLong(KEY_STORE_RESET_FOR_UPDATE, lastUpdateTime).apply();
         } catch (Exception e) {
             // Never fatal: a failed cache reset is a stale-asset annoyance, not a reason to
-            // refuse to start. (The old code left `new WebView(this)` outside this catch, so a
-            // momentarily unavailable WebView provider — e.g. while Play Store swaps the Android
-            // System WebView package — threw straight out of onCreate and killed the launch.)
+            // refuse to start.
             Log.e(TAG, "Failed to reset WebView stores", e);
         }
     }
@@ -141,11 +139,11 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
      *
      * `WebViewClient.onRenderProcessGone` must return true or the framework terminates the app
      * process outright, and Capacitor's BridgeWebViewClient returns false unless some registered
-     * WebViewListener returns true — this app registered none. So a renderer OOM (boot runs the
+     * WebViewListener returns true. Without this listener, a renderer OOM (boot runs the
      * library hydration, CRDT migrations and every background task at once, and Piper voice
      * models pin tens of MB) or an Android System WebView package update mid-session simply
-     * ended the process with no dialog and no crash prompt: from the outside, the app "opened
-     * and immediately exited".
+     * ends the process with no dialog and no crash prompt: from the outside, the app "opens
+     * and immediately exits".
      *
      * The dead WebView can never be used again, so it is detached and destroyed and the Activity
      * is recreated — a fresh Bridge and WebView reboot the web app. All state lives in

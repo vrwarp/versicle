@@ -1,6 +1,6 @@
 /**
- * TraditionalConverter unit suite (Phase 6 §7.3, prep doc PR-10): the
- * `_originalText` round-trip keeper semantics + the NEW CH-7 length guard.
+ * TraditionalConverter unit suite: the `_originalText` round-trip semantics
+ * + the CH-7 length guard.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import {

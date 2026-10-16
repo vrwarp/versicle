@@ -211,10 +211,10 @@ export class FakeEngineContext implements EngineContext {
         },
     };
 
-    // --- Storage ports (5b decomposition; in-memory, seed via the public maps) ---
+    // --- Storage ports (in-memory, seed via the public maps) ---
     /** bookId → spine sections (content.getSections). */
     sections: Record<string, Array<{ sectionId: string; title?: string; characterCount?: number }>> = {};
-    /** `${bookId}/${sectionId}` → prepared content (content.getTTSPreparation). Markers travel WITH sentences (D4). */
+    /** `${bookId}/${sectionId}` → prepared content (content.getTTSPreparation). Markers travel WITH sentences. */
     ttsContent: Record<string, { sentences: Array<{ text: string; cfi: string; sourceIndices?: number[] }>; citationMarkers?: Array<Record<string, unknown>> } | undefined> = {};
     /** bookId → captured table locations (content.listTableLocations / getTableImages). */
     tableLocations: Record<string, Array<{ id: string; cfi: string; sectionId: string }>> = {};

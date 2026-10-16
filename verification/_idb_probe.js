@@ -3,8 +3,8 @@
 // TEST-ONLY instrumentation, injected via addInitScript when TTS_IDB_PROBE=1.
 // It exists to turn "IndexedDB is the bottleneck" from a hypothesis into evidence.
 //
-// It records, at the page level (so it captures app DBService transactions AND Yjs's
-// y-indexeddb persistence uniformly):
+// It records, at the page level (so it captures app data-layer (src/data) transactions AND
+// Yjs's y-idb persistence uniformly):
 //   1. Every IndexedDB transaction: when it started, whether/when it settled, its
 //      duration, and which object store(s) it touched. A transaction that starts but
 //      never fires 'complete'/'error'/'abort' is a genuine hang. The `stores` field

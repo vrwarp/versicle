@@ -31,7 +31,7 @@ test('ARIA Labels Verification', async ({ page }) => {
   await expect(page.getByLabel('Search query')).toBeVisible();
   await expect(page.getByLabel('Close Side Bar')).toBeVisible();
 
-  // Close Search via Back Button (which is now Close Side Bar)
+  // Close Search via the Close Side Bar button
   await page.getByLabel('Close Side Bar').click();
 
   // 3. Audio Panel ARIA Labels

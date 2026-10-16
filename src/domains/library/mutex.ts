@@ -1,10 +1,10 @@
 /**
- * Per-key async mutex (Phase 7 §C). ONE instance is shared by the
- * ImportOrchestrator and the LibraryService: every mutation of book X —
- * import, register, delete, offload, restore, reprocess, hydrate-write —
- * runs inside `mutex.run(X, fn)`, which makes the historical
- * delete-vs-restore / reprocess-overlap races (the five race files, D6)
- * structurally impossible instead of guarded by copy-pasted zombie checks.
+ * Per-key async mutex. ONE instance is shared by the ImportOrchestrator and
+ * the LibraryService: every mutation of book X — import, register, delete,
+ * offload, restore, reprocess, hydrate-write — runs inside
+ * `mutex.run(X, fn)`, which makes delete-vs-restore / reprocess-overlap
+ * races structurally impossible instead of guarded by per-call-site zombie
+ * checks.
  */
 export class KeyedMutex {
   private tails = new Map<string, Promise<unknown>>();

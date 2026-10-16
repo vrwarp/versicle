@@ -65,7 +65,7 @@ export interface EmbeddingConfig {
 }
 
 /**
- * Read per call, never cached (mirrors {@link GenAIConfigProvider}) — a
+ * Read per call, never cached (mirrors GenAIConfigProvider in ../contract) — a
  * settings edit takes effect on the very next embed call, with no stale
  * singleton state to clobber.
  */

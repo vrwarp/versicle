@@ -22,11 +22,11 @@ const logger = createLogger('App');
  * the route tree. All boot ORDERING lives in the sequencer, not here.
  * Renders "Safe Mode" if the boot sequence fails.
  *
- * ToastHost + ConfirmHost mount HERE, above the router gate (Phase 8 §D):
+ * ToastHost + ConfirmHost mount HERE, above the router gate:
  * a toast fired during boot renders instead of being dropped, and the
  * SafeMode reset path gets the accessible confirm dialog (native
  * confirm/alert are banned at lint ERROR). SWUpdatePrompt mounts beside
- * them (Phase 8 §G) so even a boot-blocked client can accept an update —
+ * them so even a boot-blocked client can accept an update —
  * the recovery channel for a bad deploy.
  */
 function App() {
@@ -57,7 +57,7 @@ function App() {
     if (boot.status === 'error') {
       // A failed CRDT migration carries its pre-migration checkpoint id; the
       // failure view's restore button drives the existing RESTORING_BACKUP
-      // checkpoint-restore boot flow (phase2-fork-surgery.md §5.2).
+      // checkpoint-restore boot flow (src/app/boot/migrationInterceptor.ts).
       if (boot.error instanceof MigrationError) {
         return <CriticalMigrationFailureView backupId={boot.error.checkpointId} />;
       }
@@ -65,7 +65,7 @@ function App() {
     }
 
     // Combined loading screen; 'halted' keeps it visible while a backup
-    // restore reloads the page (migration rollback, Flow C).
+    // restore reloads the page (migration rollback).
     if (boot.status === 'loading' || boot.status === 'halted' || !swInitialized) {
       const message = boot.status === 'ready' ? 'Starting...' : boot.message;
       return (

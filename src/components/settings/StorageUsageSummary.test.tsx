@@ -1,6 +1,5 @@
 /**
- * StorageUsageSummary — the navigator.storage.estimate() settings surface
- * (P9, paying the P3 §Follow-ups item 7 the P8 settings pass left open).
+ * StorageUsageSummary — the navigator.storage.estimate() settings surface.
  */
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, afterEach, vi } from 'vitest';

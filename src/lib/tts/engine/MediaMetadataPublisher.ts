@@ -1,15 +1,12 @@
 /**
- * MediaMetadataPublisher — lock-screen/media-session metadata + position
- * state, extracted from AudioPlayerService (Phase 5b decomposition;
- * phase5-tts-strangler.md §5b.1).
+ * MediaMetadataPublisher — lock-screen/media-session metadata + position state.
  *
- * Absorbs the two NEAR-IDENTICAL metadata builders the legacy engine carried
- * (`engageBackgroundMode` and `updateMediaSessionMetadata` — now ONE
- * {@link buildMetadata}), the book-wide progress calculation, and the
- * per-timeupdate position push — which gains the S19 deadband: positions are
- * pushed only when they moved by ≥ {@link POSITION_DEADBAND_S} seconds (or
- * the duration/rate changed, or a metadata refresh forces it), instead of on
- * every provider timeupdate.
+ * Owns the media-session metadata builder (shared by `engageBackgroundMode` and
+ * `updateMediaSessionMetadata` through ONE {@link buildMetadata}), the book-wide
+ * progress calculation, and the per-timeupdate position push, which is
+ * deadbanded: positions are pushed only when they moved by
+ * ≥ {@link POSITION_DEADBAND_S} seconds (or the duration/rate changed, or a
+ * metadata refresh forces it), instead of on every provider timeupdate.
  *
  * The Bluetooth metadata-deadband keeper stays in PlatformIntegration — this
  * unit feeds it, it does not replace it.
@@ -22,7 +19,7 @@ import { createLogger } from '../../logger';
 
 const logger = createLogger('MediaMetadataPublisher');
 
-/** Positions closer than this (seconds) to the last push are dropped (S19). */
+/** Positions closer than this (seconds) to the last push are dropped. */
 export const POSITION_DEADBAND_S = 1.0;
 
 export interface BookPresentation {
@@ -50,7 +47,7 @@ export class MediaMetadataPublisher {
         private readonly source: MetadataSource,
     ) {}
 
-    /** The single metadata builder (the legacy duplicated pair, unified). */
+    /** The single metadata builder shared by engageBackgroundMode and updateMediaSessionMetadata. */
     private buildMetadata(item: TTSQueueItem) {
         const book = this.source.getBook();
         return {
@@ -93,7 +90,7 @@ export class MediaMetadataPublisher {
 
     /**
      * Push the position state derived from the provider's playback time.
-     * Deadbanded (S19): per-timeupdate pushes that moved less than
+     * Deadbanded: per-timeupdate pushes that moved less than
      * {@link POSITION_DEADBAND_S} with unchanged duration/rate are dropped.
      */
     updatePosition(providerTime: number, opts: { force?: boolean } = {}): void {

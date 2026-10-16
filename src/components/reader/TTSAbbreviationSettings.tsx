@@ -112,8 +112,7 @@ const StringListManager: React.FC<StringListManagerProps> = ({
                 const invalidItems = lines.filter(item => validateItem(item) !== null);
                 if (invalidItems.length > 0) {
                     showToast({ key: 'abbrev.import.skippedInvalid', params: { count: invalidItems.length } }, 'info');
-                    // Optionally filter them out or stop
-                    // Let's filter them out for better UX
+                    // Drop the invalid items and offer to import only the valid ones
                     const validLines = lines.filter(item => validateItem(item) === null);
                     if (await confirm({
                         titleKey: 'abbrev.import.replaceValid.title',

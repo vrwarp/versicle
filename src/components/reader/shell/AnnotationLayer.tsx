@@ -1,12 +1,10 @@
 /**
- * AnnotationLayer — user annotations on the open book (Phase 6 §5 table,
- * prep/phase6-reader-engine.md PR-9). Extracted verbatim from the legacy
- * ReaderView:
+ * AnnotationLayer — user annotations on the open book:
  *
  *  - loads the book's annotations from the store,
  *  - diffs them onto the engine's 'annotation' highlight layer (the ONE
- *    epub.js annotations path, §4), including the audio-bookmark
- *    click→display→programmatic-select→CompassPill-morph triage flow,
+ *    epub.js annotations path), including the audio-bookmark
+ *    click→display→programmatic-select→compass-morph triage flow,
  *  - renders the note-marker geometry overlay (useCfiCoordinates +
  *    AnnotationMarkerOverlay portal into the engine container).
  */
@@ -162,17 +160,16 @@ export const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
             });
           }
           // The manager logs-and-swallows epub.js failures; only track ids
-          // whose highlight actually attached (parity with the pre-manager
-          // try/catch placement).
+          // whose highlight actually attached.
           if (highlights.has('annotation', annotation.cfiRange)) {
             addedAnnotations.current.set(annotation.id, { cfi: annotation.cfiRange, className });
           }
         }
       });
 
-      // (The legacy `window.__reader_added_annotations_count` global is
-      // gone: E2E polls `__versicleTest.reader.highlightCount('annotation')`,
-      // backed by the engine's HighlightLayerManager.)
+      // (E2E observes the rendered highlights via
+      // `__versicleTest.reader.highlightCount('annotation')`, backed by the
+      // engine's HighlightLayerManager.)
     }
   }, [annotationList, isReady, engine, highlights, bookId, viewerRef]);
 

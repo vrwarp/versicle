@@ -51,7 +51,7 @@ export abstract class BaseCloudProvider implements ITTSProvider {
   /** Whether the sink was injected (shared, manager-owned) or self-constructed. */
   private readonly ownsSink: boolean;
   private disposed = false;
-  /** Aborts in-flight synthesis fetches on stop()/dispose() (5a-PR2). */
+  /** Aborts in-flight synthesis fetches on stop()/dispose(). */
   private abortController: AbortController | null = null;
 
   /**
@@ -92,11 +92,11 @@ export abstract class BaseCloudProvider implements ITTSProvider {
   }
 
   /**
-   * Single-shot failure contract (ITTSProvider.play, 5a-PR2): resolves when audible
+   * Single-shot failure contract (ITTSProvider.play): resolves when audible
    * playback has started; REJECTS exactly once on failure — it never also emits an
-   * `error` event for the same failure. The pre-5a emit+rethrow double-signal (one
-   * half of the S2 fallback double-fire) is gone; the engine owns recovery, keyed
-   * on the rejection the manager rethrows as `ProviderPlaybackError`.
+   * `error` event for the same failure (a double signal would double-fire the
+   * fallback). The engine owns recovery, keyed on the rejection the manager
+   * rethrows as `ProviderPlaybackError`.
    */
   async play(text: string, options: TTSOptions): Promise<void> {
     const { audio } = await this.getOrFetch(text, options);
@@ -259,7 +259,7 @@ export abstract class BaseCloudProvider implements ITTSProvider {
 
   /**
    * Helper method to perform a POST request and return the response as a Blob.
-   * Routes through `NetworkGateway.egress()` (Phase 7 §I): subclasses name the
+   * Routes through `NetworkGateway.egress()`: subclasses name the
    * registry destination their synthesis endpoint belongs to.
    */
   protected async fetchAudio(destinationId: DestinationId, url: string, body: unknown, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<Blob> {

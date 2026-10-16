@@ -1,14 +1,12 @@
 /**
- * epubTheming characterization (Phase 6 §Test plan "Vitest
- * characterization: normalizeAbsoluteToRem + font-scale math — pins the
- * epubTheming extraction", prep/phase6-reader-engine.md PR-4).
+ * epubTheming characterization: pins normalizeAbsoluteToRem and the
+ * font-scale math.
  *
- * The expected values are the legacy useEpubReader effect's arithmetic,
- * captured before the extraction: 16pt = 1rem conversion table, named-size
- * map, TARGET_BASE_PX=16 / TARGET_RATIO=1.35 normalization, the pinyin
- * 1.8 line-height floor, and the forced-styles CSS gate (force-font OR
- * non-light theme). The reflow test pins D5: flow()/display() fire only
- * when the caller reports a mode change.
+ * The expected values are the pipeline's arithmetic: 16pt = 1rem conversion
+ * table, named-size map, TARGET_BASE_PX=16 / TARGET_RATIO=1.35 normalization,
+ * the pinyin 1.8 line-height floor, and the forced-styles CSS gate
+ * (force-font OR non-light theme). The reflow test pins that
+ * flow()/display() fire only when the caller reports a mode change.
  */
 import { describe, it, expect, vi } from 'vitest';
 import type { Rendition } from 'epubjs';
@@ -132,10 +130,11 @@ describe('buildForcedStylesCss (legacy CSS gate)', () => {
 });
 
 describe('regression: legacy fontFamily read-time normalization (Phase 8 §I, RC-16)', () => {
-  // The pinyin font was renamed off the OFL Reserved Font Names. No
-  // shipped UI ever wrote the legacy family into the synced preference,
-  // so there is NO persisted migration — only this read-time mapping at
-  // the theming consumers (belt-and-braces; idempotent).
+  // The pinyin font stays off the OFL Reserved Font Names ('PT Sans Narrow'
+  // is the old name). No shipped UI ever wrote the old family into the
+  // synced preference, so there is NO persisted migration — only this
+  // read-time mapping at the theming consumers (belt-and-braces;
+  // idempotent).
   it('maps the legacy family to Versicle Sans Narrow', () => {
     expect(normalizeFontFamily('PT Sans Narrow')).toBe('Versicle Sans Narrow');
     expect(normalizeFontFamily("'PT Sans Narrow', sans-serif")).toBe(

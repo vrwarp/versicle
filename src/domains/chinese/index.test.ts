@@ -1,11 +1,9 @@
 /**
- * domains/chinese entry suite (Phase 6 §7, PR-10): the CH-8 interim
- * base-language helper that gates registration from the app layer.
+ * domains/chinese entry suite: the CH-8 interim base-language helper that
+ * gates registration from the app layer.
  *
- * ABSORPTION NOTE: replaces the "non-zh books bypass the pipeline" pin of
- * the deleted useEpubReader_Pinyin.characterization.test.tsx — activation
- * is now a registration decision in app/reader/useReaderController (books
- * whose base language is not 'zh' never register, and unregistration
+ * Activation is a registration decision in app/reader/useReaderController
+ * (books whose base language is not 'zh' never register, and unregistration
  * clears the overlay positions).
  */
 import { describe, it, expect } from 'vitest';

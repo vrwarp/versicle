@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useTTSSettingsStore, selectActiveRate, selectActiveVoiceId, selectActiveMinSentenceLength } from './useTTSSettingsStore';
 
-// The persisted half of the 5b split (regression: useTTSStore — pure state
-// transitions carried over; engine commands live on TtsController, the
-// playback mirror in useTTSPlaybackStore).
+// Pure state transitions of the persisted settings store; engine commands live
+// on TtsController, the playback mirror in useTTSPlaybackStore.
 
 describe('useTTSSettingsStore', () => {
   beforeEach(() => {
@@ -66,7 +65,7 @@ describe('useTTSSettingsStore', () => {
     expect(selectActiveVoiceId(state)).toBe('test-zh');
     expect(selectActiveMinSentenceLength(state)).toBe(6);
 
-    // Unknown language: a default profile materializes (zh default length 6).
+    // Unknown language: a default profile materializes.
     useTTSSettingsStore.getState().setActiveLanguage('fr');
     expect(useTTSSettingsStore.getState().profiles['fr']).toMatchObject({ voiceId: null, rate: 1.0 });
   });

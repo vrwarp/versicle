@@ -5,11 +5,9 @@ import type { UserInventoryItem } from '~types/user-data';
 /**
  * Replication declaration (aggregated by src/store/registry.ts).
  * Y.Map 'library' — matches the existing data structure for 'books'.
- * Flipped to merge-defaults + scopedDiff in flip wave 4 (phase2-fork-surgery.md
- * §2.6 #8): the inventory — highest user-data criticality, flipped after the
- * pattern was proven on six stores. Its four `state.books || {}` fallbacks
- * (plus selectors.ts and the FirestoreSyncManager clean-client check) were
- * deleted as the flip canaries.
+ * merge-defaults + scopedDiff: the inventory is the highest-criticality user
+ * data, so a `books` key absent from the doc is retained from the declared
+ * defaults on hydration rather than deleted from state.
  */
 export const LIBRARY_STORE_DEF: SyncedStoreDef<'books'> = {
     name: 'library',
@@ -46,7 +44,7 @@ interface BookState {
     updateBook: (id: string, updates: Partial<UserInventoryItem>) => void;
 
     /**
-     * Removes a book from the syned inventory.
+     * Removes a book from the synced inventory.
      */
     removeBook: (id: string) => void;
 

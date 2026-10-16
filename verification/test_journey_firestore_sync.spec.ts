@@ -34,7 +34,7 @@ async function uploadBook(page: Page, filename: string) {
  * Wait until the mock cloud's workspace doc contains every string in
  * `needles` (e.g. imported book titles or ids): MockFireProvider saves the
  * whole Y.Doc as a base64 Yjs update, in which strings are plain UTF-8.
- * Tolerant like the fixed sleeps it replaces: on timeout it just returns.
+ * Tolerant: on timeout it just returns.
  */
 async function waitForSnapshotToContain(page: Page, needles: string[], timeout = 5000) {
   await expect
@@ -123,7 +123,7 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   const bookTitlesA = await pageA.locator("[data-testid='book-title']").allTextContents();
   console.log(`[A] Book titles: ${bookTitlesA}`);
 
-  // Wait for every imported book to reach the mock cloud (was fixed 2s + 1s sleeps).
+  // Wait for every imported book to reach the mock cloud.
   await waitForSnapshotToContain(pageA, bookTitlesA);
   await pageA.evaluate(() => {
     window.dispatchEvent(new Event('beforeunload'));
@@ -180,8 +180,8 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   await pageB.goto('/');
   await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 15000 });
 
-  // Settings is now a Radix-Tabs SettingsShell at /settings/:tab (Phase-10 overhaul);
-  // the old role=button "Sync & Cloud" tab is now a real Radix tab.
+  // Settings is a Radix-Tabs SettingsShell at /settings/:tab; "Sync & Cloud" is
+  // a real Radix tab.
   await openSettings(pageB);
   await gotoSettingsTab(pageB, 'sync');
 
@@ -203,7 +203,7 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
   await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 30000 });
   // Wait for page to fully stabilize after potential internal navigation: "Yes,
   // Finalize" reloads the page (App.tsx onResolved), and only the reloaded document
-  // drops the confirmation modal (was a fixed 2s sleep).
+  // drops the confirmation modal.
   await expect(pageB.getByText('Finalize Workspace Switch?')).toBeHidden({ timeout: 15000 }).catch(() => {});
   await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 15000 }).catch(() => {});
 
@@ -259,7 +259,7 @@ test('Firestore Book Sync and Restore', async ({ browser }) => {
 
   // The ContentMissingDialog is a Radix Dialog; its bg-black/50 backdrop lingers for an
   // animation frame after the dialog closes on successful restore and intercepts the
-  // next card click (the §0 backdrop-interception signature). Wait for that SPECIFIC
+  // next card click. Wait for that SPECIFIC
   // dialog (and its hidden restore input) to detach before re-clicking the card to open
   // the reader. A global `div.bg-black/50.backdrop-blur-sm` count is too broad — the same
   // class is the overlay of EVERY Radix Modal/Dialog (the SettingsShell, ConfirmDialog,
@@ -326,7 +326,7 @@ test('Offload Status Hydration', async ({ browser }) => {
   const bookCardA = pageA.locator("[data-testid^='book-card-']").first();
   await expect(bookCardA).toBeVisible({ timeout: 15000 });
 
-  // Wait for the imported book to reach the mock cloud (was fixed 2s + 1s sleeps).
+  // Wait for the imported book to reach the mock cloud.
   const bookIdA = ((await bookCardA.getAttribute('data-testid').catch(() => null)) ?? '').replace('book-card-', '');
   await waitForSnapshotToContain(pageA, [bookIdA]);
   await pageA.evaluate(() => window.dispatchEvent(new Event('beforeunload')));
@@ -364,7 +364,7 @@ test('Offload Status Hydration', async ({ browser }) => {
   await pageB.goto('/');
   await expect(pageB.getByTestId('library-view')).toBeVisible({ timeout: 15000 });
 
-  // SettingsShell Radix tabs (Phase-10): Sync & Cloud is now a real Radix tab.
+  // SettingsShell Radix tabs: Sync & Cloud is a real Radix tab.
   await openSettings(pageB);
   await gotoSettingsTab(pageB, 'sync');
 
@@ -417,7 +417,7 @@ test('Offline Resilience Test', async ({ browser }) => {
   await page.goto('/');
   await expect(page.getByTestId('library-view')).toBeVisible({ timeout: 15000 });
 
-  // SettingsShell Radix tabs (Phase-10): open the Dictionary tab, then Manage Rules.
+  // SettingsShell Radix tabs: open the Dictionary tab, then Manage Rules.
   await openSettings(page);
   await gotoSettingsTab(page, 'dictionary');
   await page.getByRole('button', { name: 'Manage Rules' }).click();

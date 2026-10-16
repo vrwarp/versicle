@@ -1,8 +1,8 @@
 /**
- * DiagnosticsTab reads the ENGINE-side flight recorder over the command facade
- * (5b-PR4, the S9 fix): the live buffer/stats come from the worker through the
- * engine handle, never from the main-thread module singleton (which sees no
- * engine traffic). Per the useAudioCommands contract, component tests mock the
+ * DiagnosticsTab reads the ENGINE-side flight recorder over the command
+ * facade: the live buffer/stats come from the worker through the engine
+ * handle, never from the main-thread module singleton (which sees no engine
+ * traffic). Per the useAudioCommands contract, component tests mock the
  * facade module itself.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';

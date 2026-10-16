@@ -1,17 +1,16 @@
 /**
- * TtsController unit tests (Phase 5b) — the command facade between the UI, the
+ * TtsController unit tests — the command facade between the UI, the
  * split stores (persisted useTTSSettingsStore / ephemeral useTTSPlaybackStore)
  * and the engine.
  *
  * The engine is INJECTED as a fake (no module mock of the composition root):
  * the controller is the only production `getAudioPlayer()` consumer, and these
- * tests pin the responsibilities it absorbed from the legacy store:
+ * tests pin its responsibilities:
  *   1. the engine→store playback mirror into the EPHEMERAL store (incl. the
- *      loading/completed-as-playing flicker derivation, regression:
- *      useTTSStore initialize),
- *   2. the settings→engine sync that used to live inside store setters,
+ *      loading/completed-as-playing flicker derivation),
+ *   2. the settings→engine sync,
  *   3. the engine command sequences (loadVoices/downloadVoice/…),
- *   4. the voice-fallback algorithm (regression: useTTSStore_voice_recall).
+ *   4. the voice-fallback algorithm (the voice-recall regression).
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { PlaybackSnapshot, SnapshotListener, TtsEngine } from '@lib/tts/engine/TtsEngine';
@@ -22,7 +21,7 @@ import { TtsController } from './TtsController';
 import { LexiconService } from '@lib/tts/LexiconService';
 import { ensureAiConsentForBook } from '@app/google/aiConsentPrompt';
 
-// P9: play()/autoplay-loads run the per-book AI consent pre-flight before
+// play()/autoplay-loads run the per-book AI consent pre-flight before
 // forwarding to the engine; resolve it instantly here (its own behavior is
 // pinned in app/google/aiConsentPrompt.test.ts).
 vi.mock('@app/google/aiConsentPrompt', () => ({
@@ -161,8 +160,7 @@ describe('TtsController', () => {
         });
     });
 
-    // Regression: the engine→store mirror previously wired by useTTSStore.initialize(),
-    // now writing into the ephemeral useTTSPlaybackStore (5b split).
+    // The engine→store mirror writes into the ephemeral useTTSPlaybackStore.
     describe('regression: useTTSStore initialize (engine→playback-store mirror)', () => {
         it('mirrors engine broadcasts, deriving isPlaying for loading/completed (flicker guard)', () => {
             const { engine, fire } = makeFakeEngine();
@@ -291,7 +289,6 @@ describe('TtsController', () => {
             expect(LexiconService.getInstance().setGlobalBibleLexiconEnabled).toHaveBeenCalledWith(false);
         });
 
-        // Regression: useTTSStore_platform 'routes the configured providerId to the engine'.
         it('a provider switch routes the id to the engine and reloads voices', async () => {
             const { engine, raw } = makeFakeEngine();
             new TtsController(engine).initialize();
@@ -305,7 +302,6 @@ describe('TtsController', () => {
             expect(raw.init).toHaveBeenCalled();
         });
 
-        // Regression: the legacy setApiKey → setProviderId(providerId) re-init chain.
         it('an API-key commit for the ACTIVE provider re-initializes it; other keys do not', async () => {
             useTTSSettingsStore.setState({ providerId: 'google' });
             const { engine, raw } = makeFakeEngine();
@@ -338,8 +334,7 @@ describe('TtsController', () => {
 
     // Regression: useTTSStore_voice_recall — the saved profile voice must survive
     // language re-application while the runtime voice list is empty, and resolve
-    // once voices exist. The algorithm moved from the store to the controller in
-    // the 5b split (it needs both stores).
+    // once voices exist.
     describe('regression: useTTSStore_voice_recall', () => {
         it('does NOT wipe the profile voiceId when voices are not loaded yet', () => {
             useTTSSettingsStore.setState({
@@ -392,7 +387,6 @@ describe('TtsController', () => {
     });
 
     describe('voice management commands', () => {
-        // Regression: useTTSStore_platform 'loadVoices re-applies the current providerId'.
         it('loadVoices re-applies the current providerId, inits, and stores the voice list', async () => {
             const { engine, raw, setVoices } = makeFakeEngine();
             setVoices([VOICE_EN, VOICE_ZH]);

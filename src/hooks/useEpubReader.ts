@@ -1,23 +1,22 @@
 /**
- * useEpubReader — the reader LIFECYCLE hook (Phase 6 §5,
- * prep/phase6-reader-engine.md PR-4 "useEpubReader dissolves").
+ * useEpubReader — the reader LIFECYCLE hook.
  *
- * After the split this file owns exactly one concern: the cancellable
- * load/teardown pipeline (fetch blob → epub.js book → rendition → engine
- * port → display → events) plus the React state mirroring it. The former
- * inline subsystems live in their named modules:
+ * This file owns exactly one concern: the cancellable load/teardown pipeline
+ * (fetch blob → epub.js book → rendition → engine port → display → events)
+ * plus the React state mirroring it. The other reader subsystems live in
+ * their named modules:
  *
  *  - presentation        → @domains/reader/engine/epubTheming
  *  - selection pipeline  → @domains/reader/engine/selectionBridge
- *  - locations cache     → @domains/reader/engine/locations (D7 guards)
- *  - Chinese content     → @domains/chinese (Phase 6 §7, PR-10): the
- *                          dependency is INVERTED — this hook has zero
- *                          chinese imports; the app controller registers
+ *  - locations cache     → @domains/reader/engine/locations
+ *  - Chinese content     → @domains/chinese: the dependency is INVERTED —
+ *                          this hook has zero chinese imports; the app
+ *                          controller registers
  *                          `registerChineseReading(engine, …)` against the
  *                          engine's contentRendered/contentDestroyed seam.
  *
  * Characterization suites (Sanitization/Security/Selection/Theming) pin
- * through this surface; the pinyin suite moved with the feature to
+ * behavior through this surface; the pinyin suite lives with the feature in
  * src/domains/chinese/engine/.
  */
 import { useState, useEffect, useRef } from 'react';
@@ -133,9 +132,8 @@ export function useEpubReader(
   viewerRef: React.RefObject<HTMLElement>,
   options: EpubReaderOptions
 ): EpubReaderResult {
-  // No raw `Book` leaves this hook: the ReaderEngine port is the only public
-  // surface (the SearchPanel Book passthrough died with the SearchSession
-  // adoption; `bookRef` below is hook-internal lifecycle plumbing).
+  // The ReaderEngine port is the only reader surface this hook returns;
+  // `bookRef` below is hook-internal lifecycle plumbing.
   const [engine, setEngine] = useState<ReaderEngine | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [areLocationsReady, setAreLocationsReady] = useState(false);
@@ -150,11 +148,10 @@ export function useEpubReader(
   const prevSize = useRef({ width: 0, height: 0 });
   const resizeRaf = useRef<number | null>(null);
   const applyStylesRef = useRef<() => void>(() => { });
-  // Scoped selector (jank fix): the bare usePreferencesStore() call
-  // subscribed this hook's host — the whole reader tree — to EVERY
-  // preference field. Only showPinyin feeds the theme spec (its 1.8
-  // line-height floor); the Chinese content pass itself is event-driven via
-  // the app controller, not this hook.
+  // Scoped selector: a bare usePreferencesStore() call would subscribe this
+  // hook's host — the whole reader tree — to EVERY preference field. Only
+  // showPinyin feeds the theme spec (its 1.8 line-height floor); the Chinese
+  // content pass itself is event-driven via the app controller, not this hook.
   const showPinyin = usePreferencesStore(state => state.showPinyin);
   /** Disconnects the shared sandbox-patching observer (epubSecurity). */
   const sandboxObserverRef = useRef<(() => void) | null>(null);
@@ -169,11 +166,11 @@ export function useEpubReader(
   //
   // perf: `setMetadata` with a fresh object commits a second full render pass
   // of the host (the whole reader tree). The app passes a live library
-  // projection whose identity moves on every progress write, so a page turn
-  // used to double-render for nothing. The hook consumes the metadata STATE
-  // for exactly two fields — the theme spec's baseFontSize/baseLineHeight
-  // (everything else is read through `optionsRef` at load time) — so only a
-  // change to those needs a commit.
+  // projection whose identity moves on every progress write, so committing
+  // each one would double-render every page turn. The hook consumes the
+  // metadata STATE for exactly two fields — the theme spec's
+  // baseFontSize/baseLineHeight (everything else is read through
+  // `optionsRef` at load time) — so only a change to those needs a commit.
   useEffect(() => {
     const next = options.metadata;
     if (!next) return;
@@ -202,7 +199,7 @@ export function useEpubReader(
 
       try {
         const openStart = performance.now();
-        // Phase 2: Get file blob from static resources only. Metadata comes from props (Store).
+        // Get the file blob from static resources only. Metadata comes from props (Store).
         const fileData = yield bookContent.getBookFile(currentBookId);
         measureSince('reader:load-file', openStart);
 
@@ -255,11 +252,10 @@ export function useEpubReader(
           sandboxObserverRef.current = observeAndPatchSandbox(viewerRef.current);
         }
 
-        // The ReaderEngine port over the live book/rendition pair (Phase 6
-        // §2 "under-the-shell adapter"): constructed before display so its
-        // content hook (contentRendered + titled iframe) sees the first
-        // section. The deferred locationsReady resolves below when the
-        // registry is loaded or generated.
+        // The ReaderEngine port over the live book/rendition pair:
+        // constructed before display so its content hook (contentRendered +
+        // titled iframe) sees the first section. The deferred locationsReady
+        // resolves below when the registry is loaded or generated.
         let resolveLocationsReady!: () => void;
         const locationsReadyPromise = new Promise<void>((resolve) => {
           resolveLocationsReady = resolve;
@@ -279,12 +275,13 @@ export function useEpubReader(
 
         // Load navigation
         // The runner resumes the generator with the awaited yield value; the
-        // navigation shape is asserted where it is received (was `any`).
+        // navigation shape is asserted where it is received.
         const nav = (yield newBook.loaded.navigation) as { toc?: NavigationItem[] } | undefined;
         // The engine resolves the publisher TOC's hrefs onto the spine (a nav
         // document outside the OPF folder otherwise yields dead links), and
         // junk labels (`*FIX_…`, bare "Chapter N") borrow a real one from the
-        // stored TOC for the same target when it has one (plan §4.2).
+        // stored TOC for the same target when it has one
+        // (plan/epub-toc-cover-hardening.md §4.2).
         const storedToc = optionsRef.current.metadata?.syntheticToc;
         const tocItems = repairTocLabels(
           newEngine.normalizeToc(nav?.toc ?? [], 'raw'),
@@ -301,12 +298,10 @@ export function useEpubReader(
         // Display at saved location or start. `getInitialLocation` (when
         // provided) resolves LIVE — `initialLocation` and the `meta` capture
         // above are stale snapshots by now, and a position hydrated since
-        // then must still win (cold-open race fix).
+        // then must still win (the cold-open race).
         const startLocation = optionsRef.current.getInitialLocation
           ? optionsRef.current.getInitialLocation() || undefined
           : optionsRef.current.initialLocation || meta?.currentCfi || undefined;
-
-        // Legacy reading history fallback removed as Phase 2 relies on Stores (passed via options)
 
         const displayStart = performance.now();
         yield newRendition.display(startLocation);
@@ -315,11 +310,10 @@ export function useEpubReader(
 
         setIsReady(true);
 
-        // Location reporting through the engine port: identical title
-        // resolution to the legacy relocated handler (spine label →
-        // 'Chapter'/'Unknown' → findTocItem improvement), the percentage
-        // comes pre-computed on the EngineLocation (D4: ONE
-        // resolveLocationInfo path).
+        // Location reporting through the engine port: the title resolves
+        // from the spine label → 'Chapter'/'Unknown' → findTocItem
+        // improvement, and the percentage comes pre-computed on the
+        // EngineLocation.
         const reportLocation = (location: EngineLocation) => {
           const section = newEngine.resolveSection(location.sectionHref);
           let title = section ? (section.label || 'Chapter') : 'Unknown';
@@ -363,9 +357,9 @@ export function useEpubReader(
 
         // Event Listeners. Selection is deliberately NOT consumed from the
         // engine's 'selected' event: the selectionBridge mouseup pipeline
-        // below is the SINGLE selection source (D3 — epub.js 'selected' and
-        // the mouseup pipeline both reported one gesture in the legacy
-        // hook; the WebKit-reliable pipeline won, pinned by
+        // below is the SINGLE selection source (epub.js 'selected' and the
+        // mouseup pipeline would both report one gesture; the
+        // WebKit-reliable pipeline is the source, pinned by
         // useEpubReader_Selection.test.tsx).
         newEngine.subscribe((event) => {
           if (event.type === 'relocated') {
@@ -375,9 +369,9 @@ export function useEpubReader(
           }
         });
 
-        // Per-content-load pipeline (extras → selection, legacy order; the
-        // Chinese pass rides the ENGINE's contentRendered seam now and is
-        // registered by the app controller — Phase 6 §7, PR-10).
+        // Per-content-load pipeline (extras → selection; the Chinese pass
+        // rides the ENGINE's contentRendered seam and is registered by the
+        // app controller).
         const injectExtras = (contents: Contents) => {
           injectContentExtras(contents, {
             viewMode: optionsRef.current.viewMode,
@@ -399,11 +393,11 @@ export function useEpubReader(
         // Manually run BOTH content hooks for already-loaded content. The
         // content.register() hooks only fire for content loaded AFTER
         // registration, so the initial section (rendered before this runs) needs
-        // both run by hand. Previously only injectExtras was — so the selection
-        // bridge was never attached to the FIRST section, and text selection /
-        // the annotation popover silently did nothing until the reader turned a
-        // page (load a new section). Books whose content is the first section
-        // (e.g. short single-chapter books) never got selection at all.
+        // both run by hand. Otherwise the selection bridge would never attach
+        // to the FIRST section, and text selection / the annotation popover
+        // would silently do nothing until the reader turned a page (load a new
+        // section); books whose content is only the first section (e.g. short
+        // single-chapter books) would never get selection at all.
         // epubjs types getContents() as Contents (singular) but it returns an
         // array at runtime — asserted to the runtime shape, not `any`.
         (newRendition.getContents() as unknown as Contents[]).forEach((contents) => {
@@ -461,7 +455,7 @@ export function useEpubReader(
 
       const { width, height } = entries[0].contentRect;
 
-      // Use > 10px threshold as per hardening plan to prevent thrashing on mobile
+      // Use a > 10px threshold to prevent thrashing on mobile
       if (Math.abs(prevSize.current.width - width) > 10 || Math.abs(prevSize.current.height - height) > 10) {
         prevSize.current = { width, height };
 
@@ -486,10 +480,9 @@ export function useEpubReader(
   }, [viewerRef]);
 
   // Presentation (epubTheming module): apply the whole spec on any input
-  // change. D5: flow()/display() runs only when the view mode actually
-  // changed — a colors/typography tweak no longer reflows (the legacy
-  // always-reflow fired a spurious relocation event per settings change,
-  // which fed the session recorder).
+  // change. flow()/display() runs only when the view mode actually changed —
+  // a colors/typography tweak does not reflow (a reflow fires a spurious
+  // relocation event per settings change, which feeds the session recorder).
   const prevViewModeRef = useRef<'paginated' | 'scrolled' | null>(null);
   const isInitialApplyRef = useRef(true);
   useEffect(() => {
@@ -546,8 +539,9 @@ export function useEpubReader(
     metadata?.baseLineHeight,
     // showPinyin is a ReaderThemeSpec input (line-height floor).
     // forceTraditionalChinese / pinyinSize deliberately are NOT deps: neither
-    // feeds the spec, so both re-applied the whole theme (iframe CSS churn +
-    // reflow) for changes the content pass / overlay handle themselves.
+    // feeds the spec, so listing them would re-apply the whole theme (iframe
+    // CSS churn + reflow) for changes the content pass / overlay handle
+    // themselves.
     showPinyin,
   ]);
 

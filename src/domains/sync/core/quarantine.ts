@@ -13,12 +13,10 @@
  *  3. METADATA MAINTENANCE — after migration the orchestrator stamps the
  *     workspace metadata with the doc's version so layer 1 stays honest.
  *
- * `readDocSchemaVersion` is the migration coordinator's exact read,
- * RELOCATED here (src/app/migrations.ts re-exports it): P4 is the designed
- * first reader of the v6 `meta` map (program rule 5 — its write shipped one
- * release earlier), and `max(meta, library) || 1` tolerates partial
- * dual-writes so a half-stamped doc can never false-positive a quarantine
- * (risk R4).
+ * `readDocSchemaVersion` is also the migration coordinator's exact read
+ * (src/app/migrations.ts re-exports it), and `max(meta, library) || 1`
+ * tolerates partial dual-writes so a half-stamped doc can never
+ * false-positive a quarantine (risk R4).
  */
 import * as Y from 'yjs';
 

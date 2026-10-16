@@ -1,5 +1,5 @@
 /**
- * Typed errors thrown by the NetworkGateway (Phase 7 §I). Codes are members
+ * Typed errors thrown by the NetworkGateway. Codes are members
  * of the append-only C10 union (~types/errors). Callers branch on
  * `instanceof` or `code` — never message substrings.
  */
@@ -11,8 +11,8 @@ import { AppError, type AppErrorOptions } from '~types/errors';
 // governor under `kernel/quota`, and kernel modules may import only `~types`,
 // never a sibling kernel module like `kernel/net` — so it cannot live here and
 // be reached from there. Consumers import it directly from `~types/errors`. The
-// gateway surfaces it alongside the NET_* errors below once it enforces the
-// throttle.
+// gateway surfaces it alongside the NET_* errors below whenever the installed
+// QuotaScheduler rejects an acquire.
 
 /** Base class for gateway policy failures. */
 export class NetworkGatewayError extends AppError {

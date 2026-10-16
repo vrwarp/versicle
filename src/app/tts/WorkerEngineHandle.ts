@@ -6,20 +6,20 @@
  * fire-and-forget calls synchronously. This handle bridges the gap:
  *  - calls made before the worker is ready are queued on the boot promise and flushed in order
  *    (a principled startup state — `whenReady()` exposes its completion so the UI can gate on it);
- *  - it keeps an internal subscription so listener semantics match the in-process engine
+ *  - it keeps an internal subscription so listener semantics match PlaybackController.subscribe
  *    (subscribers receive the latest snapshot on subscribe, then live updates).
  *
- * Snapshot semantics across the boundary (5b-PR2, the single PlaybackSnapshot channel):
+ * Snapshot semantics across the boundary (the single PlaybackSnapshot channel):
  *  - `seq` is monotonic on the worker side; a Comlink delivery arriving out of order is
  *    DROPPED here, so consumers never observe time running backwards;
  *  - worker snapshots omit `queue` when the `queueId` did not change — the handle caches the
  *    last delivered queue and re-attaches it, so its subscribers always receive full
- *    snapshots with a stable queue identity between queue changes (P23's broadcast diet);
+ *    snapshots with a stable queue identity between queue changes;
  *  - a rejected fire-and-forget command surfaces as a snapshot with
- *    `error.code = 'TTS_COMMAND_FAILED'` instead of a swallowed log line (S8 fix).
+ *    `error.code = 'TTS_COMMAND_FAILED'` instead of a swallowed log line.
  *
  * Queue/playback *state* is not read from the handle: it flows through the subscription into
- * `useTTSStore` via the TtsController mirror, which the app reads reactively.
+ * `useTTSPlaybackStore` via the TtsController mirror, which the app reads reactively.
  */
 import type {
     TtsEngine,
@@ -73,7 +73,7 @@ export class WorkerEngineHandle implements TtsEngine {
         // (TTSProviderManager + every provider, PlatformIntegration,
         // LexiconService, comlink — ~122KB) loads in a lazy chunk here rather
         // than riding the boot task's static graph into the entry chunk, where
-        // it was parsed on every cold boot before any audio was ever used. The
+        // it would be parsed on every cold boot before any audio is used. The
         // handle already boots the worker as a fire-and-forget promise, so this
         // only moves WHERE the code is parsed, not when the worker spawns.
         this.booted = import('./createWorkerEngineClient')
@@ -165,7 +165,7 @@ export class WorkerEngineHandle implements TtsEngine {
     async deleteVoice(voiceId: string): Promise<void> { await this.call((c) => c.engine.deleteVoice(voiceId), undefined); }
     isVoiceDownloaded(voiceId: string): Promise<boolean> { return this.call((c) => c.engine.isVoiceDownloaded(voiceId), false); }
 
-    // --- Diagnostics (S9: the worker-side flight recorder is the one that
+    // --- Diagnostics (the worker-side flight recorder is the one that
     // sees engine traffic; the tab reads it through the handle) ---
     exportDiagnostics(): Promise<FlightRecorderExport> {
         return this.call((c) => c.engine.exportDiagnostics(), {

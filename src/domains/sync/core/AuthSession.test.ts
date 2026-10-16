@@ -1,6 +1,5 @@
 /**
- * `AuthSession` unit suite — the auth half of the strangled
- * FirestoreSyncManager (§D2).
+ * `AuthSession` unit suite — the auth half of the sync domain.
  *
  * Every collaborator is a port or a mocked module, so the four `start()`
  * arms (mock session / unconfigured / init failure / no Auth instance), the

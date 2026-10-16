@@ -1,10 +1,9 @@
 /**
- * Firebase config PRESENCE — the SDK-free half of firebase-config (Phase 8
- * §A first-use splitting): "is a config stored and complete?" must be
- * answerable from the boot path WITHOUT pulling firebase/app+auth+firestore
- * into the entry chunk (check 4 of scripts/check-worker-chunk.mjs asserts
- * the emitted artifact). firebase-config.ts re-exports these, so SDK-side
- * consumers keep one import.
+ * Firebase config PRESENCE — the SDK-free half of firebase-config:
+ * "is a config stored and complete?" must be answerable from the boot path
+ * WITHOUT pulling firebase/app+auth+firestore into the entry chunk (check 4
+ * of scripts/check-worker-chunk.mjs asserts the emitted artifact).
+ * firebase-config.ts re-exports these, so SDK-side consumers keep one import.
  */
 import { useSyncStore } from '@store/useSyncStore';
 import type { FirebaseConfigSettings } from '@store/useSyncStore';

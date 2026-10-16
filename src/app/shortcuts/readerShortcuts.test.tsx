@@ -1,14 +1,10 @@
 /**
- * Reader/TTS shortcut integration — the §E acceptance matrix: with BOTH
- * production registrants mounted (page turns + TTS playback keys, exactly
- * as the reader shell composes them), one ArrowRight is exactly ONE
- * action in every TTS state, for window keys and for the forwarded
- * iframe keydown stream alike.
- *
- * Absorbs (test-absorption ledger, rule 8) the keyboard assertions of the
- * deleted src/hooks/useReaderNavigation.test.ts — the hook lost its
- * keyboard half (and the P0 interim predicate) to the
- * KeyboardShortcutService.
+ * Reader/TTS shortcut integration — the keyboard acceptance matrix: with
+ * BOTH production registrants mounted (page turns + TTS playback keys,
+ * exactly as the reader shell composes them), one ArrowRight is exactly
+ * ONE action in every TTS state, for window keys and for the forwarded
+ * iframe keydown stream alike. Also owns the keyboard assertions for the
+ * page-turn keys (useReaderNavigation keeps only wheel/touch).
  */
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react';

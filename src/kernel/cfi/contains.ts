@@ -1,21 +1,18 @@
 /**
  * Canonical CFI containment — THE separator set and the two canonical
- * primitives (`cfiContains`, `stripCfiWrapper` in ./parse) that replace the
- * divergent inline copies that lived in AudioContentPipeline (`['/', '!',
- * ':']` — missing `[` and `,`, a live mis-grouping bug for assertion-bracket
- * children) and TableAdaptationProcessor (phase5-tts-strangler.md §5c.4,
- * content debt D9 / S17).
+ * primitives (`cfiContains`, `stripCfiWrapper` in ./parse). Every containment
+ * check shares one boundary definition; the set includes the assertion
+ * bracket `[` and the range comma `,`, so assertion-bracket children and
+ * range components are recognised as contained.
  *
- * `getParentCfi` is ported verbatim from src/lib/cfi-utils.ts; its
- * string-prefix fast path is pinned against the parsed-component oracle in
- * cfi.equivalence.fuzz.test.ts.
+ * `getParentCfi`'s string-prefix fast path is pinned against the
+ * parsed-component oracle in cfi.equivalence.fuzz.test.ts.
  */
 import { parseCfiRange, stripCfiWrapper, parseCfiTokens, serializeCfiTokens, preprocessBlockRoots } from './parse';
 import type { CfiToken, PreprocessedRoot } from './parse';
 
 /**
- * THE canonical step-boundary separator set (the `getParentCfi` set —
- * cfi-utils.ts:127 at the Phase 5 design pin). A string-prefix match is a
+ * THE canonical step-boundary separator set. A string-prefix match is a
  * containment only when the next character is one of these (or the end of
  * the string): child step (`/`), indirection (`!`), assertion bracket (`[`),
  * range component (`,`), or character offset (`:`).
@@ -101,9 +98,9 @@ export function getParentCfiParsed(cfi: string): string | null {
         return `epubcfi(${serializeCfiTokens(tokens.slice(0, firstComma))})`;
     }
 
-    // Point CFI: drop the terminal offset, then the leaf step. The legacy
-    // string path strips the leaf only on the CONTENT side of the last `!`
-    // (spine steps are never stripped), so mirror that: find the last
+    // Point CFI: drop the terminal offset, then the leaf step. The string
+    // path in getParentCfi strips the leaf only on the CONTENT side of the
+    // last `!` (spine steps are never stripped), so mirror that: find the last
     // indirection and only drop steps after it.
     let end = tokens.length;
     if (end > 0 && tokens[end - 1].kind === 'offset') end--;

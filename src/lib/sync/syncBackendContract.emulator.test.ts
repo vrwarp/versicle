@@ -1,12 +1,10 @@
 /**
  * SyncBackend contract (C3) run against the REAL `FirestoreBackend` + the
- * vendored y-cinder FireProvider, on the auth+firestore+storage emulator
- * trio under the repo's real `firestore.rules`/`storage.rules` — the §D8
- * collapse (phase4-sync-strangler.md) this file's previous compat-SDK
- * mirror was a placeholder for. The P9 y-cinder vendoring (+ the `saved`/
- * `sync` fork deltas) unlocked `capabilities.connect = true`: realtime
+ * y-cinder FireProvider, on the auth+firestore+storage emulator trio under
+ * the repo's real `firestore.rules`/`storage.rules`. With the y-cinder
+ * fork's `saved`/`sync` events, `capabilities.connect = true`: realtime
  * round-trips, the saved→lastSyncTime case, and the Storage half of the
- * honest-delete purge now run against the production code path.
+ * honest-delete purge all run against the production code path.
  *
  * Auto-skips when the emulators are not reachable, so the default
  * `npx vitest run` stays green. Start the trio with:
@@ -205,8 +203,8 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
   /**
    * The Firestore subcollections an honest delete sweeps. Mirrors the SUT's
    * FirestoreBackend.PURGE_SUBCOLLECTIONS: the four y-cinder subcollections
-   * (P4-6) plus `embedCache`, the artifact-lane HEAD-doc subcollection
-   * (shared-ai-cache-design.md §2.7, H-3). Both copies must include
+   * plus `embedCache`, the artifact-lane HEAD-doc subcollection
+   * (shared-ai-cache-design.md §2.7). Both copies must include
    * `embedCache` or countResiduals would under-count the HEAD-doc residual.
    */
   const PURGE_SUBCOLLECTIONS = [
@@ -233,7 +231,7 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
 
   const makeHarness = (): SyncBackendContractHarness => ({
     // The REAL provider attach: y-cinder connects in the background and the
-    // fork's `sync` handshake (surgery 2) resolves the wait — exactly what
+    // fork's `sync` handshake resolves the wait — exactly what
     // ProviderConnection/downloadWorkspaceState consume in production.
     connect: async (ydoc: Y.Doc, workspaceId: string) => {
       const connection = backend.connect(ydoc, workspaceId, {
@@ -298,7 +296,7 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
 
     probeHasData: (workspaceId) => withTransientRetry(() => backend.probeHasData(workspaceId)),
 
-    // The production delete semantics (P4-6 honest delete): tombstone
+    // The production delete semantics (honest delete): tombstone
     // first, then purge — exactly what WorkspaceService.delete runs.
     deleteWorkspace: async (workspaceId) => {
       await backend.tombstoneWorkspace(workspaceId);
@@ -307,14 +305,14 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
 
     isWorkspaceAlive: (workspaceId) => backend.isWorkspaceAlive(workspaceId),
 
-    // One residual doc in each y-cinder subcollection (what every pre-P4-6
-    // delete left behind) plus the Cloud Storage blobs the provider
-    // offloads (a compacted snapshot + a large_updates spill) — the
-    // Storage-emulator half the P4 §Follow-ups deferred to this collapse.
+    // One residual doc in each y-cinder subcollection plus the Cloud
+    // Storage blobs the provider offloads (a compacted snapshot + a
+    // large_updates spill).
     // Plus the artifact-lane residual: a real putArtifact lands an
-    // `embedCache/{key}` HEAD doc (swept by the new PURGE_SUBCOLLECTIONS
-    // entry) AND an `embeddings/{key}.bin` blob (swept by purgeStoragePrefix
-    // under the workspace prefix) — pins the H-3 fix end-to-end.
+    // `embedCache/{key}` HEAD doc (swept by the `embedCache`
+    // PURGE_SUBCOLLECTIONS entry) AND an `embeddings/{key}.bin` blob (swept by
+    // purgeStoragePrefix under the workspace prefix) — pins the HEAD-doc
+    // sweep end-to-end.
     seedResiduals: async (workspaceId) => {
       for (const sub of PURGE_SUBCOLLECTIONS) {
         if (sub === 'embedCache') continue; // seeded via the real putArtifact below
@@ -366,16 +364,16 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
       backend.putArtifact(workspaceId, relPath, bytes, meta),
     headArtifact: (workspaceId, relPath) => backend.headArtifact(workspaceId, relPath),
     getArtifact: (workspaceId, relPath) => backend.getArtifact(workspaceId, relPath),
-    // Phase-D lifecycle/GC — the real cloud delete/sweep round-trips (delete
+    // Lifecycle/GC — the real cloud delete/sweep round-trips (delete
     // HEAD doc + LEAVE the shared blob; sweep past-TTL HEAD+blob pairs). These
-    // are the round-trips the mock cannot model (no Storage tier) — CI-PENDING,
-    // auto-skip when the emulator trio is unreachable (EMULATOR HONESTY).
+    // are the round-trips the mock cannot model (no Storage tier); they
+    // auto-skip when the emulator trio is unreachable.
     deleteArtifactHead: (workspaceId, relPath) =>
       backend.deleteArtifactHead(workspaceId, relPath),
     sweepArtifacts: (workspaceId, opts) => backend.sweepArtifacts(workspaceId, opts),
   });
 
-  // ── Artifact-lane emulator cases (CI-PENDING) ──────────────────────────
+  // ── Artifact-lane emulator cases ───────────────────────────────────────
   // These exercise the REAL Firestore+Storage round trip and the
   // HEAD-after-Storage write ordering the MockBackend cannot model (no
   // Storage tier). They live INSIDE the describe.skipIf(!emulatorUp) block,
@@ -457,11 +455,11 @@ describe.skipIf(!emulatorUp)('firestore emulator (real FirestoreBackend + y-cind
   describeSyncBackendContract({
     backendName: 'FirestoreBackend (emulator trio, real rules, vendored y-cinder)',
     capabilities: {
-      // The §D8 flip: the vendored provider (with the sync handshake) runs
-      // against the emulator — realtime replication is testable here.
+      // The y-cinder provider (with the sync handshake) runs against the
+      // emulator — realtime replication is testable here.
       connect: true,
       serverSideTombstoneEnforcement: true,
-      // The P9 `saved` fork delta (§D6.1) — committed saves announce.
+      // The y-cinder fork's `saved` event — committed saves announce.
       savedEvent: true,
       // Real Firestore listeners cannot be made to fail on demand.
       eventInjection: false,

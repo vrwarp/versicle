@@ -1,7 +1,7 @@
 /**
- * Ambient vendor-prefix / nonstandard-platform surface (P9 any-ratchet).
+ * Ambient vendor-prefix / nonstandard-platform surface.
  *
- * The ONE place legacy vendor globals are typed, so call sites read
+ * The ONE place vendor-prefixed globals are typed, so call sites read
  * `window.webkitAudioContext` instead of casting through `any`. Append-only;
  * each entry names its consumer.
  */

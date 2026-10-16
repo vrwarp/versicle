@@ -1,14 +1,14 @@
 /**
- * Book content identity (Phase 7, phase7-library-google.md §B "identify").
+ * Book content identity (the import pipeline's "identify" stage).
  *
  * Two generations of identity live side by side:
  *
  *  - `contentHash` — SHA-256 (hex) over the EPUB's content bytes only.
- *    Filename-independent, collision-resistant; what every P7+ manifest
- *    carries and what restore acceptance prefers (pays ingestion-library D7:
- *    the legacy fingerprint embeds the filename, so a renamed file could
- *    never be restored).
- *  - The legacy fingerprint (`generateFileFingerprint`, pre-P7 `fileHash`):
+ *    Filename-independent, collision-resistant; what every new manifest
+ *    carries and what restore acceptance prefers (the legacy fingerprint
+ *    embeds the filename, so on its own a renamed file could never be
+ *    restored).
+ *  - The legacy fingerprint (`manifest.fileHash`):
  *    `${filename}-${title}-${author}-${djb2(head 4KiB)}-${djb2(tail 4KiB)}`.
  *    Still WRITTEN for backward compatibility and ACCEPTED on restore via
  *    its filename-independent content tail (the two trailing djb2 hashes) —
@@ -16,7 +16,7 @@
  *    upgrade in the orchestrator.
  */
 
-/** djb2 over a buffer — the legacy fingerprint's content hash (verbatim from lib/ingestion.ts). */
+/** djb2 over a buffer — the legacy fingerprint's content hash (also the per-section `sectionTextHash`). */
 export function cheapHash(buffer: ArrayBuffer): string {
   const view = new Uint8Array(buffer);
   let hash = 5381;
@@ -38,8 +38,7 @@ export async function legacyContentTail(file: Blob): Promise<string> {
 }
 
 /**
- * The legacy identity fingerprint (pre-P7 `manifest.fileHash`). Moved
- * verbatim from `lib/ingestion.ts generateFileFingerprint`; still written to
+ * The legacy identity fingerprint (`manifest.fileHash`); still written to
  * new manifests so older builds keep verifying restores.
  */
 export async function computeLegacyFingerprint(
@@ -50,7 +49,7 @@ export async function computeLegacyFingerprint(
   return `${metaString}-${await legacyContentTail(file)}`;
 }
 
-/** SHA-256 (hex) over the file's content bytes — the P7 `contentHash`. */
+/** SHA-256 (hex) over the file's content bytes — the manifest `contentHash`. */
 export async function computeContentHash(file: Blob): Promise<string> {
   const buffer = await file.arrayBuffer();
   const digest = await crypto.subtle.digest('SHA-256', buffer);
@@ -60,8 +59,9 @@ export async function computeContentHash(file: Blob): Promise<string> {
 }
 
 /**
- * Restore acceptance against a PRE-P7 manifest: does `file`'s content match
- * the stored legacy fingerprint, ignoring the filename/title/author prefix?
+ * Restore acceptance against a manifest with only the legacy fingerprint:
+ * does `file`'s content match the stored legacy fingerprint, ignoring the
+ * filename/title/author prefix?
  *
  * The prefix may contain `-` (filenames, authors), so the only robust
  * comparison is the suffix match on the two djb2 hex tokens — which are

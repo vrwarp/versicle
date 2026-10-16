@@ -1,17 +1,16 @@
 /**
- * PinyinGeometryEngine — the pure pinyin geometry pass (Phase 6 §7.1,
- * prep/phase6-reader-engine.md PR-10).
+ * PinyinGeometryEngine — the pure pinyin geometry pass.
  *
- * Code-point SAFE by construction (CH-1, fixed at PR-1 and moved here
- * verbatim): pinyin-pro returns one entry per Unicode CODE POINT while DOM
- * Range offsets count UTF-16 CODE UNITS, so the loop iterates code points
- * and advances a parallel code-unit cursor. The Han test is the full
- * `\p{Script=Han}` property — Ext-B+ astral characters included.
+ * Code-point SAFE by construction (CH-1): pinyin-pro returns one entry per
+ * Unicode CODE POINT while DOM Range offsets count UTF-16 CODE UNITS, so the
+ * loop iterates code points and advances a parallel code-unit cursor. The
+ * Han test is the full `\p{Script=Han}` property — Ext-B+ astral characters
+ * included.
  *
  * pinyin-pro is loaded lazily (it is a sizable dictionary) but TYPED
- * against the real package types (CH-11 — the legacy wrapper held it as
- * `any`). No store imports, no epubjs imports: callers inject nothing but
- * DOM nodes and offsets, so this module is trivially unit-testable.
+ * against the real package types (CH-11). No store imports, no epubjs
+ * imports: callers inject nothing but DOM nodes and offsets, so this module
+ * is trivially unit-testable.
  */
 import type { PinyinPosition } from '@domains/chinese/types';
 import { applyPolyphonicOverrides } from './polyphonic';
@@ -55,17 +54,16 @@ export function getPinyin(text: string): string[] {
 }
 
 /**
- * Per-node readings cache (jank fix): the reading pass (pinyin-pro
- * segmentation + polyphonic overrides) is pure string work over text that
- * never changes for a given node — only its GEOMETRY moves on relocation /
- * resize. Remeasure passes used to recompute readings for the whole chapter
- * on every page turn and scroll-settle; this cache makes those passes
- * rect-reads only. Keyed weakly on the Text node; the entry stores the
- * exact string the readings were computed from, so a node whose displayed
- * text changes (Traditional toggle re-running before the cache was built,
- * a mutated DOM) recomputes instead of serving stale readings. cn→tw is
- * code-point aligned, so both display scripts share one entry (the
- * Simplified source key).
+ * Per-node readings cache: the reading pass (pinyin-pro segmentation +
+ * polyphonic overrides) is pure string work over text that never changes for
+ * a given node — only its GEOMETRY moves on relocation / resize. The cache
+ * lets remeasure passes (every page turn and scroll-settle) be rect-reads
+ * only instead of recomputing readings for the whole chapter. Keyed weakly
+ * on the Text node; the entry stores the exact string the readings were
+ * computed from, so a node whose displayed text changes (Traditional toggle
+ * re-running before the cache was built, a mutated DOM) recomputes instead
+ * of serving stale readings. cn→tw is code-point aligned, so both display
+ * scripts share one entry (the Simplified source key).
  */
 const readingsCache = new WeakMap<Text, { key: string; readings: string[] }>();
 
@@ -95,8 +93,8 @@ export function getNodeReadings(textNode: Text, pinyinSourceText?: string): stri
 
 /**
  * Collect the Han text nodes of a section document (the walker half of the
- * legacy pass): text nodes containing at least one Han code point, skipping
- * nodes inside ruby annotations (`<rt>`/`<ruby>` may already carry readings).
+ * pass): text nodes containing at least one Han code point, skipping nodes
+ * inside ruby annotations (`<rt>`/`<ruby>` may already carry readings).
  */
 export function findHanTextNodes(doc: Document): Text[] {
   const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);

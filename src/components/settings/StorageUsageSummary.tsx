@@ -3,9 +3,8 @@ import { formatBytes, formatPercent } from '@kernel/locale/format';
 
 /**
  * Storage usage line for the Data Management settings tab — the
- * `navigator.storage.estimate()` surface Phase 3 deferred to the settings
- * pass (phase3-storage-gateway.md §Follow-ups item 7; `storage.persist()`
- * itself is requested at first open by data/connection.ts D2). Landed P9.
+ * `navigator.storage.estimate()` surface (`storage.persist()` itself is
+ * requested once after the first successful open by data/connection.ts).
  *
  * Self-contained on purpose: the tab is a props-fed presentational
  * component, and this is a read of a browser API with no app state — it

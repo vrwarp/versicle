@@ -1,10 +1,10 @@
 /**
  * Boot interceptor for the workspace-migration state machine
- * (moved verbatim from App.tsx; see MigrationStateService for the states).
+ * (see MigrationStateService for the states).
  *
- * - STAGED → run the idempotent staged apply (Phase 4 §D4: wipe main +
- *   rewrite from the durable staging DB under the cross-tab swap lock,
- *   transition to AWAITING_CONFIRMATION, reload) and HALT the boot
+ * - STAGED → run the idempotent staged apply (plan/overhaul/prep/phase4-sync-strangler.md §D4:
+ *   wipe main + rewrite from the durable staging DB under the cross-tab swap
+ *   lock, transition to AWAITING_CONFIRMATION, reload) and HALT the boot
  *   sequence. A crash anywhere in apply re-enters this arm on next boot —
  *   staging stays intact until the user finalizes. Apply failure routes to
  *   RESTORING_BACKUP (the protected pre-migration checkpoint always exists
@@ -65,7 +65,7 @@ export const migrationInterceptorTask: BootTask = {
       }
 
       if (migrationState.status === 'RESTORING_BACKUP') {
-        // Flow C: Execute rollback immediately.
+        // Execute the rollback immediately.
         // The migration state is kept until the restore SUCCEEDS —
         // restoreCheckpoint clears it once the snapshot is fully written,
         // just before reloading. Clearing it up-front would make a failed
@@ -73,12 +73,13 @@ export const migrationInterceptorTask: BootTask = {
         logger.info('Boot interceptor: RESTORING_BACKUP detected, rolling back...');
         if (migrationState.backupCheckpointId != null) {
           // pauseSync (§D7 inversion): sync never started on this boot path
-          // (ctx.syncAllowed gates syncInit), so this is belt-and-braces —
-          // it severs anything a future boot reordering might have started.
+          // (ctx.halt stops the sequence before syncInit), so this is
+          // belt-and-braces — it severs anything a future boot reordering
+          // might have started.
           // setActiveWorkspaceId: staged-swap states carry the pre-switch
-          // workspace id; the restore reverts the local tie alongside the
-          // data so a rollback cannot leave old data tied to the target
-          // workspace (P4-5; legacy states without the field are untouched).
+          // workspace id (previousWorkspaceId); the restore reverts the local
+          // tie alongside the data so a rollback cannot leave old data tied to
+          // the target workspace (states without the field are untouched).
           CheckpointService.restoreCheckpoint(migrationState.backupCheckpointId, {
             pauseSync: stopSyncConnections,
             setActiveWorkspaceId,
@@ -100,8 +101,8 @@ export const migrationInterceptorTask: BootTask = {
       }
 
       if (migrationState.status === 'AWAITING_CONFIRMATION') {
-        // Flow B, Step 6: surface the confirmation modal, do NOT initialize
-        // sync (enforced by the syncInit task reading ctx.syncAllowed).
+        // Surface the confirmation modal, do NOT initialize sync (enforced by
+        // the syncInit task reading ctx.syncAllowed).
         logger.info('Boot interceptor: AWAITING_CONFIRMATION detected, HALT sync init...');
         ctx.syncAllowed = false;
         ctx.pendingMigration = {

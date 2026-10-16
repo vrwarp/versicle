@@ -1,12 +1,11 @@
 /**
- * dictionary — the `versicle-dict` IndexedDB database owner
- * (Phase 6 §7.4, prep/phase6-reader-engine.md PR-11).
+ * dictionary — the `versicle-dict` IndexedDB database owner.
  *
- * Deliberately a SEPARATE database, not a new object store in
- * EpubLibraryDB: the dictionary is rebuildable static content (compiled
- * CC-CEDICT served from /dict/), not user data — so it needs no main-schema
- * version bump, no slot in the v25 migration registry, and no write-gate
- * coordination (no other tab/worker writes it). It IS enumerated by
+ * Deliberately a SEPARATE database, not an object store in EpubLibraryDB:
+ * the dictionary is rebuildable static content (compiled CC-CEDICT served
+ * from /dict/), not user data — so it needs no main-schema version bump,
+ * no slot in the migration registry, and no write-gate coordination (no
+ * other tab/worker writes it). It IS enumerated by
  * `wipeAllData()` (../wipe.ts APP_DATABASES) so a full wipe leaves nothing
  * behind, and the wipe closes this connection first so the deletion cannot
  * be blocked by our own tab.

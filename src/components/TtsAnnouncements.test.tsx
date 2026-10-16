@@ -1,7 +1,6 @@
 /**
- * LiveAnnouncer + TTS announcement adapter (Phase 8 §D, a11y item 2):
- * playback STATE TRANSITIONS reach the persistent live regions; sentence
- * advances never do.
+ * LiveAnnouncer + TTS announcement adapter: playback STATE TRANSITIONS
+ * reach the persistent live regions; sentence advances never do.
  */
 import { render, screen, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';

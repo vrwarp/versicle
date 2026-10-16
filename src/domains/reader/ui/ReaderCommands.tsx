@@ -1,35 +1,30 @@
 /**
- * ReaderCommands — the typed command surface of the open reader (Phase 6
- * §5a, prep/phase6-reader-engine.md PR-8).
+ * ReaderCommands — the typed command surface of the open reader.
  *
- * Replaces three ad-hoc command paths that all died with this module:
- *  - the `reader:chapter-nav` window CustomEvent (CompassPill → ReaderView),
- *  - the `playFromSelection`/`jumpToLocation` closures stored INSIDE
- *    useReaderUIStore (callbacks-in-store),
- *  - the dead `rendition` prop chain (RootLayout mounted ReaderControlBar
- *    bare, so CompassPill's selection-refinement branch was unreachable —
- *    reader.md D11; it is reachable again via `refineSelection()`).
+ * Commands travel through this typed surface instead of a window
+ * CustomEvent, closures stored INSIDE useReaderUIStore (which keeps DATA
+ * state only), or a `rendition` prop chain. Out-of-tree mounts such as
+ * ReaderControlBar (mounted by RootLayout, outside the reader tree) can reach
+ * the open reader through the registry, including `refineSelection()` for the
+ * audio-triage selection-refinement path.
  *
  * Two consumption modes:
  *  - inside the reader tree: `useReaderCommands()` / `useReaderEngine()`
  *    (React context),
- *  - out-of-tree mounts (CompassPill lives in RootLayout):
+ *  - out-of-tree mounts (ReaderControlBar lives in RootLayout):
  *    `readerCommandsRegistry.get()` — registered by the provider on mount,
- *    cleared on unmount; null whenever no reader is open (callers already
- *    handle absence, exactly like the optional store callbacks they
- *    replaced).
+ *    cleared on unmount; null whenever no reader is open (callers handle
+ *    absence).
  *
- * Reconciliation vs the prep-doc sketch (recorded per program rules): the
- * doc draws `ReaderCommandsProvider: React.FC<{ engine }>` building the
- * commands itself, but the TTS-aware chapter routing needs the audio
+ * The provider takes an already-built ReaderCommands object rather than
+ * building it from the engine: the TTS-aware chapter routing needs the audio
  * facade + playback store — app/state surfaces this domain module must not
- * import (domains-no-store, master plan §2 rule 3). So the SHELL assembles
- * the ReaderCommands object (it owns those imports already) and the
- * provider owns context + registry lifecycle. `nextPage`/`prevPage` are
- * additions over the sketch: the keyboard path turns pages regardless of
- * TTS chapter routing (since Phase 8 §E the keys are
- * KeyboardShortcutService registrations — src/app/shortcuts/ — where
- * scope stacking replaced the P0 interim predicates).
+ * import (domains-no-store). So the reader controller
+ * (src/app/reader/useReaderController.ts) assembles the ReaderCommands object
+ * and the provider owns context + registry lifecycle. `nextPage`/`prevPage`
+ * exist because the keyboard path turns pages regardless of TTS chapter
+ * routing (the keys are KeyboardShortcutService registrations —
+ * src/app/shortcuts/ — where scope stacking decides ownership).
  */
 import React, { createContext, useContext, useEffect } from 'react';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
@@ -43,7 +38,7 @@ export interface ReaderCommands {
   nextPage(): void;
   prevPage(): void;
   /**
-   * TTS-aware chapter navigation (the CompassPill arrows): routes to
+   * TTS-aware chapter navigation (the AudioPill arrows): routes to
    * skipToNext/PreviousSection while TTS is active, else turns the page.
    */
   nextChapter(): void;
@@ -52,7 +47,7 @@ export interface ReaderCommands {
   playFromSelection(cfiRange: string): void;
   /**
    * Current iframe selection as a refined annotation target (the
-   * audio-triage path, D11) — null when nothing is selected.
+   * audio-triage path) — null when nothing is selected.
    */
   refineSelection(): { cfiRange: string; text: string } | null;
 }
@@ -64,7 +59,7 @@ interface ReaderCommandsContextValue {
 
 const ReaderCommandsContext = createContext<ReaderCommandsContextValue | null>(null);
 
-/** Out-of-tree handle (CompassPill in RootLayout). Module-scope, inert. */
+/** Out-of-tree handle (ReaderControlBar in RootLayout). Module-scope, inert. */
 let registered: ReaderCommands | null = null;
 
 export const readerCommandsRegistry = {

@@ -141,7 +141,7 @@ describe('replication spec completeness', () => {
         expect(snapshot.kind).toBe('settings');
         const settings = (snapshot as unknown as { settings: Record<string, unknown> }).settings;
         // Exactly the engine-read field set — no playback mirror, no queue, no
-        // actions, no api keys (the old plain(getState()) shipped everything).
+        // actions, no api keys (a plain(getState()) push would ship everything).
         expect(Object.keys(settings).sort()).toEqual([
             'alwaysMerge',
             'customAbbreviations',
@@ -201,8 +201,8 @@ describe('replication spec completeness', () => {
     describe("regression: progress slice does not echo the engine's own writes", () => {
         // The engine writes progress per sentence (updateTTSProgress) and per finished
         // sentence (addCompletedRange); both land in the reading-state store on the host and
-        // used to round-trip the WHOLE UserProgress (completedRanges + up to 500
-        // readingSessions) back into the worker, twice per sentence. The slice now replicates
+        // would round-trip the WHOLE UserProgress (completedRanges + up to 500
+        // readingSessions) back into the worker, twice per sentence. The slice replicates
         // only the two fields restoreQueue reads, behind an equality guard.
         const fullProgress = {
             bookId: 'b1',
@@ -266,8 +266,8 @@ describe('replication spec completeness', () => {
     });
 
     describe('regression: bookLanguage pushes one update, for the current book only', () => {
-        // The old slice looped the WHOLE library on every book-store write: 300 books meant
-        // 300 Comlink messages and 300 bookListeners firings in the worker, for state the
+        // Looping the WHOLE library on every book-store write would mean 300 Comlink messages
+        // and 300 bookListeners firings in the worker for a 300-book library, for state the
         // engine only ever reads for the current book.
         const library = {
             books: {
@@ -311,7 +311,7 @@ describe('replication spec completeness', () => {
 
     describe('regression: analysis slice pushes only the current book', () => {
         // `sections` is keyed `${bookId}/${sectionId}` across the WHOLE library and its
-        // entries carry tableAdaptations text; the old slice deep-cloned all of it on every
+        // entries carry tableAdaptations text; pushing all of it would deep-clone it on every
         // content-analysis write — including the worker's own markAnalysisLoading /
         // saveTableAdaptations echoes.
         const a1 = { status: 'success', generatedAt: 1 };
@@ -368,12 +368,12 @@ describe('replication spec completeness', () => {
 
     describe('regression: a book-scoped analysis map must not wipe the other books', () => {
         // The two sides of this one kind have to agree on SCOPE. The host scopes its
-        // multi-change fallback to the open book — the whole point of the change was to stop
-        // deep-cloning a cross-library map on every write — while the worker used to treat
-        // any map as authoritative for its entire cache. Other books' boot-replicated
-        // entries were silently dropped, and a book switch pushes language + progress only,
-        // never analysis, so they never came back: the AnalysisApplier found nothing on
-        // section load and neither applied nor cleared that book's mask/adaptations.
+        // multi-change fallback to the open book (to avoid deep-cloning a cross-library map
+        // on every write), so a worker that treated any map as authoritative for its entire
+        // cache would silently drop other books' boot-replicated entries. A book switch
+        // pushes language + progress only, never analysis, so they would never come back:
+        // the AnalysisApplier would find nothing on section load and neither apply nor clear
+        // that book's mask/adaptations.
         const otherBook = { status: 'success', generatedAt: 1 };
 
         function bootedWorker() {
@@ -420,12 +420,13 @@ describe('replication spec completeness', () => {
 
     describe('regression: the bookLanguage echo guard tracks the WORKER cache, not one writer', () => {
         // That cache has two writers — this slice's subscription and the setBook pre-push
-        // (bookSnapshotUpdates) — and the guard used to remember only its own pushes. Any
-        // window with no current book desynchronizes them: the subscription drops the writes
-        // it sees there, so a later write back to the pre-window language looks like "no
-        // news" and is suppressed, leaving the worker on a language the store no longer has.
-        // PlaybackController's language sync only re-reads when an update is APPLIED
-        // (bookListeners), so TTS keeps the wrong voice until the next book switch.
+        // (bookSnapshotUpdates) — so a guard that remembered only its own pushes would go
+        // stale. Any window with no current book desynchronizes them: the subscription
+        // drops the writes it sees there, so a later write back to the pre-window language
+        // looks like "no news" and is suppressed, leaving the worker on a language the
+        // store no longer has. PlaybackController's language sync only re-reads when an
+        // update is APPLIED (bookListeners), so TTS keeps the wrong voice until the next
+        // book switch.
         it('re-pushes a language the setBook pre-push overwrote while no book was open', () => {
             const ctx = new WorkerEngineContext({ post: vi.fn() });
             fakeStores.book.state = { books: { b1: { bookId: 'b1', language: 'fr' } } };

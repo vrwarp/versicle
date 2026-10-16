@@ -155,33 +155,19 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ en
             await engine.display(newCfi);
 
             // Try to select it visually
-            // getting range from cfi
             const range = engine.getRenderedRange(newCfi);
             if (range) {
                 setMergedContent(range.toString());
 
-                // We need to find which contents object this range belongs to
-                // rendition.getContents() returns an array of contents
-                // We can try to select in all of them or find the right one.
-                // A simpler way for debug is just to rely on rendition.display to show it,
-                // and maybe add a temporary annotation.
-
-                // Select in DOM
-                // This is the main window selection, but reader is in iframe
-
-                // We need to access the iframe's selection
+                // The reader renders inside iframes, so the selection has to be
+                // set on a content view's own window, not the main window's.
                 const contents = engine.getContentViews();
                 if (contents && contents.length > 0) {
-                    // Iterate through contents to find where the range belongs (or just try all)
+                    // Try every content view rather than working out which one owns the range
                     contents.forEach((content) => {
                         const contentDoc = content.document;
                         const contentWin = content.window;
                         if (contentDoc && contentWin) {
-                            // This part is tricky because 'range' object from getRange might be created in the context of the iframe
-                            // provided by epub.js
-
-                            // Actually, rendition.getRange(cfi) returns a Range object valid in the document context.
-                            // Let's try to add it to selection.
                             try {
                                 const sel = contentWin.getSelection();
                                 sel?.removeAllRanges();
@@ -248,8 +234,7 @@ export const ContentAnalysisLegend: React.FC<ContentAnalysisLegendProps> = ({ en
 
         setIsReprocessing(true);
         try {
-            // Through the ImportOrchestrator queue (mutex-guarded) — the
-            // lib/ingestion.reprocessBook delegate died with this re-point.
+            // Through the ImportOrchestrator queue (mutex-guarded).
             await importController.reprocessBook(currentBookId);
             window.location.reload();
         } catch (e) {

@@ -42,9 +42,10 @@
  *    until that cooldown elapses (or once the daily request budget is spent)
  *    acquire throws {@link NetRateLimitedError} before any network call.
  *
- * Cross-device note: the QuotaStore port is the single seam where, later, a sum
- * of spend across the user's other devices can be folded in without changing
- * the governor — it only ever asks the port for "today's usage".
+ * Cross-device note: the governor and the QuotaStore port only ever see THIS
+ * device's usage. Other devices' spend is accounted for outside the kernel (the
+ * app layer reduces the background daily ceiling by it); folding it into the
+ * persisted counter would double-count on the next persist.
  */
 import { NetRateLimitedError } from '~types/errors';
 import { ptDayString, msUntilNextPtDay } from './ptDay';
@@ -281,7 +282,7 @@ export class QuotaGovernor {
    * held until the matching {@link release}, AND the spend is RECORDED here (the
    * rolling per-minute window event + the persisted daily request/token count):
    * this is the single recorder, so a request that never commits (e.g. an
-   * embedding, whose client has no governor) still counts toward every budget
+   * embedding, whose client never calls commit) still counts toward every budget
    * and still persists via the store. {@link commit} only reconciles the
    * recorded estimate to the actual cost.
    */
@@ -407,8 +408,9 @@ export class QuotaGovernor {
   }
 
   /**
-   * Release a foreground claim WITHOUT touching the windows or daily — for the
-   * failure path where an {@link acquire} succeeded but the request never ran.
+   * Release a foreground claim WITHOUT touching the windows or daily. The
+   * NetworkGateway calls it exactly once per admitted egress, on every
+   * completion (success, resolved non-2xx, or throw).
    * It NEVER undoes the acquire-recorded window/daily event (the attempt still
    * counts — matching free-tier reality). Idempotent (clamped at zero). Both the
    * `fg` and `fgd` lanes hold a foreground claim; `bg` holds none and is a no-op

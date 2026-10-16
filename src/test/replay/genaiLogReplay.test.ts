@@ -237,7 +237,8 @@ describe.skipIf(!LOG_PATH)('GenAI log replay (real export from GENAI_LOG_PATH)',
       writeFileSync(`${out.replace(/\.json$/, '')}.txt`, `${text}\n`);
     }
     expect(report.detection.attempts).toBeGreaterThan(0);
-    // The regression claims of the fix set, checked against the real answers:
+    // The current validator, checked against the real logged answers: it keeps every
+    // previously accepted answer and accepts every previously rejected one.
     expect(report.detection.validator.newlyRejected).toBe(0);
     expect(report.detection.validator.rejectedAfterOfThose).toBe(0);
   });

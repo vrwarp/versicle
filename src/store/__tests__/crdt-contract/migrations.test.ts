@@ -34,12 +34,11 @@ import { DEVICE_A, DEVICE_B, BOOK_EN, BOOK_CJK } from '@test/fixtures/ydoc/seed'
  *    standing pairings: v5-vs-v6, v6-vs-v7, v7-vs-v8, and v8-vs-v9 —
  *    where the enforcement layer CHANGES: the v9 bump retired the
  *    library.__schemaVersion dual write, so the middleware per-map pill
- *    stays silent by design and the P4 doc-level meta layers own the
+ *    stays silent by design and the doc-level meta layers own the
  *    quarantine (both halves pinned).
- *  - Coordinator invariants (absorbing the durable assertions of the
- *    deleted yjs-provider.migration-race.test.ts spy test): no double-apply,
- *    failure → MigrationError with the pre-migration checkpoint id, atomic
- *    transactional bump, idempotent re-run after success.
+ *  - Coordinator invariants: no double-apply, failure → MigrationError with
+ *    the pre-migration checkpoint id, atomic transactional bump, idempotent
+ *    re-run after success.
  */
 
 // vitest's jsdom environment rewrites import.meta.url to a non-file URL;
@@ -134,8 +133,8 @@ describe('F.3 migration matrix — committed era fixtures → v9', () => {
       expect(doc.getMap(`preferences/${device}`).size).toBe(0);
     }
 
-    // v9 scope 3: the de-synced activeContext key (P8 §J route state) is
-    // pruned from every folded device map; nothing else was touched.
+    // v9 scope 3: the de-synced activeContext key (route state, not synced)
+    // is pruned from every folded device map; nothing else was touched.
     expect('activeContext' in foldedA).toBe(false);
     expect('activeContext' in foldedB).toBe(false);
 
@@ -164,7 +163,7 @@ describe('F.3 migration matrix — committed era fixtures → v9', () => {
     }).knownCharacters;
     expect(vocab).toEqual({ 红: 1740000000000, 楼: 1740000600000, 梦: 1740001200000 });
 
-    // v8 scope: the one-time reading-list bookId FK link (Phase 7 §D) —
+    // v8 scope: the one-time reading-list bookId FK link —
     // exact filename↔sourceFilename join first ('alice.epub' links even
     // though its TITLE differs from the inventory's), fuzzy title+author
     // join second (the renamed 紅樓夢 copy), orphans left alone. Works
@@ -418,9 +417,10 @@ describe('coordinator invariants', () => {
     await migrate(doc);
 
     // Zero library transactions across the whole v8 → v9 run: the frozen
-    // stamp is untouched residue, not a rewrite — pre-P4-era clients keep
-    // their poison-pill tripwire (8 > v≤7) and v8-era clients are caught
-    // by the P4 doc-level meta layers (the F.2 v9 case pins both halves).
+    // stamp is untouched residue, not a rewrite — clients that predate the
+    // doc-level meta layers keep their poison-pill tripwire (8 > v≤7) and
+    // v8-era clients are caught by those meta layers (the F.2 v9 case pins
+    // both halves).
     expect(libraryEvents).toBe(0);
     expect(doc.getMap('library').get('__schemaVersion')).toBe(8);
     expect(doc.getMap('meta').get('schemaVersion')).toBe(9);
@@ -521,15 +521,14 @@ describe('F.2 two-client quarantine — v5 stack vs migrated v6 doc', () => {
     expect(updatesAfterQuarantine).toBe(0);
     expect((docB.getMap('library').get('books') as Y.Map<unknown>).size).toBe(2);
 
-    // PINNED RESIDUAL (D5; P4-4 LANDED the doc-level enforcement): at THIS
-    // layer the Y-level merge has already happened — the local doc (and
-    // therefore y-idb) carries v6 data. That stays true by design: the
-    // middleware pill cannot undo a CRDT merge. What P4-4 added on top is
-    // doc-level: the live `meta` observer destroys the provider (zero
-    // further outbound), the heartbeat stops, and the pre-attach/pre-apply
-    // gates lock BEFORE remote bytes reach the live doc on the
-    // clean-sync/switch/reconnect paths — pinned in
-    // src/lib/sync/FirestoreSyncManager.quarantine.test.ts…
+    // PINNED RESIDUAL (D5): at THIS layer the Y-level merge has already
+    // happened — the local doc (and therefore y-idb) carries v6 data. That
+    // stays true by design: the middleware pill cannot undo a CRDT merge.
+    // The doc-level enforcement sits on top of it: the live `meta` observer
+    // destroys the provider (zero further outbound), the heartbeat stops,
+    // and the pre-attach/pre-apply gates lock BEFORE remote bytes reach the
+    // live doc on the clean-sync/switch/reconnect paths — pinned in
+    // src/domains/sync/core/SyncOrchestrator.quarantine.test.ts…
     expect(docB.getMap('library').get('__schemaVersion')).toBe(6);
     expect(docB.getMap('meta').get('schemaVersion')).toBe(6);
     expect(docB.getMap('annotations').has('popover')).toBe(false);
@@ -542,10 +541,10 @@ describe('F.2 two-client quarantine — v5 stack vs migrated v6 doc', () => {
   // Program rule 6 (standing): the Playwright two-client journey — client B
   // booted with a v5 schema override, client A migrating the v5 fixture over
   // the mock sync backend, ObsoleteLockView asserted (and persisting across
-  // reload). It needs the `window.__versicleTest.overrideSchemaVersion` hook,
-  // which feeds `defineSyncedStore` — that seam lands with the store
-  // registry item (phase2-fork-surgery.md §5.4, P2-6/P2-9). Until then the
-  // journey lives here as the wired-up TODO for the emulator/nightly lane.
+  // reload). It needs a `window.__versicleTest.overrideSchemaVersion` hook
+  // feeding `defineSyncedStore`, which does not exist yet
+  // (phase2-fork-surgery.md §5.4); until then the journey lives here as the
+  // TODO for the emulator/nightly lane.
   it.todo(
     'Playwright journey (nightly lane): v5-overridden client locks (ObsoleteLockView) against a v6 workspace and stays locked across reload',
   );
@@ -553,8 +552,7 @@ describe('F.2 two-client quarantine — v5 stack vs migrated v6 doc', () => {
 
 // ─── F.2 (v7): two-client quarantine — v6 stack vs migrated v7 doc ──────────
 // Program rule 6 is STANDING: every schema bump ships its own two-client
-// upgrade test. v7 = the vocabulary simplified-key canonicalization
-// (Phase 6 §7.5, PR-13).
+// upgrade test. v7 = the vocabulary simplified-key canonicalization.
 
 describe('F.2 two-client quarantine — v6 stack vs migrated v7 doc', () => {
   interface LibraryMirror {
@@ -644,7 +642,7 @@ describe('F.2 two-client quarantine — v6 stack vs migrated v7 doc', () => {
     // WITHOUT a __schemaVersion key never quarantine — a v6 client's fresh
     // traditional-key write still lands in its LOCAL doc. What actually
     // stops it fleet-wide is the bump itself: handleObsoleteClient locks the
-    // UI and the P4 doc-level layers sever the provider (zero outbound), so
+    // UI and the doc-level layers sever the provider (zero outbound), so
     // the local residual never reaches the v7 workspace — and if a stale
     // local copy later merges, any v7 client's read path suppresses the
     // traditional key (it canonicalizes the displayed char) even though the
@@ -657,7 +655,7 @@ describe('F.2 two-client quarantine — v6 stack vs migrated v7 doc', () => {
 
     // The Y-level merge has already happened — the local doc carries the
     // canonicalized v7 keys with the min-merged duplicate timestamp. The
-    // middleware pill cannot undo a CRDT merge; the P4 doc-level layers
+    // middleware pill cannot undo a CRDT merge; the doc-level layers
     // gate the live sync paths.
     const mergedVocab = (
       docB.getMap('vocabulary').get('knownCharacters') as Y.Map<unknown>
@@ -675,7 +673,7 @@ describe('F.2 two-client quarantine — v6 stack vs migrated v7 doc', () => {
 
 // ─── F.2 (v8): two-client quarantine — v7 stack vs migrated v8 doc ──────────
 // Program rule 6 is STANDING: every schema bump ships its own two-client
-// upgrade test. v8 = the reading-list bookId FK linker (Phase 7 §D) — and
+// upgrade test. v8 = the reading-list bookId FK linker — and
 // the pinned residual below is the EXACT hazard the bump exists for: a
 // pre-v8 client's whole-entry rebuild drops the unknown `bookId` field.
 
@@ -784,7 +782,7 @@ describe('F.2 two-client quarantine — v7 stack vs migrated v8 doc', () => {
     // client's store never quarantines; its whole-entry rebuild lands in
     // its LOCAL doc and silently DROPS the freshly-linked bookId. What
     // stops this fleet-wide is the bump itself: handleObsoleteClient locks
-    // the UI and the P4 doc-level layers sever the provider (zero
+    // the UI and the doc-level layers sever the provider (zero
     // outbound), so the dropped FK never reaches the v8 workspace.
     readingListB.getState().upsertEntry({ filename: 'alice.epub' });
     await drain();
@@ -798,16 +796,17 @@ describe('F.2 two-client quarantine — v7 stack vs migrated v8 doc', () => {
 
 // ─── F.2 (v9): two-client quarantine — v8 stack vs migrated v9 doc ──────────
 // Program rule 6 is STANDING: every schema bump ships its own two-client
-// upgrade test. v9 = the husk-clear + dual-write-retirement bump (P9), and
+// upgrade test. v9 = the husk-clear + dual-write-retirement bump, and
 // the ENFORCEMENT LAYER CHANGES with it: the library stamp froze at 8, so a
 // v8 client's middleware per-map pill is structurally blind to the v9 bump
 // (8 ≤ 8 — pinned below as the designed delta, not a regression). What
-// quarantines the v8 fleet is the P4 doc-level machinery every v8-era build
-// carries (P4 ≪ P7): the pre-apply scratch check on downloaded state and
+// quarantines the v8 fleet is the doc-level machinery every v8-era build
+// carries: the pre-apply scratch check on downloaded state and
 // the live `meta` observer — both asserted here against the real
 // ProviderConnection. This is exactly the N+1 verification documented on
-// clearHusksAndRetireDualWrite: meta's write shipped at v6, its readers at
-// P4, and no client that can pass the frozen library tripwire predates them.
+// clearHusksAndRetireDualWrite: meta's write shipped at v6, its doc-level
+// readers between the v6 and v7 releases, and no client that can pass the
+// frozen library tripwire predates them.
 
 describe('F.2 two-client quarantine — v8 stack vs migrated v9 doc', () => {
   interface LibraryMirror {
@@ -828,7 +827,7 @@ describe('F.2 two-client quarantine — v8 stack vs migrated v9 doc', () => {
     expect(readUpdateSchemaVersion(v9Update)).toBe(9);
 
     // Client B: a v8-era stack — middleware configured schemaVersion: 8 —
-    // hydrated from its own copy of the v8 doc, with the P4 live `meta`
+    // hydrated from its own copy of the v8 doc, with the live `meta`
     // observer attached (ProviderConnection, currentSchemaVersion 8).
     const docB = loadDoc(8);
     const libraryObsolete = vi.fn();

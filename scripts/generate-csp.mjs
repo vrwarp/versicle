@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CSP generator (Phase 7 §I) — renders the Content-Security-Policy from the
+ * CSP generator — renders the Content-Security-Policy from the
  * egress destination registry (src/kernel/net/destinations.ts via
  * src/kernel/net/csp.ts) and rewrites every committed copy:
  *

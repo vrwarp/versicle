@@ -6,7 +6,7 @@ describe('mergeCfiRanges Performance', () => {
     const generateSequentialRanges = (count: number) => {
         const ranges: string[] = [];
         for (let i = 0; i < count; i++) {
-            // Fake CFI: /6/14!/4/2/1:{i*10},/1:{i*10+5}
+            // Fake CFI range: /6/14!/4/2/1:{i*20} to /6/14!/4/2/1:{i*20+10}
             // Using a simple structure to ensure they parse and compare correctly
             // We use simple step numbers
             const start = `epubcfi(/6/14!/4/2/1:${i * 20})`;

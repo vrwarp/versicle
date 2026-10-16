@@ -1,5 +1,5 @@
 /**
- * Library-domain test composition (Phase 7): the REAL KeyedMutex +
+ * Library-domain test composition: the REAL KeyedMutex +
  * ImportOrchestrator + LibraryService over the REAL zustand stores, with the
  * persistence seam (and optionally the extractor) injected — the same
  * wiring as `src/app/library/createLibrary.ts` minus IDB.
@@ -37,7 +37,7 @@ export function makeTestLibrary(opts: {
   listZipEpubs?: ImportOrchestratorDeps['listZipEpubs'];
   extractionOptions?: () => ExtractionOptions;
   now?: () => number;
-  /** Phase D: the per-book cloud-artifact GC port (best-effort delete). */
+  /** The per-book cloud-artifact GC port (best-effort delete). */
   purgeBookArtifact?: (bookId: string) => Promise<void>;
 }): TestLibrary {
   const mutex = new KeyedMutex();

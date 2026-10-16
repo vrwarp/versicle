@@ -4,7 +4,8 @@ import * as utils from './utils';
 
 /**
  * Programmatically selects text inside the epub.js iframe and fires the
- * `mouseup` event the reader listens for (see useEpubReader.ts attachListeners).
+ * `mouseup` event the reader listens for (see attachSelectionBridge in
+ * src/domains/reader/engine/selectionBridge.ts).
  * Mirrors the proven approach in test_journey_notes.spec.ts and works across
  * Chromium and WebKit, where Playwright's synthetic page-level mouse drag does
  * not reliably create a selection inside the (sandboxed, same-origin) iframe.

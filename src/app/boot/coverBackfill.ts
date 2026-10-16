@@ -3,13 +3,13 @@
  * before the malformed-EPUB hardening (plan/epub-toc-cover-hardening.md §5,
  * decision §9.3: automatic, once, after the update).
  *
- * Import used to find a cover only through epub.js's two OPF markers, so a
- * book whose cover lived in a cover page (or was declared any other
- * non-standard way) was stored with NO cover and shows the "Aa" placeholder
- * forever — reprocessing never rewrites the cover. This pass re-runs just
- * the cover step of the import preamble for every local book without one,
- * on idle, once per device (localStorage flag). The Data settings panel's
- * "Re-scan covers" button runs the same pass on demand.
+ * Books imported before that hardening got a cover only through epub.js's two
+ * OPF markers, so a book whose cover lived in a cover page (or was declared
+ * any other non-standard way) was stored with NO cover and shows the "Aa"
+ * placeholder forever — reprocessing never rewrites the cover. This pass
+ * re-runs just the cover step of the import preamble for every local book
+ * without one, on idle, once per device (localStorage flag). The Data settings
+ * panel's "Re-scan covers" button runs the same pass on demand.
  *
  * {@link runCoverBackfill} is pure/injectable (the suite drives it with
  * fakes); the boot task and {@link rescanCovers} bind the real repos/stores.

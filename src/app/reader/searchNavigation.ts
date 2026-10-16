@@ -1,18 +1,16 @@
 /**
- * Search-result navigation (Phase 7 §F, PR-S4's reader half — the named
- * post-merge follow-up): land on the EXACT occurrence with a temporary
+ * Search-result navigation: land on the EXACT occurrence with a temporary
  * highlight, through the ReaderEngine port only.
  *
- * Replaces `scrollToText` + the 500ms timer (the P1-vetoed artifact): instead
- * of re-finding the query text in the rendered DOM after an arbitrary delay,
- * the result's `charOffset`/`matchLength` resolve to a DOM Range against the
- * rendered section's text nodes (`findRangeForOffset` — the indexed corpus IS
- * the concatenated text-node stream), the view's `cfiFromRange` produces the
- * occurrence CFI, and `display(cfi)` lands the reader on the page containing
- * it. The temporary highlight rides the reserved 'search' layer of the
- * HighlightLayerManager and auto-removes. Resolution failure (stale corpus vs
- * re-rendered content) degrades to the section-level `display(href)` that has
- * already happened — the doc's sanctioned fallback.
+ * Rather than re-finding the query text in the rendered DOM after an
+ * arbitrary delay, the result's `charOffset`/`matchLength` resolve to a DOM
+ * Range against the rendered section's text nodes (`findRangeForOffset` — the
+ * indexed corpus IS the concatenated text-node stream), the view's
+ * `cfiFromRange` produces the occurrence CFI, and `display(cfi)` lands the
+ * reader on the page containing it. The temporary highlight rides the
+ * reserved 'search' layer of the HighlightLayerManager and auto-removes.
+ * Resolution failure (stale corpus vs re-rendered content) degrades to the
+ * section-level `display(href)` that has already happened.
  */
 import type { DetailedSearchResult } from '~types/search';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';

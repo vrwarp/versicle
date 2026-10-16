@@ -13,8 +13,8 @@ const ttsPolyfillContent = fs.readFileSync(ttsPolyfillPath, 'utf8');
 test("workspace deletion tombstone", async ({ browser, baseURL }) => {
   // Two-phase journey (create+delete a workspace, then a fresh stale-client detects the
   // tombstone). It runs in ~8s nominally but spans two browser contexts, multiple reloads
-  // and a cross-context sync event, so the default 30s budget is too tight under parallel
-  // load. test.slow() triples it (90s desktop/mobile, 360s webkit) — comfortably above the
+  // and a cross-context sync event, so the default budget is too tight under parallel
+  // load. test.slow() triples it (270s desktop/mobile, 360s webkit) — comfortably above the
   // internal waits below.
   test.slow();
   const finalBaseURL = baseURL || "http://localhost:5173";
@@ -36,8 +36,8 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
   await page.goto(finalBaseURL);
   await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 15000 });
 
-  // Go to Sync Settings. Settings is now the Radix-Tabs SettingsShell at /settings/:tab
-  // (opened as a route-modal over the library); tabs are real role="tab" triggers.
+  // Go to Sync Settings. Settings is the Radix-Tabs SettingsShell at /settings/:tab
+  // (an overlay over the library); tabs are real role="tab" triggers.
   await openSettings(page);
   await page.getByRole("tab", { name: "Sync & Cloud" }).scrollIntoViewIfNeeded().catch(() => {});
   await page.getByRole("tab", { name: "Sync & Cloud" }).click();
@@ -55,7 +55,7 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
   console.log(`Created workspace: ${wsName}`);
 
   // Wait for the workspaces block to refresh and become stable: the list re-fetch
-  // after creation renders the new workspace's row (was a fixed 1s sleep)
+  // after creation renders the new workspace's row
   await expect(page.locator("div.text-sm.bg-muted\\/50").filter({ hasText: wsName }).first()).toBeVisible({ timeout: 5000 }).catch(() => {});
 
   // Get the workspace ID
@@ -84,7 +84,7 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
   await page.getByRole("button", { name: "Create" }).click();
   await expect(page.getByText('Safe Workspace').first()).toBeVisible();
 
-  // Let the list re-fetch render the new row before the screenshot (was a fixed 2s sleep)
+  // Let the list re-fetch render the new row before the screenshot
   await expect(page.locator("div.text-sm.bg-muted\\/50").filter({ hasText: 'Safe Workspace' }).first()).toBeVisible({ timeout: 5000 }).catch(() => {});
   await page.screenshot({ path: path.join(__dirname, "screenshots", "deletion_list.png") });
   console.log("Screenshot saved: deletion_list.png");
@@ -101,8 +101,8 @@ test("workspace deletion tombstone", async ({ browser, baseURL }) => {
   // into view first, THEN force past any overlap.
   await deleteBtn.scrollIntoViewIfNeeded();
 
-  // Delete now confirms through the in-app ConfirmDialog (useConfirm → ConfirmHost),
-  // not window.confirm. The old page.on('dialog', …) never fires; drive the dialog's
+  // Delete confirms through the in-app ConfirmDialog (useConfirm → ConfirmHost),
+  // not window.confirm, so a page.on('dialog', …) listener never fires; drive the dialog's
   // own confirm button instead. The delete is danger:true, so the confirm label is "Delete".
   // dispatchEvent fires the React onClick directly, immune to mobile viewport/
   // overlap positioning (a force-click at a covered centerpoint silently no-ops).

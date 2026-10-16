@@ -56,10 +56,10 @@ export function createZeroDelayTick(): {
 
 /**
  * ONE measuring canvas for the whole extraction pass. The helpers below run
- * per sampled paragraph per chapter, so a 300-section book used to allocate
- * tens of thousands of canvases + 2D contexts; the context is stateless
- * between calls (every call sets `font` before measuring), so a single
- * shared one is equivalent. Created lazily and cached (null = 2D
+ * per sampled paragraph per chapter, so a canvas per call would mean tens of
+ * thousands of canvases + 2D contexts for a 300-section book; the context is
+ * stateless between calls (every call sets `font` before measuring), so a
+ * single shared one is equivalent. Created lazily and cached (null = 2D
  * unavailable).
  */
 let measureContext: CanvasRenderingContext2D | null | undefined;
@@ -162,7 +162,7 @@ export function accumulateChapterStyles(
       continue;
     }
     // ONE resolved-style read per paragraph, shared by both measurements
-    // (each helper used to call getComputedStyle itself — two cross-realm
+    // (each helper calling getComputedStyle itself would cost two cross-realm
     // style resolutions per paragraph).
     const computedStyle = win.getComputedStyle(p as HTMLElement);
     const fontSize = getActualInkHeight(computedStyle, context, text);

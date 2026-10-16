@@ -1,10 +1,8 @@
 /**
  * Book domain types: immutable per-book data derived from the EPUB file
- * (the V18 "static" domain rows), the legacy v17 book rows kept for
- * migration/backward compatibility, and section-level content metadata.
+ * (the "static" domain rows), the merged {@link BookMetadata} view the app
+ * layer consumes, and section-level content metadata.
  *
- * Extracted from types/db.ts in the Phase 1a type split
- * (plan/overhaul/README.md §Roadmap P1; layering-deps.md LD-1).
  * Layering rule: src/types/** imports nothing internal except other
  * src/types modules, and that graph stays acyclic.
  */
@@ -32,8 +30,6 @@ export interface PerceptualPalette {
   deltaE: number;
 }
 
-// --- NEW V18 ARCHITECTURE TYPES ---
-
 // DOMAIN 1: STATIC (Immutable, Authoritative Source: File)
 
 /**
@@ -53,16 +49,15 @@ export interface StaticBookManifest {
   isbn?: string;
   /**
    * Legacy identity fingerprint: `${filename}-${title}-${author}` plus djb2
-   * hashes of the first/last 4 KiB (NOT a cryptographic hash — the field
-   * name predates Phase 7). Retained for restore acceptance of pre-P7
-   * manifests; new identity checks prefer {@link contentHash}.
+   * hashes of the first/last 4 KiB (NOT a cryptographic hash despite the
+   * field name). Retained for restore acceptance of manifests that predate
+   * {@link contentHash}; new identity checks prefer {@link contentHash}.
    */
   fileHash: string;
   /**
    * SHA-256 (hex) over the EPUB's content bytes only — filename-independent
-   * book identity (Phase 7, phase7-library-google.md §B "identify"). Absent
-   * on manifests written before P7; lazily backfilled when a legacy
-   * fingerprint match succeeds during restore.
+   * book identity. Absent on manifests written before it existed; lazily
+   * backfilled when a legacy fingerprint match succeeds during restore.
    */
   contentHash?: string;
   /** The size of the file in bytes. */
@@ -73,7 +68,8 @@ export interface StaticBookManifest {
   schemaVersion: number;
   /**
    * The binary Blob of the cover image (thumbnail).
-   * Moved here to allow fast loading in library view without fetching heavy resources.
+   * Lives on the manifest rather than with the heavy blobs in {@link StaticResource},
+   * so the library view loads fast without fetching heavy resources.
    */
   coverBlob?: Blob;
   /**
@@ -121,12 +117,11 @@ export interface StaticStructure {
   }[];
 }
 
-// --- LEGACY TYPES (For Migration & Backward Compatibility) ---
+// --- BOOK METADATA VIEW (composed into BookMetadata below) ---
 
 /**
  * 1. Core Book Identity & Display Metadata.
  * Essential metadata for displaying the book in the library (including offloaded state).
- * Stored in 'books'.
  */
 interface Book {
   /** Unique identifier for the book (UUID). */
@@ -143,8 +138,8 @@ interface Book {
    */
   coverUrl?: string;
   /**
-   * The binary Blob of the cover image.
-   * Stored in IndexedDB (books store).
+   * The binary Blob of the cover image (sourced from
+   * {@link StaticBookManifest.coverBlob}).
    *
    * perf: merged metadata OMITS this while the page is service-worker
    * controlled — the SW serves every cover straight from IndexedDB, so
@@ -173,14 +168,13 @@ interface Book {
 /**
  * 2. Source Metadata (Technical/File Info).
  * Metadata related to the original file and ingestion process.
- * Stored in 'book_sources'.
  */
 interface BookSource {
   /** The unique identifier of the book (FK). */
   bookId: string;
   /** The original filename of the EPUB file. */
   filename?: string;
-  /** SHA-256 hash of the original EPUB file, used for verification during restore. */
+  /** Legacy identity fingerprint ({@link StaticBookManifest.fileHash}), used for verification during restore. */
   fileHash?: string;
   /** The size of the file in bytes. */
   fileSize?: number;
@@ -202,7 +196,6 @@ interface BookSource {
 /**
  * 3. User State (User Generated Content/Runtime).
  * Mutable user data like progress, current location, and status.
- * Stored in 'book_states'.
  */
 interface BookState {
   /** The unique identifier of the book (FK). */
@@ -228,8 +221,8 @@ interface BookState {
 }
 
 /**
- * Composite type representing the full view of a book.
- * Maintains backward compatibility with the application layer.
+ * Composite type representing the full view of a book: display metadata,
+ * source/ingestion info and mutable reading state in one object.
  */
 export type BookMetadata = Book & Partial<BookSource> & Partial<BookState>;
 

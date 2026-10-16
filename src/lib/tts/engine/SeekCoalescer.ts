@@ -1,8 +1,7 @@
 /**
  * SeekCoalescer — coalesces a BURST of absolute scrubber seeks into a single
- * settled apply. A Phase 5b decomposition sibling of {@link DragnetGesture}:
- * gesture machinery lives in its own unit, the PlaybackController FSM keeps
- * only thin hooks.
+ * settled apply. A sibling of {@link DragnetGesture}: gesture machinery lives
+ * in its own unit, the PlaybackController FSM keeps only thin hooks.
  *
  * The OS media controls (Chrome's Global Media Controls, the lock screen, a
  * Bluetooth head unit) fire a rapid stream of absolute `seekto` actions while

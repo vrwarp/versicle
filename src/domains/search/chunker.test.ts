@@ -1,11 +1,11 @@
 /**
- * chunkSection unit suite (Increment C §2): window sizing, overlap continuity,
+ * chunkSection unit suite: window sizing, overlap continuity,
  * sentence-boundary snapping (no mid-sentence cuts), char-offset round-trip,
  * and the single-sentence / empty-text edge cases.
  */
 import { describe, expect, it } from 'vitest';
 // Reach the chunker via the published domain surface (the barrel), the same
-// way an in-domain consumer would (Increment C §2 barrel export).
+// way an in-domain consumer would.
 import { chunkSection, sectionHasEmbeddableText } from './index';
 
 /**
@@ -93,7 +93,7 @@ describe('chunkSection', () => {
     // single oversized sentence (j===i). The sentence-snapped overlap is then
     // geometrically impossible (the next sentence starts at/after windowEnd), so
     // the chunker must continue the next window from a MID-sentence offset inside
-    // the overlap zone — otherwise the overlap is silently lost (#7).
+    // the overlap zone — otherwise the overlap is silently lost.
     const big = `Big ${'wordy '.repeat(120)}tail.`; // ~735 chars, one sentence
     const text = [big, big, big].join(' ');
     const targetChars = 80 * 4; // 320 — each `big` is well over the target

@@ -1,10 +1,11 @@
 /**
  * Injected ports for the sync domain (phase4-sync-strangler.md §D2; master
  * plan §2 boundary rule 3 — the EngineContext pattern): `domains/sync/core`
- * holds NO store imports. The composition root (src/app/sync/createSync.ts)
- * constructs the orchestrator once and injects store-backed adapters for
- * everything the legacy FirestoreSyncManager used to reach into directly
- * (`useSyncStore`, `useBookStore`, `@store/yjs-provider`, test-flags).
+ * holds NO store imports. The composition root (src/app/sync/createSync.ts;
+ * adapters wired in composeSync.ts) constructs the orchestrator once and
+ * injects store-backed adapters for everything that would otherwise reach
+ * into the stores directly (`useSyncStore`, `useBookStore`,
+ * `@store/yjs-provider`, test-flags).
  */
 import type * as Y from 'yjs';
 import type { SyncBackendFactory } from '../backend/SyncBackend';
@@ -25,11 +26,10 @@ export interface SyncStatePort {
 
 /**
  * Checkpoint operations the sync flows depend on. Wired to the (static)
- * CheckpointService by the composition root. (The legacy destructive
- * `applyRemoteState` member is gone: the staged swap (§D4) moved the
- * destructive apply to the boot interceptor's STAGED arm —
- * domains/sync/workspaces/stagedSwap.ts — so the switch path itself never
- * wipes anything.)
+ * CheckpointService by the composition root. There is deliberately no
+ * destructive apply here: the staged swap (§D4) performs it in the boot
+ * interceptor's STAGED arm (domains/sync/workspaces/stagedSwap.ts), so the
+ * switch path itself never wipes anything.
  */
 export interface CheckpointsPort {
   createCheckpoint(trigger: string, options?: { protected?: boolean }): Promise<number>;
@@ -61,7 +61,7 @@ export interface SyncBackendSelection {
   mockSession?: { uid: string; email: string };
 }
 
-/** Provider flush tuning (the legacy FirestoreSyncConfig). */
+/** Provider flush tuning. */
 export interface SyncOrchestratorConfig {
   /**
    * Maximum time to wait before flushing updates to the backend (ms).
@@ -76,20 +76,19 @@ export interface SyncOrchestratorDeps {
   /** Initial backend selection; replaceable via setBackendSelection. */
   backendSelection: SyncBackendSelection;
   events: SyncEventBus;
-  /** The live shared Y.Doc (replaces the direct getYDoc import). */
+  /** The live shared Y.Doc. */
   doc: () => Y.Doc;
-  /** Resolves when local persistence has hydrated (was waitForYjsSync). */
+  /** Resolves when local persistence has hydrated. */
   whenLocalSynced: () => Promise<void>;
-  /** Quarantine UI-lock + announce handle (was handleObsoleteClient). */
+  /** Quarantine UI-lock + announce handle. */
   onObsolete: (incomingVersion: number) => void;
   /** CURRENT_SCHEMA_VERSION, injected so core stays store-free. */
   currentSchemaVersion: number;
-  /** Clean-client check (was a direct useBookStore read). */
+  /** Clean-client check (the local library holds no books). */
   isCleanClient: () => boolean;
   /**
    * The single init gate (§D2): `(firebaseEnabled && isConfigured) ||
-   * mockEnabled`. Evaluated at start(); fixes the legacy boot path that
-   * ignored the `firebaseEnabled` flag (prep doc reality item 20).
+   * mockEnabled`. Evaluated at start().
    */
   isEnabled: () => boolean;
   /** Test-flag debounce override in ms; 0 when unset (src/test-flags). */

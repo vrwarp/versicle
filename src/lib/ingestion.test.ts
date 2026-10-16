@@ -3,8 +3,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { validateZipSignature, sanitizeString, getSanitizedBookMetadata } from './ingestion';
 import { extractBook, type FullBookExtraction } from '@domains/library/import/extract';
 
-// Re-pointed at PR-L1/L2 (phase7): `extractBookData` was a deleted delegate;
-// the same assertions now exercise the unified extractor directly.
+// Exercises the unified extractor at full depth.
 const extractBookData = (file: File) => extractBook(file, { depth: 'full' });
 import { TTS_EXTRACTION_VERSION } from './ingestion/sentence-extraction';
 
@@ -267,9 +266,8 @@ describe('ingestion', () => {
     });
   });
 
-  // Absorbed from src/db/validators.test.ts in the same PR that dissolved
-  // src/db/validators.ts into this module (Phase 3 D4; test-absorption
-  // ledger, plan/overhaul/README.md section 4 rule 8).
+  // Sanitize-at-ingest helpers re-exported by `./ingestion` (implemented in
+  // `@domains/library/import/metadata`).
   describe('regression: metadata sanitization (absorbed from db/validators.test.ts)', () => {
     beforeEach(() => {
       vi.spyOn(console, 'error').mockImplementation(() => {});

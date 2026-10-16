@@ -1,14 +1,15 @@
 /**
- * GenAI activity-log types + payload redaction (Phase 7 §H; privacy D3/GG-3).
+ * GenAI activity-log types + payload redaction (privacy D3/GG-3).
  *
  * Log entries flow client → injected sink (wired to useGenAIStore.addLog at
- * the composition root). The store keeps them as an IN-MEMORY ring buffer
- * (`maxLogs`-capped, NOT persisted — its partialize allowlist excludes
- * `logs`); when P5b extracts the kernel ring buffer this sink adopts it.
+ * the composition root). The store keeps them as an in-memory ring buffer
+ * (`maxLogs`-capped); its partialize allowlist excludes `logs`, so they never
+ * reach localStorage. Cross-restart persistence is the app layer's job
+ * (app/google/genaiLogPersistence.ts mirrors the buffer into a side database).
  *
  * `redactPayload` strips `inlineData` base64 image bytes BEFORE the entry
- * ever leaves the client: table-adaptation prompts embedded full-resolution
- * page screenshots, which previously landed verbatim in localStorage.
+ * ever leaves the client: table-adaptation prompts embed full-resolution
+ * page screenshots, which must not be stored verbatim.
  */
 
 export interface GenAILogEntry {
@@ -54,8 +55,8 @@ function isInlineData(value: unknown): value is { data: string; mimeType?: strin
  * Deep-copy `payload` with every `inlineData: { data: <base64>, … }` node
  * replaced by `{ byteCount, hash, mimeType }`. Everything else (prompt text,
  * schemas, parsed responses) passes through untouched — the prompt text is
- * the user's own book and stays useful for debugging, but never persists
- * (the store does not persist logs at all).
+ * the user's own book and stays useful for debugging; only the heavy image
+ * bytes are dropped.
  */
 export function redactPayload(payload: unknown, depth = 0): unknown {
   if (depth > 16 || payload === null || typeof payload !== 'object') return payload;

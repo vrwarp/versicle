@@ -1,6 +1,5 @@
 /**
- * Performance benchmark (moved with the feature from src/lib/chinese/ —
- * Phase 6 §7, PR-10). Informational: logs, no assertions.
+ * Performance benchmark. Informational: logs, no assertions.
  */
 import { describe, it } from 'vitest';
 import { ensurePinyin, getPinyin } from './PinyinGeometryEngine';

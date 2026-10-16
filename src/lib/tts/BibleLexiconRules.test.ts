@@ -4,7 +4,8 @@ import { lexiconApplier } from './LexiconApplier';
 import type { LexiconRule } from '~types/user-data';
 
 describe('Bible Lexicon Rules', () => {
-    // Prepared as the assembler compiles them (lazy JSON since 5c-PR3)
+    // Prepared like the system lexicon provider's compiled rules (systemLexicon.ts);
+    // the rule JSON loads lazily
     let rules: LexiconRule[] = [];
 
     beforeAll(async () => {
@@ -25,7 +26,7 @@ describe('Bible Lexicon Rules', () => {
         expect(result).toMatch(/Matthew 1:2 ae$/);
 
         result = lexiconApplier.applyLexicon('v43a', rules);
-        // "v43" -> "verse 43" (now with space)
+        // "v43" -> "verse 43"
         // "43a" -> "43 ae"
         expect(result).toMatch(/verse 43 ae$/);
 

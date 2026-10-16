@@ -1,11 +1,9 @@
 /**
- * Bible lexicon loader (Phase 5c; phase5-tts-strangler.md §5c.3, content
- * debt S16/D6): the 2,899-line eagerly-imported TS data file is now
- * `bible-lexicon.json`, loaded through ONE dynamic import so the ruleset
- * leaves the entry chunk on both threads (the worker bundles it as its own
- * async chunk too — `npm run check:worker-chunk` asserts the entry-chunk
- * effect). The data is byte-identical to the legacy module (round-trip
- * verified at conversion).
+ * Bible lexicon loader: the abbreviation list and pronunciation rules live
+ * in `bible-lexicon.json`, loaded through ONE dynamic import so the ruleset
+ * stays out of the entry chunk on both threads (the worker bundles it as its
+ * own async chunk too — `npm run check:worker-chunk` asserts it is only
+ * reachable through that dynamic import).
  */
 import type { LexiconRule } from '~types/user-data';
 

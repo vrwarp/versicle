@@ -173,7 +173,7 @@ describe('LexiconManager', () => {
     unmount();
 
     // ...and reachable once a book is the active reader context (which the
-    // nested /read/:id/settings route now preserves while settings is open).
+    // nested /read/:id/settings route preserves while settings is open).
     useReaderUIStore.setState({ currentBookId: 'book1' });
     try {
       render(<LexiconManager open={true} onOpenChange={vi.fn()} />);

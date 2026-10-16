@@ -73,7 +73,7 @@ export const SmartLinkDialog: React.FC<SmartLinkDialogProps> = ({ open, onOpenCh
             setError(null);
 
             try {
-                // Deep feature import (first-use loading, Phase 8 §A).
+                // Deep feature import: loaded on first use.
                 const { mapReadingListToLibrary } = await import(
                     '@domains/google/genai/features/libraryMapping'
                 );

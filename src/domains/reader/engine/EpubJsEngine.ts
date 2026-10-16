@@ -1,20 +1,19 @@
 /**
  * EpubJsEngine — the epub.js implementation of the ReaderEngine port
  * (contract C7) and the SOLE runtime importer of `epubjs` in the tree
- * (boundary rule 8, lint-enforced; the kernel's epubcfi shim and the two
- * named P7-deadlined ingestion exceptions are the only carve-outs).
+ * (boundary rule 8, lint-enforced; the kernel's epubcfi shim and the
+ * ingestion extractor `domains/library/import/extract.ts` are the only
+ * carve-outs).
  *
- * Strategy (prep doc §Risks "under-the-shell adapter"): the engine wraps the
- * LIVE book/rendition pair the React lifecycle hook (useEpubReader) still
- * constructs — consumers moved onto the port without the load pipeline
- * moving in the same change. The remaining hook internals (theming effect,
- * chinese content processor, locations cache) dissolve into engine modules
- * in their own Phase 6 items (PR-4/PR-10 of the prep doc).
+ * Strategy: the engine wraps the LIVE book/rendition pair the React
+ * lifecycle hook (useEpubReader) constructs — consumers talk to the port
+ * while the load pipeline stays in the hook. Theming, the selection bridge
+ * and the locations cache live in sibling engine modules (`epubTheming`,
+ * `selectionBridge`, `locations`).
  *
- * Typing (§8 stub retirement): imports resolve to the REAL upstream
- * `epubjs/types/*` declarations (the ambient shadow is deleted); the
- * remaining untyped internals come from `./epubjsInternals` — see its
- * header for the §8.5 decision record.
+ * Typing: imports resolve to the REAL upstream `epubjs/types/*`
+ * declarations; the untyped internals come from `./epubjsInternals` — see
+ * its header for the decision record.
  */
 import ePub, { type Book, type Contents, type Rendition, type Location } from 'epubjs';
 import { createLogger } from '@lib/logger';
@@ -309,9 +308,9 @@ export class EpubJsEngine implements ReaderEngine {
   }
 
   /**
-   * Nav-based section label — ReadingHistoryPanel's resolveSectionLabel
-   * moved verbatim behind the port (it reached through book.navigation and
-   * the spine index scan).
+   * Nav-based section label for a CFI or href (ReadingHistoryPanel): the
+   * resolved TOC first, then a spine-index scan of the navigation, then a
+   * `Chapter N` fallback.
    */
   getNavLabel(cfiOrHref: string): string | null {
     const book = bookInternals(this.deps.book);
@@ -362,10 +361,7 @@ export class EpubJsEngine implements ReaderEngine {
     return spinePos >= 0 ? `Chapter ${spinePos + 1}` : null;
   }
 
-  /**
-   * Loads a section's text content without rendering it (useSmartTOC's
-   * collectSectionData internals, verbatim; P7 reuses it for indexing).
-   */
+  /** Loads a section's text content without rendering it (used by useSmartTOC). */
   async loadSectionText(href: string): Promise<string> {
     const contentOrDoc: unknown = await this.deps.book.load(this.resolveTarget(href).split('#')[0]);
     let doc: Document | null = null;
@@ -398,7 +394,7 @@ export class EpubJsEngine implements ReaderEngine {
 
   // --- selection ------------------------------------------------------------
 
-  /** Programmatic block selection (the audio-bookmark triage path, verbatim). */
+  /** Programmatic block selection (the audio-bookmark triage path). */
   selectRange(cfiRange: string): void {
     try {
       const range = this.getRenderedRange(cfiRange);
@@ -423,8 +419,8 @@ export class EpubJsEngine implements ReaderEngine {
         // collapses the selection, and the bridge already no-ops on a collapsed
         // selectionchange. Arming the flag here (on every popover dismiss) would
         // instead suppress a legitimate user re-selection landing within the
-        // flag window — the original "highlighting doesn't open the compass"
-        // symptom (review finding 1). Only selectRange, which creates a real
+        // flag window — the "highlighting doesn't open the compass"
+        // symptom. Only selectRange, which creates a real
         // selection via addRange, needs suppression.
         iframe.contentWindow.getSelection()?.removeAllRanges();
       }
@@ -477,7 +473,7 @@ export class EpubJsEngine implements ReaderEngine {
     try {
       percentage = this.deps.book.locations.percentageFromCfi(location.start.cfi) ?? 0;
     } catch {
-      // ignore — registry may not be generated yet (legacy behavior)
+      // ignore — registry may not be generated yet
     }
     return {
       startCfi: location.start.cfi,
@@ -508,7 +504,7 @@ export class EpubJsEngine implements ReaderEngine {
 
     on('selected', (cfiRange, contents) => {
       const range = this.getRenderedRange(cfiRange as string);
-      if (!range) return; // legacy guard: epub.js 'selected' with no live range is dropped
+      if (!range) return; // epub.js 'selected' with no live range is dropped
       const view = contents as Contents | undefined;
       this.emit({
         type: 'selected',
@@ -522,7 +518,7 @@ export class EpubJsEngine implements ReaderEngine {
       this.emit({ type: 'click', event: event as MouseEvent });
     });
 
-    // The forwarded iframe keydown stream (P0 keyboard-gating hotfix path).
+    // The forwarded iframe keydown stream (consumed by the reader keyboard shortcuts).
     on('keydown', (event) => {
       this.emit({ type: 'keydown', event: event as KeyboardEvent });
     });
@@ -533,9 +529,9 @@ export class EpubJsEngine implements ReaderEngine {
 
     // Section teardown (EVENTS.RENDITION.REMOVED — the default manager
     // destroys the outgoing view on display/clear). Without this the
-    // content-processor seam never learned a section died, so its per-section
-    // state (and the detached document behind it) accumulated per chapter
-    // visited — every preference refresh then re-walked dead DOMs.
+    // content-processor seam cannot learn a section died, so its per-section
+    // state (and the detached document behind it) would accumulate per chapter
+    // visited — every preference refresh would then re-walk dead DOMs.
     on('removed', (section) => {
       const href = (section as { href?: string } | undefined)?.href;
       if (typeof href === 'string' && href) {

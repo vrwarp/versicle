@@ -174,11 +174,11 @@ describe('useGlobalSearch', () => {
 
   /**
    * `useAllBooks()` hands back a NEW array on every library-projection
-   * recompute — a progress write, a sync tick, an import. `executeSearch` used
-   * to be keyed on that array, and the view re-runs the query whenever the
-   * callback's identity changes, so the whole library was re-read (every book's
-   * vectors AND its entire text) several times per reading second, with no
-   * in-flight guard. The library is now read through a ref.
+   * recompute — a progress write, a sync tick, an import. `executeSearch` must
+   * not be keyed on that array: the view re-runs the query whenever the
+   * callback's identity changes, so the whole library would be re-read (every
+   * book's vectors AND its entire text) several times per reading second. The
+   * library is read through a ref.
    */
   describe('regression: global search does not reload the library per store write', () => {
     it('keeps executeSearch stable and re-reads nothing when a progress write lands', async () => {
@@ -186,8 +186,8 @@ describe('useGlobalSearch', () => {
       const { deps, spies } = makeDeps({
         corpora: new Map([['bk-1', corpusRow('bk-1', 2)], ['bk-2', corpusRow('bk-2', 2)]]),
         embeddings: new Map([['bk-1', embeddedRow('bk-1', 2)], ['bk-2', embeddedRow('bk-2', 2)]]),
-        // Stamped job rows, so the badge effect reads neither repo (finding 5)
-        // and the counts below belong to the QUERY alone.
+        // Stamped job rows, so the badge effect reads neither repo and the
+        // counts below belong to the QUERY alone.
         jobs: new Map([['bk-1', jobRow('bk-1', 2, 2)], ['bk-2', jobRow('bk-2', 2, 2)]]),
       });
 
@@ -287,9 +287,9 @@ describe('useGlobalSearch', () => {
   });
 
   /**
-   * The engine handle used to be disposed and RE-CREATED for every query, and
-   * the worker lazily instantiates a multi-megabyte wasm engine on first use.
-   * One handle per hook instance; supersession is the run token's job.
+   * The engine handle must not be disposed and RE-CREATED for every query: the
+   * worker lazily instantiates a multi-megabyte wasm engine on first use. One
+   * handle per hook instance; supersession is the run token's job.
    */
   describe('regression: the search worker is created once per hook instance', () => {
     it('creates one engine across three sequential searches and disposes it on unmount', async () => {
@@ -338,9 +338,9 @@ describe('useGlobalSearch', () => {
   });
 
   /**
-   * Ranking kept up to 20 rows per section per book and MATERIALIZED every one
-   * of them — a `getExcerpt` plus an `Intl.Segmenter` pass each, on the main
-   * thread, before anything was sorted. Ranking and materialization are now
+   * Ranking keeps up to 20 rows per section per book; materializing every one
+   * of them would cost a `getExcerpt` plus an `Intl.Segmenter` pass each, on the
+   * main thread, before anything is sorted. Ranking and materialization are
    * separate: tuples are sorted and cut to TOP_K first.
    */
   describe('regression: global search caps materialized hits', () => {
@@ -372,11 +372,11 @@ describe('useGlobalSearch', () => {
   });
 
   /**
-   * The TOP_K cut was SILENT: nothing in the hook's return value or the view
-   * said the list had been cut, so a page filled by one strongly-matching book
-   * (20 rows per section, ~15% chunk overlap → near-duplicate high-scoring
-   * tuples) read as "Found 100 match(es)" — the whole answer, with every other
-   * book's best passage quietly gone.
+   * The TOP_K cut must not be SILENT: without a signal in the hook's return
+   * value, a page filled by one strongly-matching book (20 rows per section,
+   * ~15% chunk overlap → near-duplicate high-scoring tuples) would read as
+   * "Found 100 match(es)" — the whole answer, with every other book's best
+   * passage quietly gone.
    */
   describe('regression: global search reports the TOP_K cut', () => {
     it('flags truncation when more tuples ranked than the page holds', async () => {
@@ -444,9 +444,9 @@ describe('useGlobalSearch', () => {
   });
 
   /**
-   * The badge grid read EVERY book's entire search text AND its entire packed
-   * vector row just to decide indexed/partial/unindexed. The stamped job row
-   * answers it on its own.
+   * The badge grid must not read EVERY book's entire search text AND its entire
+   * packed vector row just to decide indexed/partial/unindexed. The stamped job
+   * row answers it on its own.
    */
   describe('regression: indexing badges read the job row alone', () => {
     it('never loads the corpus or the vectors when every book has a stamped job row', async () => {

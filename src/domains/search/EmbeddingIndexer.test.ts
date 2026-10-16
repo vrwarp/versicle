@@ -1,5 +1,5 @@
 /**
- * EmbeddingIndexer suite (Increment C §4): outward ordering from a current
+ * EmbeddingIndexer suite: outward ordering from a current
  * CFI, resume-skip on {href, sectionTextHash}, consent + lane + bookId
  * threading through a fake EmbeddingClient port, the no-op when the client is
  * unconfigured, and the packed int8 + scales round-trip through a fake repo.
@@ -86,7 +86,7 @@ function section(href: string, hash: string) {
   };
 }
 
-/** A simple per-vector int8 quantizer (the B3 port shape) for the suite. */
+/** A simple per-vector int8 quantizer (the QuantizePort shape) for the suite. */
 const quantize = (vec: Float32Array): { vectors: Int8Array; scale: number } => {
   let maxAbs = 0;
   for (const v of vec) maxAbs = Math.max(maxAbs, Math.abs(v));
@@ -166,7 +166,7 @@ describe('EmbeddingIndexer', () => {
       sections: [{ href: 's0.xhtml', embeddedThroughChunk: 1, sectionTextHash: 'h0' }],
       updatedAt: 0,
     };
-    // B-3: resume-skip requires the section's VECTORS to be present in the
+    // Resume-skip requires the section's VECTORS to be present in the
     // persisted row (a job-complete-but-vectors-absent section re-embeds). So
     // the persisted row carries s0's vectors alongside the matching job entry.
     const persisted: PersistedStamp = {
@@ -200,7 +200,7 @@ describe('EmbeddingIndexer', () => {
 
   it('B-3 self-heal: a job-complete section whose VECTORS are absent re-embeds (skip-but-empty)', async () => {
     // The §2.8 crash window: the job marks s0 complete but the persisted row has
-    // NO s0 section (a crash between the two legacy writes, or a partial
+    // NO s0 section (a crash between the journal and vectors writes, or a partial
     // hydrate). The guard must treat s0 as a MISS and re-embed, not continue
     // forever leaving it silently un-searchable.
     const sections = [section('s0.xhtml', 'h0')];
@@ -258,10 +258,10 @@ describe('EmbeddingIndexer', () => {
 
   it('resume-skips a HASH-LESS corpus on the second pass (derived text hash heals pre-field v3 corpora)', async () => {
     // Regression: corpora extracted at version 3 BEFORE `sectionTextHash` was
-    // added (the version was never bumped for the field) carry no hash. The old
-    // `?? ''` fallback made the skip guard (`hash !== ''`) always fail, so EVERY
-    // reader pass re-embedded EVERY section — thousands of embeddings, no
-    // progress. The indexer now derives the hash from the section text, so a
+    // added (the version was never bumped for the field) carry no hash. A
+    // `?? ''` fallback would make the skip guard (`hash !== ''`) always fail, so
+    // EVERY reader pass would re-embed EVERY section — thousands of embeddings,
+    // no progress. The indexer derives the hash from the section text, so a
     // second pass over the same hash-less corpus resume-skips.
     const sections = [
       { href: 's0.xhtml', title: 's0', text: 'Call me Ishmael. Some years ago, never mind how long.' },
@@ -292,7 +292,7 @@ describe('EmbeddingIndexer', () => {
 
     await indexer.enqueue('bk-1');
     expect(calls).toHaveLength(2); // first pass embeds both sections
-    // The written row carries a NON-empty derived hash (not the old '').
+    // The written row carries a NON-empty derived hash (not '').
     expect(embeddingRow?.sections.every((s) => s.sectionTextHash !== '')).toBe(true);
 
     await indexer.enqueue('bk-1');
@@ -423,7 +423,7 @@ describe('EmbeddingIndexer', () => {
         updatedAt: 0,
       };
       // Stamp matches the live config → the per-section resume-skip still holds,
-      // PROVIDED s0's vectors are actually present in the persisted row (B-3).
+      // PROVIDED s0's vectors are actually present in the persisted row.
       const persisted: PersistedStamp = {
         model: 'gemini-embedding-001',
         dims: 4,
@@ -544,7 +544,8 @@ describe('EmbeddingIndexer', () => {
     expect(vectors.length % 4).toBe(0);
     const rows = vectors.length / 4;
     expect(scales.length).toBe(rows);
-    // Each chunk carries a tokenCount and empty CFIs (Phase D populates CFI).
+    // Each chunk carries a tokenCount and empty CFIs (the read path recovers
+    // positions from the persisted char offsets).
     expect(sec.chunks.length).toBe(rows);
     expect(sec.chunks[0].cfiStart).toBe('');
     expect(sec.chunks[0].tokenCount).toBeGreaterThan(0);
@@ -636,10 +637,10 @@ describe('EmbeddingIndexer', () => {
   });
 
   /**
-   * Writing after EVERY section re-serialized the whole per-book row (every
+   * Writing after EVERY section would re-serialize the whole per-book row (every
    * ArrayBuffer embedded so far) through the gated IDB path, on the main thread,
-   * while the user reads: O(sections²) bytes — a 30-section book moved ~15× the
-   * bytes it had to, a 100-section book ~50×. Writes are now batched, and the
+   * while the user reads: O(sections²) bytes — a 30-section book would move ~15×
+   * the bytes it has to, a 100-section book ~50×. Writes are batched, and the
    * journal row may never claim a section whose vectors were not written with it.
    */
   describe('regression: embedding writes are batched', () => {
@@ -660,7 +661,7 @@ describe('EmbeddingIndexer', () => {
       await indexer.enqueue('bk-1');
 
       expect(calls).toHaveLength(20); // every section still embedded
-      expect(puts.length).toBeLessThanOrEqual(5); // was 20 (one per section)
+      expect(puts.length).toBeLessThanOrEqual(5); // not 20 (one per section)
       // Nothing is lost: the final row carries all twenty sections.
       const finalHrefs = puts[puts.length - 1].sections.map((s) => s.href);
       expect(new Set(finalHrefs).size).toBe(20);
@@ -713,7 +714,7 @@ describe('EmbeddingIndexer', () => {
   });
 
   /**
-   * The job row now carries how many sections CAN be embedded, so the library
+   * The job row carries how many sections CAN be embedded, so the library
    * search view can render an indexed/partial badge from this row alone instead
    * of loading every book's whole search text plus its whole vector row.
    */
@@ -745,10 +746,10 @@ describe('EmbeddingIndexer', () => {
   });
 
   /**
-   * A reader-open over an already-embedded book used to COPY every persisted
+   * A reader-open over an already-embedded book must not COPY every persisted
    * vector buffer (toArrayBuffer = slice) just to seed the read-modify-write
-   * accumulator, before discovering that every section resume-skips. The seed is
-   * now lazy: a fully-resumed pass touches no buffer and writes nothing.
+   * accumulator, only to discover that every section resume-skips. The seed is
+   * lazy: a fully-resumed pass touches no buffer and writes nothing.
    */
   describe('regression: a fully-resumed pass does no work', () => {
     it('never reads the persisted buffers and never writes', async () => {

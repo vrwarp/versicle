@@ -189,11 +189,12 @@ describe('citation marker leading flag', () => {
 });
 
 describe('regression: NFKD normalization corrupted sentence CFI ranges for non-ASCII text', () => {
-  // Segmentation offsets used to be computed against NFKD-normalized text and then
-  // mapped onto the raw (un-normalized) DOM text nodes: every decomposable character
-  // (NFC é, ligature ﬁ, …) before a sentence start shifted the Range — and therefore
-  // the persisted CFI — to the right by the cumulative length drift. Ranges must
-  // cover the exact raw characters; only the outbound sentence text is normalized.
+  // Segmentation offsets must be computed against the RAW text, since they are mapped
+  // onto the raw (un-normalized) DOM text nodes. Computed against NFKD-normalized text,
+  // every decomposable character (NFC é, ligature ﬁ, …) before a sentence start would
+  // shift the Range — and therefore the persisted CFI — to the right by the cumulative
+  // length drift. Ranges must cover the exact raw characters; only the outbound
+  // sentence text is normalized.
   const extractWithRanges = (html: string) => {
     const div = document.createElement('div');
     div.innerHTML = html;
@@ -209,8 +210,8 @@ describe('regression: NFKD normalization corrupted sentence CFI ranges for non-A
   it('ranges cover the exact raw characters when precomposed accents precede a sentence', () => {
     const { sentences, ranges } = extractWithRanges('<p>Le café est bon. Voilà le chat. Fin.</p>');
 
-    // Pre-fix, "café"/"Voilà" each lengthened under NFKD, so the second and third
-    // ranges started 1 and 2 characters too far right.
+    // Under NFKD "café"/"Voilà" each lengthen, so offsets computed against normalized
+    // text would start the second and third ranges 1 and 2 characters too far right.
     expect(ranges).toEqual(['Le café est bon. ', 'Voilà le chat. ', 'Fin.']);
     expect(sentences).toHaveLength(3);
     expect(sentences[2].text).toBe('Fin.');
@@ -225,8 +226,8 @@ describe('regression: NFKD normalization corrupted sentence CFI ranges for non-A
   });
 
   it('ranges stay correct when the accented text spans multiple text nodes', () => {
-    // Pre-fix, the drifted end offset overran the last text node and the final
-    // sentence was silently dropped (no CFI could be generated).
+    // A drifted end offset would overrun the last text node and the final
+    // sentence would be silently dropped (no CFI could be generated).
     const { sentences, ranges } = extractWithRanges('<p>Le caf<em>é</em> est bon. Fin.</p>');
 
     expect(ranges).toEqual(['Le café est bon. ', 'Fin.']);
@@ -257,8 +258,8 @@ describe('regression: NFKD normalization corrupted sentence CFI ranges for non-A
 
 describe('extraction v3 — raw at rest (5c-PR4; phase5-tts-strangler.md §5c.1)', () => {
   // The version constant bumps ONLY with this comparison suite green: on the
-  // composed-accent / ligature / CJK fixtures (the 4197cdab NFKD regression
-  // family above), the v3 output must carry CFIs IDENTICAL to what the v2
+  // composed-accent / ligature / CJK fixtures (the NFKD regression family
+  // above), the v3 output must carry CFIs IDENTICAL to what the v2
   // pipeline persisted (v2 = raw extraction + an ingest-time refineSegments
   // pass with empty abbreviations). Refinement is a no-op on these fixtures,
   // so any drift here would be a real CFI regression from the format change.
@@ -271,8 +272,8 @@ describe('extraction v3 — raw at rest (5c-PR4; phase5-tts-strangler.md §5c.1)
       return extractSentencesFromNode(div, cfiGenerator).sentences;
     };
     const v3 = run();
-    // The legacy v2 tail: refine with the import-time inputs the library store
-    // passed (empty abbreviations/alwaysMerge, default starters).
+    // The v2 tail: ingest-time refinement with empty abbreviations/alwaysMerge
+    // and the default starters.
     const v2 = TextSegmenter.refineSegments(run(), [], [], DEFAULT_SENTENCE_STARTERS);
     return { v2, v3 };
   };
@@ -306,10 +307,10 @@ describe('extraction v3 — raw at rest (5c-PR4; phase5-tts-strangler.md §5c.1)
   });
 
   it('old rows are retained: the read path serves any extractionVersion (graft rule)', () => {
-    // No purge/filter exists anywhere on extractionVersion (the background
-    // re-ingestion DRIVER is Phase 7 scope). Pin the rule at the type level:
-    // the row schema keeps the field optional, so v1 (absent) / v2 / v3 rows
-    // all remain valid reads.
+    // The read path never filters rows on extractionVersion (the re-ingestion
+    // wave upgrades them in place — src/domains/library/reingest.ts). Pin the
+    // rule at the type level: the row schema keeps the field optional, so v1
+    // (absent) / v2 / v3 rows all remain valid reads.
     const v1Row = { id: 'b-s', bookId: 'b', sectionId: 's', sentences: [] } as CacheTtsPreparation;
     const v3Row = { ...v1Row, extractionVersion: TTS_EXTRACTION_VERSION } as CacheTtsPreparation;
     expect(v1Row.extractionVersion).toBeUndefined();
@@ -320,8 +321,8 @@ describe('extraction v3 — raw at rest (5c-PR4; phase5-tts-strangler.md §5c.1)
 /**
  * extractSentencesFromNode is one unbroken synchronous pass over a whole
  * chapter — traverse + Intl.Segmenter + sanitize + createRange + a CFI per
- * sentence — and the offscreen renderer could only yield BETWEEN chapters, so
- * a single-XHTML book blocked the main thread for the entire book.
+ * sentence — so yielding only BETWEEN chapters would let a single-XHTML book
+ * block the main thread for the entire book.
  */
 describe('regression: extraction yields inside a large chapter', () => {
   const buildChapter = (paragraphs: number): HTMLElement => {

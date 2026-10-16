@@ -1,8 +1,8 @@
 /**
  * Row schemas for the CACHE domain stores (`cache_render_metrics`,
  * `cache_audio_blobs`, `cache_session_state`, `cache_tts_preparation`,
- * `cache_table_images`) — Phase 3, D4 in
- * plan/overhaul/prep/phase3-storage-gateway.md.
+ * `cache_table_images`, `cache_search_text`, `cache_embeddings`,
+ * `cache_embed_jobs`, `cache_query_embeddings`, `cache_drive_previews`).
  *
  * See rows/static.ts for the shared posture (loose envelope, strict
  * required keys, `z.custom` binaries, ingress-only validation) and for why
@@ -34,8 +34,7 @@ export type CacheRenderMetricsRow = {
 /**
  * A `cache_render_metrics` row as restored from a backup file's `locations`
  * array (the untrusted restore ingress). Invalid rows are skipped with a
- * warning — never written (pre-rows/ behavior wrote
- * `{ bookId, locations: undefined }` garbage).
+ * warning — never written.
  */
 export const bookLocationsRowSchema = z.looseObject({
   bookId: z.string().min(1),
@@ -53,8 +52,8 @@ const timepointSchema = z.looseObject({
  * `alignmentData` is the LEGACY field name for `alignment` written by older
  * builds — read-shim only (the audioCache repo normalizes it onto
  * `alignment` on read; new rows never write it). `size` is the additive
- * byte-length field new writes stamp for the LRU eviction job (P3-6);
- * absent on older rows, backfilled by v25.
+ * byte-length field new writes stamp for the LRU eviction job; absent on
+ * older rows, backfilled by the audioCache repo's post-open idle job.
  */
 export const cacheAudioBlobRowSchema = z.looseObject({
   key: z.string().min(1),
@@ -152,7 +151,7 @@ export type TableImageRow = {
 
 /**
  * `cache_search_text` row (key: bookId) — the persisted per-book search
- * corpus (Phase 7 §F): plain text per spine section, written at import (a
+ * corpus: plain text per spine section, written at import (a
  * free output of the unified extractor) and lazily on first search for
  * pre-existing books. `extractionVersion` is the invalidation stamp:
  * rows below the current extraction version are re-extracted.
@@ -193,9 +192,9 @@ const embeddingBinarySchema = z.custom<ArrayBuffer>((v) => v instanceof ArrayBuf
 });
 
 const embeddingChunkSchema = z.looseObject({
-  /** CFI (EPUB position locator) of the chunk start — filled in by the
-   *  embedding builder, which runs in the reader and can resolve text spans to
-   *  CFIs; the background text-chunker cannot derive a CFI from raw text. */
+  /** CFI (EPUB position locator) of the chunk start. The indexer chunks plain
+   *  text and cannot derive a CFI without the live reader view, so it writes
+   *  '' for `cfiStart`/`cfiEnd`; the char offsets below carry the position. */
   cfiStart: z.string(),
   cfiEnd: z.string(),
   tokenCount: z.number(),

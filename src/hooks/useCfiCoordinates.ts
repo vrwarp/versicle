@@ -8,15 +8,14 @@ export interface CfiCoordinate {
 }
 
 /**
- * The shared measured-portal primitive (Phase 6 §4 "MeasuredOverlay"): maps
+ * The shared measured-portal primitive ("MeasuredOverlay"): maps
  * CFIs to overlay-container coordinates through the ReaderEngine port
  * (`getRangeRects` = rendered range rects + iframe stacking offsets) and
  * re-measures on relocation, container resize, and explicit dependency
  * changes. Consumers portal the results via ReaderOverlay.
  *
- * Placement semantics preserved from the pre-port hook: the point is the
- * bottom-right of the LAST client rect (markers sit at the end of the last
- * highlighted line).
+ * Placement: the point is the bottom-right of the LAST client rect (markers
+ * sit at the end of the last highlighted line).
  *
  * @param engine The ReaderEngine port (null while the book loads).
  * @param cfis CFI strings to measure.

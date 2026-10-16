@@ -1,9 +1,8 @@
 /**
- * LexiconEngine suite (Phase 5c; phase5-tts-strangler.md §5c.3; absorption
- * ledger row 18). Carries the surviving assertions of the deleted
- * LexiconService per-area suites as named `describe('regression: …')`
- * blocks, rewritten against the injected-deps LexiconAssembler (no store
- * module mocks). The fuzz/perf/trace companions survive as
+ * LexiconEngine suite. Assembly, filtering, ordering, Bible-injection and
+ * applier regressions live here as named `describe('regression: …')`
+ * blocks, run against the injected-deps LexiconAssembler (no store module
+ * mocks). The fuzz/perf/trace companions are
  * LexiconEngine.{fuzz,perf,trace}.test.ts.
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -222,7 +221,7 @@ describe('CompiledLexicon memo + invalidation (5c-PR3: S15 dies)', () => {
         });
         const a = await h.assembler.getCompiled('book1', 'en');
         const b = await h.assembler.getCompiled('book1', 'en');
-        expect(b).toBe(a);              // memo hit — the S15 book-path cache bug is dead
+        expect(b).toBe(a);              // memo hit
         expect(b.rules).toBe(a.rules);  // stable identity → LexiconApplier WeakMap stays hot
         expect(Object.isFrozen(a.rules)).toBe(true);
     });
@@ -359,8 +358,8 @@ describe('regression: LexiconServiceInitialisms', () => {
 
 describe('golden: audio-cache-key stability (default output byte-identical)', () => {
     // Audio cache keys are SHA-256 of the PROCESSED text — these literals pin
-    // the default applyLexicon output across the 5c-PR3 applier rework so no
-    // user's synthesized-audio cache is invalidated.
+    // the default applyLexicon output so applier changes never invalidate a
+    // user's synthesized-audio cache.
     const RULES: LexiconRule[] = [
         { id: '1', original: 'Hello', replacement: 'Hi', created: 0 },
         { id: '2', original: 'chapter (\\d+)', replacement: 'Section $1', isRegex: true, matchType: 'regex', created: 0 },

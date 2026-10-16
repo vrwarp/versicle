@@ -1,8 +1,7 @@
 /**
- * Recovery settings panel (Phase 8 §B): checkpoint listing/creation wiring
- * for the presentational RecoverySettingsTab, moved verbatim from the
- * deleted GlobalSettingsDialog (including the unmount-safe listing the
- * predictability regression pinned — see SettingsShell.test.tsx).
+ * Recovery settings panel: checkpoint listing/creation wiring for the
+ * presentational RecoverySettingsTab (including the unmount-safe listing
+ * pinned by the regression block in SettingsShell.test.tsx).
  */
 import React, { useEffect, useState } from 'react';
 import { CheckpointService } from '@domains/sync/checkpoints/CheckpointService';

@@ -2,7 +2,7 @@
  * `EpubJsEngine` unit suite — the C7 port over a duck-typed book/rendition
  * pair.
  *
- * The engine is the tree's only epub.js importer, and almost every method is
+ * The engine is the reader's only epub.js adapter, and almost every method is
  * a guard around an upstream call that is typed more optimistically than it
  * behaves (`location` before the first display, `spine` deleted at destroy,
  * `navigation` undefined until it loads, `getContents()` returning an array

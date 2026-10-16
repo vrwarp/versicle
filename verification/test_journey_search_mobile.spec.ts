@@ -4,7 +4,8 @@ import { resetApp, captureScreenshot } from "./utils";
 test("search and sort mobile", async ({ page }) => {
   console.log("Starting Search and Sort User Journey (Mobile)...");
 
-  // Set viewport to mobile to verify the 3-row layout and responsiveness
+  // Set viewport to mobile to verify the stacked 3-row header layout (title/actions,
+  // search, then filter + sort) and responsiveness
   await page.setViewportSize({ width: 390, height: 844 });
 
   await resetApp(page);
@@ -33,7 +34,7 @@ test("search and sort mobile", async ({ page }) => {
   await searchInput.fill("Lewis Carroll");
   await expect(page.getByText("Alice's Adventures in Wonderland").first()).toBeVisible();
 
-  // 2b-bis. Test Input Clear Button (New Feature)
+  // 2b-bis. Test Input Clear Button
   console.log("  - Testing Input Clear Button");
   const inputClearBtn = page.getByLabel("Clear search");
   await expect(inputClearBtn).toBeVisible();

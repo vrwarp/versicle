@@ -73,4 +73,4 @@ The engine is a plain dependency-injected class. There are two construction path
 | Host | How it builds the engine | Context |
 |------|--------------------------|---------|
 | **Production (worker)** | `WorkerTtsEngine.connect()` constructs `PlaybackController.createWithContext(...)` directly inside the worker (`tts.worker.ts`); the main thread talks to it through `WorkerEngineHandle` | `WorkerEngineContext` (replicated state + repo-backed storage ports) |
-| **Tests / in-process** | `PlaybackController.createWithContext(ctx, backendFactory, platformFactory)` — a fresh, isolated instance (`getInProcessAudioPlayer()` in `src/app/tts/` for store-wired unit tests) | `FakeEngineContext` (tests) or `createZustandEngineContext()` |
+| **Tests / in-process** | `PlaybackController.createWithContext(ctx, backendFactory, platformFactory)` — a fresh, isolated instance; engine suites build it through the `FakeEngineContext` / `parityHostDb` ports (there is no app-level in-process builder) | `FakeEngineContext` (tests) or `createZustandEngineContext()` |

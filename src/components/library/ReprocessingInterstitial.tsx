@@ -25,10 +25,10 @@ export const ReprocessingInterstitial: React.FC<ReprocessingInterstitialProps> =
         const runReprocessing = async () => {
             setProgress('processing');
             try {
-                // Phase 7: routed through the ImportOrchestrator queue — the
-                // book mutex makes overlapping reprocess runs impossible
-                // (D6), and the job refreshes the static-metadata projection
-                // itself (no manual hydrate needed).
+                // Routed through the ImportOrchestrator queue — the per-book
+                // mutex makes overlapping reprocess runs impossible, and the
+                // job refreshes the static-metadata projection itself (no
+                // manual hydrate needed).
                 await libraryController.reprocessBook(bookId);
                 onComplete();
             } catch (e) {

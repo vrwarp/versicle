@@ -4,9 +4,8 @@ import '@testing-library/jest-dom';
 import * as Y from 'yjs';
 import { DataRecoveryView } from './DataRecoveryView';
 
-// The view reads through the data layer's snapshot primitive since the
-// P4-7/P9 retarget (no more temp IndexeddbPersistence dance); hand it a
-// real encoded Y.Doc update.
+// The view reads through the data layer's snapshot primitive; hand it a real
+// encoded Y.Doc update.
 const { readSnapshotMock } = vi.hoisted(() => ({ readSnapshotMock: vi.fn() }));
 vi.mock('@data/snapshot/YjsSnapshotService', () => ({
     readSnapshot: readSnapshotMock,

@@ -6,8 +6,8 @@ import { useBookStore } from '@store/useBookStore';
 import { useGenAIStore } from '@store/useGenAIStore';
 import { mapReadingListToLibrary } from '@domains/google/genai/features/libraryMapping';
 
-// Mock dependencies (P9: the GenAIService façade is deleted — the dialog
-// deep-imports the libraryMapping feature module and the domain client).
+// Mock dependencies (the dialog deep-imports the libraryMapping feature
+// module and the domain client).
 vi.mock('@store/useReadingListStore');
 vi.mock('@store/useBookStore');
 vi.mock('@store/useGenAIStore');
@@ -121,7 +121,7 @@ describe('SmartLinkDialog', () => {
             expect(screen.getAllByRole('checkbox').length).toBeGreaterThan(0);
         });
 
-        // Uncheck and re-check to test toggle (it's checked by default in the implementation)
+        // Suggested mappings are selected by default
         const checkbox = screen.getByRole('checkbox');
         expect(checkbox).toBeChecked();
 

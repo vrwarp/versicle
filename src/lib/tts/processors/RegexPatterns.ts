@@ -7,9 +7,7 @@ export const RegexPatterns = {
     PAGE_NUMBER: /^\s*(?:(?:page|pg\.?)\s*)?\d+\s*$/i,
 
     // Matches URLs, capturing the domain.
-    // Group 1: Protocol (optional)
-    // Group 2: Domain (required)
-    // Group 3: Path/Query (optional)
+    // Group 1: Domain (the only capture group; protocol, "www." and path/query are non-capturing)
     URL: /https?:\/\/(?:www\.)?([-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9]{1,63})\b(?:[-a-zA-Z0-9()@:%_+.~#?&//=]*[^.,?!:;"'\s])?/,
 
     // Matches academic citations like [1], [12], (Author, 2020)

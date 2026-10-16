@@ -1,5 +1,5 @@
 /**
- * One-time bookId linker pins (Phase 7 §D — the F.3 discipline: determinism,
+ * One-time bookId linker pins (the F.3 discipline: determinism,
  * idempotency, convergence under concurrent migration). The step is
  * REGISTERED as CRDT v8 ({ from: 7, to: 8 } in src/app/migrations.ts);
  * coordinator-level coverage (captured era fixtures → v8, two-client

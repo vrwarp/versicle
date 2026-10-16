@@ -2,7 +2,7 @@
  * `createSync` — the LIGHT half of the composition root.
  *
  * Its contract is singleton discipline and the enablement gate. Both are
- * load-bearing for the Phase 8 chunk split: `isSyncEnabled` decides whether
+ * load-bearing for the firebase chunk split: `isSyncEnabled` decides whether
  * the firebase chunk is fetched at all, and the supersede check inside the
  * dynamic import is what keeps a wipe racing a composition from installing
  * a stale orchestrator.

@@ -16,22 +16,18 @@ export type StateChangeListener = (state: PlaybackStateSnapshot) => void;
 let nextQueueId = 0;
 
 /**
- * QueueModel — the IMMUTABLE queue/position model of the TTS playback session
- * (Phase 5b-PR2; the renamed PlaybackStateManager).
+ * QueueModel — the IMMUTABLE queue/position model of the TTS playback session.
  *
  * Copy-on-write: every mutation replaces `_queue` with a fresh array (frozen in
  * DEV) and stamps a new `queueId` when the queue's CONTENT identity changed —
  * a published queue array is never mutated afterwards, so consumers (the
  * snapshot channel, the store mirror, persistence) can rely on reference
- * identity. The in-place `applySkippedMask` mutation (the S4 debt and the P14
- * parity rider) died here. Persistence dedupe is keyed on `queueId`, not on
- * array reference (the reference check was defeated by exactly that in-place
- * mutation).
+ * identity. Persistence dedupe is keyed on `queueId`, not on array reference.
  *
  * Also tracks the current index, section index, and reading progress. The
- * model is PURE since 5b-PR4: persistence moved behind the SessionStore port
+ * model is PURE: persistence lives behind the SessionStore port
  * (EngineContext), driven by the PlaybackController's subscription keyed on
- * `queueId` — the QueueModel no longer touches storage at all.
+ * `queueId` — the QueueModel never touches storage.
  */
 export class QueueModel {
     private _queue: ReadonlyArray<TTSQueueItem> = QueueModel.seal([]);
@@ -43,11 +39,11 @@ export class QueueModel {
     private listeners: StateChangeListener[] = [];
 
     /**
-     * DEV-only mutation tripwire (Phase 5b-PR3, the C4 dev-assert): the engine
-     * installs a guard that throws unless a sequenced task is currently
-     * running, making "only sequenced tasks mutate the queue" a crashing
-     * invariant in dev/test instead of a convention. No-op when unset
-     * (standalone QueueModel unit tests drive the model directly).
+     * DEV-only mutation tripwire: the engine installs a guard that throws
+     * unless a sequenced task is currently running, making "only sequenced
+     * tasks mutate the queue" a crashing invariant in dev/test instead of a
+     * convention. No-op when unset (standalone QueueModel unit tests drive the
+     * model directly).
      */
     private mutationGuard: ((op: string) => void) | null = null;
 
@@ -115,7 +111,7 @@ export class QueueModel {
     /**
      * Applies a mask to mark specific raw indices as skipped.
      * Copy-on-write: produces a NEW queue array with `isSkipped` recomputed; the
-     * previously published array is untouched (the P14 identity guarantee).
+     * previously published array is untouched.
      *
      * @param {Set<number>} rawSkippedIndices A set of raw sentence indices to skip.
      * @param {string} sectionId The section ID for validation.
@@ -133,7 +129,7 @@ export class QueueModel {
 
             // NOTE comparison is deliberately strict (no ?? normalization): an item
             // with isSkipped UNDEFINED is normalized to an explicit false on the first
-            // mask application — the legacy behavior consumers/persistence pin.
+            // mask application — behavior consumers/persistence pin.
             if (item.isSkipped !== shouldSkip) {
                 changed = true;
                 return { ...item, isSkipped: shouldSkip };
@@ -368,7 +364,7 @@ export class QueueModel {
 
     /**
      * Seeks to a specific time in the current section.
-     * Updates the current index and persists the state.
+     * Updates the current index and notifies listeners.
      *
      * @param {number} time The elapsed time in seconds.
      * @returns {boolean} True if the index changed.

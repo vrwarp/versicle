@@ -3,17 +3,16 @@
  *
  * The embedding indexer's per-section resume-skip and the reader's "sections
  * embedded" progress counter both key on `sectionTextHash` — the djb2 the
- * extractor stamps on each corpus section at import. But that field was added
- * (2026-06-15) two days AFTER `TTS_EXTRACTION_VERSION` was bumped to 3, and the
- * version was NOT bumped again for it. Re-extraction only fires for corpora
- * whose version is BELOW the current one, so a corpus written at version 3
- * before the field existed keeps `sectionTextHash` absent forever — it is never
- * re-extracted to backfill it.
+ * extractor stamps on each corpus section at import. But corpora written
+ * before that field existed lack it: the field was added without bumping
+ * `TTS_EXTRACTION_VERSION`, and re-extraction only fires for corpora whose
+ * version is BELOW the current one, so such a corpus keeps `sectionTextHash`
+ * absent forever — it is never re-extracted to backfill it.
  *
- * With the field absent, the old `?? ''` fallbacks made the indexer's skip
- * guard (`sectionTextHash !== ''`) and the counter's match (`liveHash !==
- * undefined`) silently no-op: every reader pass re-embedded EVERY section from
- * scratch (thousands of embeddings) while progress sat at zero forever.
+ * Treating the absent field as `''` would make the indexer's skip guard
+ * (`sectionTextHash !== ''`) and the counter's match (`liveHash !== undefined`)
+ * silently no-op: every reader pass would re-embed EVERY section from scratch
+ * (thousands of embeddings) while progress sat at zero forever.
  *
  * This derives the hash from the section text with the SAME djb2 the extractor
  * uses, so:

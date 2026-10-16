@@ -2,10 +2,9 @@
  * Toast capture: record every `showToast` call through the REAL
  * `useToastStore` instead of `vi.mock`ing the store module.
  *
- * Phase 8 §D: the store is queue-based now (the single-slot overwrite is
- * dead), but the capture stays useful — it records the RESOLVED display
- * message for every call in order, so suites keep pinning user-visible
- * copy even when call sites pass catalog keys.
+ * The store is queue-based, but the capture stays useful — it records the
+ * RESOLVED display message for every call in order, so suites keep pinning
+ * user-visible copy even when call sites pass catalog keys.
  */
 import { useToastStore } from '@store/useToastStore';
 import type { ToastType } from '@store/useToastStore';

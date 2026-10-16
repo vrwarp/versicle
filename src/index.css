@@ -1,14 +1,13 @@
 @import "tailwindcss";
-/* Phase 8 §K (RC-18 decision: INSTALL): the animate-in/fade-in/slide-in-*
-   entrance classes authored across Modal/Sheet/Popover/Toast/pills were
-   silent no-ops since the Tailwind v4 migration dropped tailwindcss-animate.
-   tw-animate-css is the TW4-native replacement — the classes run again,
-   under the global reduced-motion override at the end of this file. */
+/* tw-animate-css provides the animate-in/fade-in/slide-in-* entrance classes
+   authored across Modal/Sheet/Popover/Toast/pills (the Tailwind v4-native
+   replacement for tailwindcss-animate), under the global reduced-motion
+   override at the end of this file. */
 @import "tw-animate-css";
-/* Versicle Sans Narrow (Phase 8 §I): the pinyin-overlay derivative
-   renamed off the OFL Reserved Font Names. Rebuilt from the previously
-   shipped glyph-injected binaries by scripts/build-pinyin-font.py
-   (provenance + hashes in third-party/inventory.json). */
+/* Versicle Sans Narrow: the pinyin-overlay derivative, renamed off the OFL
+   Reserved Font Names. Built from the glyph-injected binaries by
+   scripts/build-pinyin-font.py (provenance + hashes in
+   third-party/inventory.json). */
 @font-face {
   font-family: 'Versicle Sans Narrow';
   font-style: normal;
@@ -321,7 +320,7 @@ input[type="search"]::-webkit-search-results-decoration {
   font-family: 'Versicle Sans Narrow', sans-serif;
 }
 
-/* Phase 8 §K: ONE global reduced-motion policy. CSS animations/transitions
+/* ONE global reduced-motion policy. CSS animations/transitions
    collapse to imperceptible durations (not 0s — animationend/transitionend
    listeners still fire) and smooth scrolling turns instant. JS-driven
    motion consumes the matching useReducedMotion() hook (src/hooks/). */

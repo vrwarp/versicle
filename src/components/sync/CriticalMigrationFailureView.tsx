@@ -12,7 +12,8 @@ interface CriticalMigrationFailureViewProps {
 
 /**
  * Rendered by ErrorBoundary when a crash occurs during AWAITING_CONFIRMATION,
- * indicating the downloaded remote state is incompatible with the current UI.
+ * indicating the downloaded remote state is incompatible with the current UI,
+ * and by App.tsx when the boot-time CRDT migration throws a MigrationError.
  */
 export const CriticalMigrationFailureView: React.FC<CriticalMigrationFailureViewProps> = ({ backupId }) => {
     const [isRollingBack, setIsRollingBack] = React.useState(false);

@@ -1,8 +1,8 @@
 /**
- * SearchPanel on the SearchSession (Phase 7 §F reader adoption). The session
- * is REAL with an in-process engine (the PR-0c pattern — no worker, no
- * Comlink); the corpus comes from an injected textSource; the orchestrator
- * reprocess fallback and the toast surface are the only mocks.
+ * SearchPanel on the SearchSession. The session is REAL with an in-process
+ * engine (no worker, no Comlink); the corpus comes from an injected
+ * textSource; the orchestrator reprocess fallback and the toast surface are
+ * the only mocks.
  */
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';

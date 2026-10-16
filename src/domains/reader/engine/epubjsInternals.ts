@@ -1,32 +1,26 @@
 /**
- * Typed epub.js INTERNALS for the reader engine — Phase 6 §8
- * (prep/phase6-reader-engine.md), the Phase 1 audit's "typed refactor task"
- * (prep/phase1-deletions.md §1.23).
+ * Typed epub.js INTERNALS for the reader engine.
  *
- * The legacy `src/types/epubjs.d.ts` was an ambient `declare module 'epubjs'`
- * that SHADOWED the package's shipped types (`epubjs/types/*`), so every
- * epubjs import in the tree type-checked against a hand-rolled 136-line
- * approximation. It is deleted in the same commit that adds this file;
- * imports now resolve to the real upstream 0.3.93 declarations.
+ * `epubjs` imports resolve to the package's shipped declarations
+ * (`epubjs/types/*`, 0.3.93); there is no ambient `declare module 'epubjs'`
+ * shadowing them.
  *
- * DECISION RECORD (the doc's §8.5 fallback, taken deliberately): the doc's
- * preferred mechanism — module augmentation over `epubjs/types/*` — is
- * structurally impossible here. Upstream declares every surface as an
- * `export default class` (Rendition, Book, Section, View, …), and TypeScript
- * cannot declaration-merge new members into a DEFAULT export via module
- * augmentation (only named exports can be augmented; under `skipLibCheck`
- * the attempt even fails silently). So the genuinely untyped internals from
- * the §2a API table are typed HERE as intersection types over the upstream
+ * DECISION RECORD: the natural mechanism — module augmentation over
+ * `epubjs/types/*` — is structurally impossible here. Upstream declares every
+ * surface as an `export default class` (Rendition, Book, Section, View, …),
+ * and TypeScript cannot declaration-merge new members into a DEFAULT export
+ * via module augmentation (only named exports can be augmented; under
+ * `skipLibCheck` the attempt even fails silently). So the genuinely untyped
+ * internals are typed HERE as intersection types over the upstream
  * declarations, consumed only inside `domains/reader/engine/` (the sole
- * runtime epubjs importer, boundary rule 8). Everything else the doc lists
+ * runtime epubjs importer, boundary rule 8). Everything else the engine uses
  * (rendition.location, flow/spread/resize, on('keydown', …),
  * hooks.content.register, book.spine.hooks.serialize, contents.cfiFromRange,
- * annotations' className/styles args) IS declared upstream — verified
- * against node_modules/epubjs/types at 0.3.93.
+ * annotations' className/styles args) IS declared upstream — checked against
+ * node_modules/epubjs/types at 0.3.93.
  *
- * Kept alongside: `src/types/epubjs-epubcfi.d.ts` (7 lines, maps the
- * worker-safe `epubjs/src/epubcfi` runtime submodule; analysis and audit
- * concur it stays).
+ * Kept alongside: `src/types/epubjs-epubcfi.d.ts` (maps the worker-safe
+ * `epubjs/src/epubcfi` runtime submodule).
  */
 import type { Book, Contents, Rendition } from 'epubjs';
 import type Section from 'epubjs/types/section';

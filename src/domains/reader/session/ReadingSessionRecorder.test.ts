@@ -1,17 +1,15 @@
 /**
- * ReadingSessionRecorder — the owning suite (Phase 6 §6 / PR-6,
- * prep/phase6-reader-engine.md).
+ * ReadingSessionRecorder — the owning suite.
  *
- * The first describes pin the EXTRACTED legacy behavior (write shapes,
- * guards, panic-save semantics — characterization tier). The serialization
- * describe pins the §6 fix: per-book FIFO so a delayed snap for relocation
- * N can never commit after N+1 (the legacy out-of-order `currentCfi` bug,
- * reader.md D6).
+ * The first describe pins the write behavior (write shapes, guards,
+ * panic-save semantics — characterization tier). The serialization describe
+ * pins the per-book FIFO: a delayed snap for relocation N can never commit
+ * after N+1 (which would leave `currentCfi` pointing backwards).
  *
  * BOTH run against BOTH branches of `commit()` (see {@link MODES}): the
  * coalescing window the app actually ships, and the `commitWindowMs: 0`
- * write-through branch. They used to run only against zero — a branch nothing
- * in production selects — which left every one of these assertions validating
+ * write-through branch. Running only against zero — a branch nothing in
+ * production selects — would leave every one of these assertions validating
  * code the app never executes.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -110,7 +108,7 @@ const committedPositions = (store: Store): string[] =>
  * window's timer fire. Under `commitWindowMs: 0` the second hop does nothing
  * (there is no window); under the production window it is what issues the
  * merged write — so one settle means "one commit has reached the store" on
- * BOTH branches, and the legacy assertions below hold verbatim on each.
+ * BOTH branches, and the assertions below hold on each.
  */
 const settle = async () => {
   await vi.advanceTimersByTimeAsync(0);
@@ -156,8 +154,8 @@ describe.each(MODES)(
           label: 'Chapter One',
         },
       ]);
-      // The current range never counts as a history append (legacy: the tick
-      // fired only for the previous-range entry).
+      // The current range never counts as a history append (the tick fires
+      // only for the previous-range entry).
       expect(onHistoryRecorded).not.toHaveBeenCalled();
     });
 
@@ -174,7 +172,7 @@ describe.each(MODES)(
       const updates = store.updateReadingSession.mock.calls[1][3];
       expect(updates).toEqual([
         {
-          // null-range resolver → snap returns the raw CFIs (legacy fallback)
+          // null-range resolver → snap returns the raw CFIs
           range: range(1),
           type: 'page',
           label: 'Chapter One',
@@ -199,8 +197,7 @@ describe.each(MODES)(
       await settle();
 
       const updates = store.updateReadingSession.mock.calls[1][3];
-      // Previous range dropped; current range keeps its (unfiltered) label —
-      // legacy behavior, verbatim.
+      // Previous range dropped; current range keeps its (unfiltered) label.
       expect(updates).toHaveLength(1);
       expect(updates[0].label).toBe('Chapter');
       expect(onHistoryRecorded).not.toHaveBeenCalled();
@@ -340,7 +337,7 @@ describe.each(MODES)('regression: serialized per-book writes (D6 fix, §6) — $
     // FIFO: N+1 must NOT have committed ahead of N.
     expect(store.updateReadingSession).toHaveBeenCalledTimes(1);
 
-    // Resolve N's snap (after N+1 was enqueued — the legacy out-of-order
+    // Resolve N's snap (after N+1 was enqueued — the out-of-order
     // scenario), then N+1's.
     release(loc(1).startCfi);
     release(loc(1).endCfi);
@@ -380,7 +377,7 @@ describe.each(MODES)('regression: serialized per-book writes (D6 fix, §6) — $
 
     // Both recordings committed synchronously (raw, unsnapped ranges) in
     // event order — merged into one write on the production path, one write
-    // each when coalescing is off — plus the legacy final panic segment.
+    // each when coalescing is off — plus the final panic segment.
     expect(store.updateReadingSession).toHaveBeenCalledTimes(mode.merges ? 1 : 2);
     expect(committedRanges(store)).toEqual([range(1), range(2), range(2), range(3)]);
     expect(committedPositions(store).at(-1)).toBe(loc(3).startCfi);
@@ -427,7 +424,7 @@ describe.each(MODES)('regression: serialized per-book writes (D6 fix, §6) — $
 
 /**
  * perf/durability: the progress store is a CRDT, and Yjs is append-only, so
- * every relocation's own `updateReadingSession` left ~65 bytes of PERMANENT
+ * a per-relocation `updateReadingSession` would leave ~65 bytes of PERMANENT
  * Y.Doc growth (tombstones and delete-set ranges survive `encodeStateAsUpdate`)
  * — 22ms of cold-boot `Y.applyUpdate` at 500 turns against 283ms at 40k, and a
  * document the user carries and syncs forever. Commits are merged into a time

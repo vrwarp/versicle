@@ -1,10 +1,11 @@
 /**
  * Data Integrity Tests
  *
- * Tests for the three data integrity hazards:
- * 1. mergeUpdatesAsync must validate single-item arrays (no bypass)
- * 2. Compaction candidate must be a valid Yjs update before commit
- * 3. Sync must propagate Cloud Storage download failures
+ * Tests for the data integrity hazards around compaction:
+ * 1. mergeUpdatesAsync does NOT validate single-item arrays (Y.mergeUpdates
+ *    returns a lone blob unparsed), so a corrupt blob passes through it
+ * 2. The compaction candidate must therefore be validated as a Yjs update
+ *    before commit; the Y.decodeUpdate checks below stand in for that guard
  *
  * @file data-integrity.test.ts
  */
@@ -37,19 +38,18 @@ describe('Data Integrity: mergeUpdatesAsync validation', () => {
     it('should throw on a single corrupted update (zero-byte array)', async () => {
         const corrupted = new Uint8Array([0, 0]);
 
-        // With the bypass removed, this goes through Y.mergeUpdates
-        // which attempts to decode the blob. A [0, 0] blob is technically
-        // the "empty update" which Y.mergeUpdates accepts — but verify it
-        // doesn't crash and produces a decodable result.
+        // A [0, 0] blob is technically the "empty update" which
+        // Y.mergeUpdates accepts — verify it doesn't crash and produces a
+        // decodable result.
         const result = await mergeUpdatesAsync([corrupted]);
         expect(() => Y.decodeUpdate(result)).not.toThrow();
     });
 
     it('should pass garbage through Y.mergeUpdates (validating compaction guard is needed)', async () => {
         // KEY INSIGHT: Y.mergeUpdates does NOT validate structure for single items.
-        // It silently passes garbage through. This is why the Y.decodeUpdate guard
-        // in compaction.ts is the critical defense — without it, garbage becomes
-        // the canonical snapshot.
+        // It silently passes garbage through. This is why the candidate validation
+        // in y-cinder's compaction is the critical defense — without it, garbage
+        // becomes the canonical snapshot.
         const garbage = new Uint8Array([255, 254, 253, 252, 251, 250, 249]);
 
         // mergeUpdatesAsync does NOT throw — this is the vulnerability we're guarding against

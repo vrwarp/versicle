@@ -19,9 +19,7 @@ interface ReadingListDialogProps {
 }
 
 /**
- * Dialog for managing the user's reading list.
- * Supports sorting, selection, batch deletion, and CSV export.
- * Also provides access to individual entry editing.
+ * A single row in the reading list table.
  */
 const ReadingListRow = React.memo(({ entry, isSelected, onToggleSelection, onEdit, onDelete }: {
     entry: ReadingListEntry,
@@ -86,6 +84,11 @@ const ReadingListRow = React.memo(({ entry, isSelected, onToggleSelection, onEdi
 });
 ReadingListRow.displayName = 'ReadingListRow';
 
+/**
+ * Dialog for managing the user's reading list.
+ * Supports sorting, selection, batch deletion, and CSV export.
+ * Also provides access to individual entry editing.
+ */
 export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOpenChange }) => {
     const entriesMap = useReadingListStore(state => state.entries);
     const entries = useMemo(() => Object.values(entriesMap || {}), [entriesMap]);
@@ -100,8 +103,6 @@ export const ReadingListDialog: React.FC<ReadingListDialogProps> = ({ open, onOp
 
     // The domain client reports whether any provider is configured (API key or mock).
     const canUseGenAI = isGenAIEnabled && getGenAIClient().isConfigured();
-
-    // No need for useEffect -> refreshEntries, store is reactive
 
     // Wrap the original onOpenChange to reset selection when closing
     const handleOpenChange = (newOpen: boolean) => {

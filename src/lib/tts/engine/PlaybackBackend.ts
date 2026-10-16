@@ -19,8 +19,7 @@ import type { ITTSProvider, TTSVoice } from '../providers/types';
 /**
  * Interface defining the events emitted by the playback backend (the
  * production implementation is TTSProviderManager). Declared HERE — the
- * consumer side of the seam — so the engine/manager edge is one-directional
- * (P9: the last full-graph import cycle was this type's old home).
+ * consumer side of the seam — so the engine/manager edge is one-directional.
  */
 export interface TTSProviderEvents {
     /** Triggered when playback starts. */
@@ -30,7 +29,7 @@ export interface TTSProviderEvents {
     /**
      * Triggered when an error occurs DURING playback (after play() resolved).
      * Failures to start playback reject from {@link TTSProviderManager.play}
-     * instead (single failure path, 5a-PR2) — they never arrive here.
+     * instead (single failure path) — they never arrive here.
      * @param error The error object or message.
      */
     onError: (error: unknown) => void;

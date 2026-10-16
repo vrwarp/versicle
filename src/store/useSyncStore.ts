@@ -43,7 +43,7 @@ interface SyncStore {
     setFirebaseUserEmail: (email: string | null) => void;
 
     // === Workspace ===
-    /** Active workspace ID (null = legacy default path) */
+    /** Active workspace ID (null = no workspace assigned yet; sync auto-provisions one or waits for the user to choose) */
     activeWorkspaceId: string | null;
     setActiveWorkspaceId: (id: string | null) => void;
 

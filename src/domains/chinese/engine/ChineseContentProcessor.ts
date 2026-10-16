@@ -1,14 +1,10 @@
 /**
- * ChineseContentProcessor — the event-driven Chinese reading pass
- * (Phase 6 §7.2, prep/phase6-reader-engine.md PR-10; supersedes the
- * chineseContentProcessor.ts seam, which had replaced the inline pass in
- * useEpubReader).
+ * ChineseContentProcessor — the event-driven Chinese reading pass.
  *
- * CH-2 dies here: the legacy pass ran only on content load + a fixed React
- * dependency list ([isReady, forceTraditionalChinese, showPinyin,
- * pinyinSize]) and REPLACED the whole position array per run, so a
- * relocation, a resize, or a second loaded section (scrolled mode stacks
- * iframes) dropped or clobbered annotations. This processor:
+ * A pass that ran only on content load + a fixed React dependency list and
+ * REPLACED the whole position array per run would drop or clobber annotations
+ * on a relocation, a resize, or a second loaded section (scrolled mode stacks
+ * iframes). This processor instead:
  *
  *  - keys positions per section (`Map<sectionHref, PinyinPosition[]>`) and
  *    emits the MERGED array, so multi-section scrolled mode composes;
@@ -17,8 +13,8 @@
  *    `resized` (re-measure all live views, coalesced), plus an explicit
  *    `refresh()` for preference/book-language changes;
  *  - threads a PER-SECTION cancellation token per scheduled run, shared by
- *    the traditional-conversion and geometry passes (CH-7's interleaving
- *    hazard): a superseded run abandons its writes instead of racing, and
+ *    the traditional-conversion and geometry passes (so the two cannot
+ *    interleave): a superseded run abandons its writes instead of racing, and
  *    one section's fresh render never cancels a neighbor's pass.
  *
  * Jank posture (the remeasure path runs on EVERY page turn, scroll-settle
@@ -30,7 +26,7 @@
  *  - readings are cached per text node (PinyinGeometryEngine); remeasures
  *    re-read rects only, never re-run pinyin-pro/OpenCC over the chapter;
  *  - the measure loop yields to the event loop on a time budget
- *    (MEASURE_SLICE_BUDGET_MS) — the existing run tokens make each slice
+ *    (MEASURE_SLICE_BUDGET_MS) — the run tokens make each slice
  *    safely abortable, so a superseded pass stops at its next slice edge;
  *  - a pass whose positions come out IDENTICAL to the section's current
  *    ones neither rewrites the map nor emits — the no-op remeasure storm
@@ -41,8 +37,8 @@
  *    documents can never accumulate work.
  *
  * Boundary: domains-no-store — preferences arrive via the injected
- * `getPrefs()` thunk (read at run time, exactly the getState() timing the
- * legacy pass had); the app layer owns the wiring (src/app/reader).
+ * `getPrefs()` thunk (read at run time); the app layer owns the wiring
+ * (src/app/reader).
  */
 import type { ContentView, ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import type { PinyinPosition } from '@domains/chinese/types';
@@ -156,7 +152,8 @@ export class ChineseContentProcessor {
   /**
    * Idle-time warmup of the heavy lazily-loaded processors (jank fix): the
    * pinyin-pro and OpenCC dictionary modules parse in one unbreakable task,
-   * which used to land INSIDE the first "show pinyin"/"traditional" toggle.
+   * which would otherwise land INSIDE the first "show pinyin"/"traditional"
+   * toggle.
    * The processor only exists for zh books, so prefetching at idle trades a
    * few MB of memory for a toggle that starts annotating immediately.
    */

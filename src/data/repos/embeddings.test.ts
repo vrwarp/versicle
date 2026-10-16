@@ -1,10 +1,11 @@
 /**
- * embeddings repo contract (Increment B): packed-blob round-trip with correct
+ * embeddings repo contract: packed-blob round-trip with correct
  * Int8Array/Float32Array re-wrapping, get/put/delete on both stores, the
  * delete-with-book guarantee (vectors AND resumable job state die inside
  * bookContent.deleteBook's gated transaction), and faithful stamp round-trip
  * (the {model,dims,quant,extractionVersion} invalidation policy lives in the
- * Phase-F consumer, so the repo only proves the stamp survives a round-trip).
+ * consumer, domains/search/EmbeddingIndexer, so the repo only proves the
+ * stamp survives a round-trip).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
@@ -165,7 +166,8 @@ describe('embeddingsRepo', () => {
     // carries only ch1, and the jobRow must mark ONLY ch1 complete — so the
     // indexer re-embeds the dropped ch2 on the next pass instead of resume-
     // skipping a section whose vectors are absent. putHydrated is the primary
-    // fix (one atomic tx); the B-3 indexer guard is the backstop.
+    // guard (one atomic tx); the EmbeddingIndexer's persistedHrefs self-heal is
+    // the backstop.
     const partialRow: CacheEmbeddingsRow = {
       ...row('bk-partial'),
       // Only the first section survived reconciliation.
@@ -320,12 +322,12 @@ describe('EmbeddingsRepo.runEviction (injected-recency LRU, Increment F §6/§8.
   });
 
   /**
-   * perf: the sweep streams a VALUE cursor, so every book's packed int8
-   * vectors (budget 256 MiB) were deserialized on the main thread before the
-   * `totalBytes <= budgetBytes` early-out could run — at boot, every boot. A
-   * persisted running byte total (app_metadata['embedding-cache-total-bytes'])
-   * now answers "are we under budget?" without touching a single row, exactly
-   * as the audio cache's does.
+   * perf: the sweep streams a VALUE cursor, so without a guard every book's
+   * packed int8 vectors (budget 256 MiB) would be deserialized on the main
+   * thread before the `totalBytes <= budgetBytes` early-out could run — at
+   * boot, every boot. A persisted running byte total
+   * (app_metadata['embedding-cache-total-bytes']) answers "are we under
+   * budget?" without touching a single row, exactly as the audio cache's does.
    */
   describe('regression: eviction does not scan while under budget', () => {
     it('skips the cursor entirely once the tracked total is known (scanned === 0)', async () => {
@@ -408,15 +410,13 @@ describe('EmbeddingsRepo.runEviction (injected-recency LRU, Increment F §6/§8.
   });
 
   /**
-   * The tracked total used to be accumulated ONLY in memory by put/putHydrated:
-   * the persisted key was written exclusively from inside runEviction, which for
-   * this cache runs ONLY as a boot task. At boot the in-memory remainder is
-   * empty, so the sweep's fast path returned without writing anything: the
-   * stored hint froze at whatever the first scan saw, every later session's
-   * vectors died with the page, and the sweep went on skipping a cache that had
-   * long outgrown its budget — where the pre-change code rescanned at every boot
-   * and could not drift. Both write paths now fold their bytes into the stored
-   * total inside their OWN gated transaction.
+   * The tracked total must not be accumulated ONLY in memory by put/putHydrated:
+   * runEviction runs for this cache ONLY as a boot task, and at boot the
+   * in-memory remainder is empty, so a hint written exclusively from inside the
+   * sweep would freeze at whatever the first scan saw, every later session's
+   * vectors would die with the page, and the sweep would go on skipping a cache
+   * that had long outgrown its budget. Both write paths therefore fold their
+   * bytes into the stored total inside their OWN gated transaction.
    */
   describe('regression: the persisted total advances without a sweep', () => {
     it('folds put AND putHydrated into the stored total, so a session that never sweeps is not lost', async () => {
@@ -455,12 +455,12 @@ describe('EmbeddingsRepo.runEviction (injected-recency LRU, Increment F §6/§8.
   });
 
   /**
-   * persistTotal and the delete-batch flush both RESET the in-memory remainder
-   * and then wrote a total computed before that reset, so every write that
-   * completed in between — normal, because the sweep is fire-and-forget while
-   * the indexer keeps flushing batches — had its bytes erased from the
-   * accounting entirely. Each write now settles exactly the snapshot it folded
-   * in.
+   * persistTotal and the delete-batch flush must not RESET the in-memory
+   * remainder wholesale after writing a total computed before the reset: every
+   * write that completed in between — normal, because the sweep is
+   * fire-and-forget while the indexer keeps flushing batches — would have its
+   * bytes erased from the accounting entirely. Each write settles exactly the
+   * snapshot it folded in.
    */
   describe('regression: a sweep never erases bytes it did not account for', () => {
     it('keeps a write that lands mid-sweep in the tracked total', async () => {
@@ -468,7 +468,7 @@ describe('EmbeddingsRepo.runEviction (injected-recency LRU, Increment F §6/§8.
       // books flushes TWICE — and the racing write's transaction is queued on
       // the write gate BEFORE the first flush's, so its bytes are on the books
       // well before the second flush writes a total derived from the one scan.
-      // That is exactly the window the old wholesale reset erased.
+      // That is exactly the window a wholesale reset would erase.
       const COUNT = 55;
       for (let i = 0; i < COUNT; i++) {
         await embeddingsRepo.put(row(`mid-${i}`));

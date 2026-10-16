@@ -1,12 +1,12 @@
-# Phase 0 PR gate (plan/overhaul/README.md §5 P0): lint, typecheck (app +
+# PR gate (the gate list lives in TESTING.md): lint, typecheck (app +
 # test + e2e code via tsc -b project references), sharded vitest, production
-# build, worker-chunk purity, dependency-cruiser ratchet, license gate.
+# build, worker-chunk purity, dependency-cruiser and lint-debt ratchets,
+# license gate, dead-code gate, and the sync-backend emulator contract.
 #
 # Conventions (do not regress):
 #   - Node comes from .nvmrc — never hardcode a version here.
 #   - npm ci only. `npm install` in CI re-resolves git deps and can test a
-#     different tree than the lockfile (this exact failure mode existed in
-#     the retired npm-test.yml).
+#     different tree than the lockfile.
 #   - The Docker/Playwright E2E lane lives in e2e-verification.yml:
 #     desktop+mobile run per-PR (informational, not branch-protected),
 #     webkit stays nightly + manual.
@@ -14,8 +14,8 @@ name: CI
 
 on:
   push:
-    # antigravity is the integration branch; main kept during transition
-    # (several legacy workflows still reference it).
+    # antigravity is the integration branch; main is gated too (deploy.yml
+    # and docker-publish.yml trigger on it).
     branches: [antigravity, main]
   pull_request:
 
@@ -40,13 +40,13 @@ jobs:
       - name: Typecheck (app + tests + e2e)
         run: npx tsc -b
       - name: Dependency boundaries (warn-mode ratchet)
-        # All boundary rules are severity "warn" (Phase 0) so plain depcruise
-        # exits 0; the check fails only if a rule's violation count exceeds
-        # the committed baseline (.dependency-cruiser-baseline.json).
+        # The check fails if any rule's violation count exceeds the committed
+        # baseline (.dependency-cruiser-baseline.json): "error" rules are
+        # pinned at zero, the two "warn" ratchets may only go down.
         run: npm run depcruise:check
       - name: Lint-debt ratchet (any / eslint-disable)
-        # P9 ratchet: production `as any` / `: any` / eslint-disable counts
-        # may only decrease; the irreducible rest is justified per entry in
+        # Production `as any` / `: any` / eslint-disable counts may only
+        # decrease; the irreducible rest is justified per entry in
         # lint-debt-allowlist.json.
         run: npm run lintdebt:check
       - name: License gate
@@ -54,8 +54,8 @@ jobs:
         # allowlist and on incomplete third-party/inventory.json entries.
         run: npm run licenses:check
       - name: Dead-code gate (knip)
-        # P9 deletion audit made the tree knip-clean: unused files, exports,
-        # types, and dependencies fail the build. Intentional keeps carry an
+        # The tree is knip-clean: unused files, exports, types, and
+        # dependencies fail the build. Intentional keeps carry an
         # explicit ignore + reason in knip.jsonc (or a @public JSDoc tag).
         run: npm run knip
 
@@ -92,7 +92,7 @@ jobs:
         # Compiles scripts/cedict-source.zip — the CC-CEDICT snapshot vendored
         # in-repo and pinned by scripts/cedict.lock.json. Fully OFFLINE and
         # reproducible: no mdbg.net download at build time, so MDBG's ~daily
-        # export rotation can no longer break CI. Upgrades are a deliberate,
+        # export rotation cannot break CI. Upgrades are a deliberate,
         # reviewed PR (.github/workflows/update-dict.yml). No cache needed —
         # compiling the committed zip is deterministic and ~2s.
         run: npm run compile-dict
@@ -107,7 +107,7 @@ jobs:
     name: Sync backend contract (firebase emulator)
     # Drives the REAL FirestoreBackend + the y-cinder provider against the
     # auth/firestore/storage emulator trio (firebase.json). This is the only
-    # gate that exercises y-cinder's overhauled wire format end-to-end; the
+    # gate that exercises y-cinder's wire format end-to-end; the
     # suites skipIf(!emulatorUp) in the plain `test` job, so they only run here.
     runs-on: ubuntu-latest
     steps:

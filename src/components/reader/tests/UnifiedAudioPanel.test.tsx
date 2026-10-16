@@ -19,7 +19,7 @@ vi.mock('zustand/react/shallow', () => ({
   useShallow: (selector: any) => selector
 }));
 
-// Mock the command facade (engine commands moved off the store at 5b-PR1).
+// Mock the command facade (engine commands come from useAudioCommands, not the store).
 vi.mock('@app/tts/useAudioCommands', () => ({
   useAudioCommands: () => ({
     play: vi.fn(),

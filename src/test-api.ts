@@ -9,11 +9,8 @@
  *
  * Lives at the src/ root next to main.tsx (its only importer): this is
  * composition-root wiring, not a lib/ service — and lib/ may not depend on
- * store/ (.dependency-cruiser.cjs `lib-not-to-store`). Its final home is
- * `app/` (master plan §2 rule 9, §5 P1b).
+ * store/ (.dependency-cruiser.cjs `lib-not-to-store`).
  *
- * The legacy function globals are consolidated here (Phase 1b):
- * `__DISCONNECT_YJS__` → `disconnectYjs()`, `__CLOSE_DB__` → `closeDb()`.
  * The `__VERSICLE_MOCK_*` flags stay as raw window globals — they are INPUT
  * injected by Playwright `addInitScript()` before the app boots, so they
  * cannot live behind installTestApi(); their typed readers are in
@@ -45,10 +42,10 @@ export interface VersicleTestApi {
    *  - the y-idb Yjs update queue (`writeDebounceMs: 200` — reading
    *    progress, annotations, the whole CRDT).
    *
-   * Resolves once both queues are quiescent (all bytes handed to committed
+   * Resolves once all queues are quiescent (all bytes handed to committed
    * IndexedDB transactions), so a `page.reload()` immediately afterwards
-   * cannot lose state. Replaces the E2E suite's hardcoded 1500ms
-   * `waitForPersistedWrites` sleep.
+   * cannot lose state. The E2E suite's `waitForPersistedWrites`
+   * (verification/utils.ts) calls this instead of sleeping.
    */
   flushPersistence(): Promise<void>;
 
@@ -63,21 +60,18 @@ export interface VersicleTestApi {
   /**
    * Destroy the y-idb persistence binding so the `versicle-yjs` database
    * releases its IndexedDB locks (specs delete databases between scenarios).
-   * Replaces the legacy `window.__DISCONNECT_YJS__` global.
    */
   disconnectYjs(): Promise<void>;
 
   /**
    * Close the `EpubLibraryDB` connection so it releases its IndexedDB locks.
-   * Replaces the legacy `window.__CLOSE_DB__` global.
    */
   closeDb(): Promise<void>;
 
   /**
-   * GenAI mock seam (Phase 7 §H — the `localStorage.mockGenAIResponse` exit,
-   * GG-4/privacy D9): swaps the composition-root GenAIClient for a
+   * GenAI mock seam: swaps the composition-root GenAIClient for a
    * MockGenAIClient primed with the fixture. Runtime-settable, so specs
-   * install it after boot/reload (the legacy localStorage timing maps 1:1).
+   * install it after boot/reload.
    * `{ response }` resolves every structured call with the fixture (run
    * through the SAME per-feature validation as real model output);
    * `{ error }` rejects every call with that message.
@@ -86,15 +80,14 @@ export interface VersicleTestApi {
     setMock(fixture: MockGenAIFixture): void;
     /**
      * Toggles the GenAI content-analysis debug mode (the same switch the
-     * settings UI drives via useGenAIStore.setDebugModeEnabled). P6 overlay
-     * characterization seam: the debug-highlight layer keys on this flag.
+     * settings UI drives via useGenAIStore.setDebugModeEnabled). The
+     * debug-highlight layer keys on this flag.
      */
     setDebugMode(enabled: boolean): void;
   };
 
   /**
-   * Seeds a content-analysis result for one section (P6 entry gate,
-   * prep/phase6-reader-engine.md §Test plan): writes through the
+   * Seeds a content-analysis result for one section: writes through the
    * useContentAnalysisStore action so the reader's debug-highlight layer
    * picks it up exactly like real GenAI output.
    */
@@ -105,12 +98,10 @@ export interface VersicleTestApi {
   ): void;
 
   /**
-   * TTS playback commands for the verification specs (Phase 9): the typed
-   * replacement for the play/pause half of the legacy `window.useTTSStore`
-   * shim (deleted from main.tsx at its named P9 deadline). State READS go
-   * through `window.useTTSPlaybackStore` — the real store, exposed for
-   * verification — so this surface carries only the commands, routed
-   * through the same TtsController the UI uses.
+   * TTS playback commands for the verification specs, routed through the
+   * same TtsController the UI uses. State READS go through
+   * `window.useTTSPlaybackStore` — the real store, exposed for verification
+   * (src/main.tsx) — so this surface carries only the commands.
    */
   tts: {
     play(): void;
@@ -118,10 +109,9 @@ export interface VersicleTestApi {
   };
 
   /**
-   * Typed reader predicates over the live ReaderEngine (Phase 6 §2b) —
-   * the named replacements for the exact `window.rendition` /
-   * `__reader_added_annotations_count` polls the E2E suite used to do.
-   * All methods are safe before a reader mounts (null/0/false).
+   * Typed reader predicates over the live ReaderEngine, so specs need not
+   * poll reader internals. All methods are safe before a reader mounts
+   * (null/0/false).
    */
   reader: {
     isReady(): boolean;

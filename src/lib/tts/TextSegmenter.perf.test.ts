@@ -4,8 +4,7 @@ import type { SentenceNode } from '~types/tts-content';
 
 describe('TextSegmenter Performance', () => {
     it('avoids unnecessary string splitting during post-processing', () => {
-        // Create a segmenter with a dummy abbreviation to potentially trigger logic
-        // Note: Constructor only takes locale, extra args are ignored but kept here to match previous test style
+        // The constructor only takes a locale; the extra abbreviations argument is ignored.
         // @ts-expect-error: extra args are ignored but kept here to match previous test style
         const segmenter = new TextSegmenter('en', ['Dr.']);
 
@@ -23,9 +22,7 @@ describe('TextSegmenter Performance', () => {
 
         splitSpy.mockRestore();
 
-        // REGRESSION TEST:
-        // Previously, the implementation used `split` roughly once per sentence boundary.
-        // This test ensures we rely on efficient regex extraction instead.
+        // Guards against post-processing that calls `split` roughly once per sentence boundary.
         // We assert that split calls are minimal (effectively 0 for this logic).
         expect(callCount).toBeLessThan(10);
     });

@@ -4,10 +4,8 @@ import type { AnalysisStatus } from '~types/content-analysis';
 
 /**
  * Replication declaration (aggregated by src/store/registry.ts).
- * Flipped to merge-defaults + scopedDiff in flip wave 1 (phase2-fork-surgery.md
- * §2.6 #1): regenerable AI cache, lowest data criticality — worst case is
- * re-running analysis. Its seven `state.sections || {}` hydration fallbacks
- * were deleted as the flip canaries.
+ * merge-defaults + scopedDiff: regenerable AI cache, lowest data criticality —
+ * worst case is re-running analysis.
  */
 export const CONTENT_ANALYSIS_STORE_DEF: SyncedStoreDef<'sections'> = {
     name: 'contentAnalysis',

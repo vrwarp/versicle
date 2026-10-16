@@ -228,8 +228,8 @@ describe('TTSSettingsTab', () => {
     it('renders the provider choices from the registry (single source of truth)', () => {
         render(<TTSSettingsTab {...defaultProps} />);
 
-        // jsdom is the web platform: device provider surfaces under its real
-        // post-split id (5b-PR3 — 'local' is migration-mapped, never offered).
+        // jsdom is the web platform: the device provider surfaces under its
+        // real id ('local' is migration-mapped, never offered).
         expect(screen.getByTestId('select-item-webspeech')).toHaveTextContent('Web Speech (Local)');
         expect(screen.getByTestId('select-item-piper')).toHaveTextContent('Piper (High Quality Local)');
         expect(screen.getByTestId('select-item-google')).toHaveTextContent('Google Cloud TTS');

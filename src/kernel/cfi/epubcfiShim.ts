@@ -1,8 +1,8 @@
 /**
- * epubcfiShim — the ONE module allowed to import `epubjs/src/epubcfi`
- * (phase5-tts-strangler.md §5c.4). Everything else in the kernel (and the
- * rest of the tree) goes through these typed wrappers, so the
- * `@ts-expect-error`'d epubjs internals are quarantined to a single file.
+ * epubcfiShim — the ONE module allowed to import `epubjs/src/epubcfi`.
+ * Everything else in the kernel (and the rest of the tree) goes through
+ * these typed wrappers, so the `@ts-expect-error`'d epubjs internals are
+ * quarantined to a single file.
  * `cfi.kernel-boundary.test.ts` pins this as an invariant.
  *
  * Kernel admission (master plan §2 rule 1): no internal imports — epubjs is

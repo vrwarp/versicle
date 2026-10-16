@@ -7,9 +7,8 @@ import type { HighlightLayerManager } from '@domains/reader/engine/HighlightLaye
  * Ensures highlights are not updated live during TTS playback,
  * but only on viewer updates (page turns) or when idle (initial load/sync).
  *
- * Phase 6: epub.js calls go through the HighlightLayerManager's 'history'
- * layer (the registry carries the gray style verbatim); the update-gating
- * state machine below is unchanged.
+ * epub.js calls go through the HighlightLayerManager's 'history' layer (the
+ * registry carries the gray style).
  */
 export const useHistoryHighlights = (
     highlights: HighlightLayerManager | null,

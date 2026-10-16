@@ -1,14 +1,14 @@
 /**
- * ProviderDescriptor registry tests (Phase 5a-PR1).
+ * ProviderDescriptor registry tests.
  *
  * The registry is the single source of truth for provider ids, construction, UI
  * options, and capability routing — these tests pin the derived surfaces the rest
  * of the app depends on (store union, settings options, descriptor-driven guards,
- * and the 'local' alias that defers the webspeech/capacitor id split to 5b).
+ * and the 'local' alias that resolves to the platform's webspeech/capacitor provider).
  */
 import { describe, it, expect } from 'vitest';
 
-// No module mocks (vi.mock is being retired from providers/): jsdom IS the web
+// No module mocks (vi.mock is banned in providers/): jsdom IS the web
 // platform for Capacitor, every alias test passes its platform explicitly, and no
 // live provider is ever built here — capability guards run against plain fakes.
 import {

@@ -87,7 +87,7 @@ describe('reprocessBookContent', () => {
     expect(extractPreamble.mock.calls[0][0]).toBe(blob);
   });
 
-  /* Reprocess parity: the palette comes from the RAW cover, uncompressed. */
+  /* The palette comes from the RAW cover, uncompressed. */
   it('extracts the palette from the raw cover', async () => {
     await reprocessBookContent('b1');
 

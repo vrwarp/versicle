@@ -1,20 +1,19 @@
 /**
- * LexiconEngine — the assembled-lexicon value object + assembler (Phase 5c;
- * phase5-tts-strangler.md §5c.3).
+ * LexiconEngine — the assembled-lexicon value object + assembler.
  *
  * {@link CompiledLexicon} is keyed by (bookId, language, store version):
  * the assembler memoizes per key and bumps its version on every lexicon
  * store change (rules/settings), on global-Bible-flag changes, and on
  * explicit invalidation — so a memo hit returns the SAME frozen rules array
- * (LexiconApplier's WeakMap compilation cache stays hot; S15's
- * never-populated book cache + rebuild-per-call die). The memo is written
- * before EVERY return path by construction — assembly is a single-exit
- * function (the LexiconService.ts:114 early-return bug is unrepresentable).
+ * (LexiconApplier's WeakMap compilation cache stays hot). The memo is
+ * written before EVERY return path by construction — assembly is a
+ * single-exit function.
  *
  * Store access is INJECTED (AssemblerDeps): the production wiring hands in
- * useLexiconStore reads + subscription and the settings-store global flag
- * (via TtsController — a direct lib→store read here would regress the
- * lib-not-to-store ratchet); tests hand in plain objects.
+ * useLexiconStore reads + subscription (LexiconService) and the
+ * settings-store global flag (pushed by TtsController — a direct lib→store
+ * read here would violate the lib-not-to-store boundary rule); tests hand in
+ * plain objects.
  */
 import type { LexiconRule } from '~types/user-data';
 import type { BiblePreference } from './biblePreference';
@@ -85,8 +84,7 @@ export class LexiconAssembler {
 
     /**
      * The assembled lexicon for a (bookId, language) pair at the current
-     * version. Assembly order preserved verbatim from the legacy
-     * LexiconService.getRules: high-priority book rules → global rules →
+     * version. Assembly order: high-priority book rules → global rules →
      * system (Bible) rules → standard book rules.
      */
     async getCompiled(bookId?: string, language?: string): Promise<CompiledLexicon> {

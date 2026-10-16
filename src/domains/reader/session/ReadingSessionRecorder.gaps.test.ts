@@ -1,7 +1,7 @@
 /**
  * `ReadingSessionRecorder` — the guards and error arms.
  *
- * The owning suite pins the write shapes and the §6 serialization fix.
+ * The owning suite pins the write shapes and the serialization guarantee.
  * This one walks the decisions around them: disposal, the no-op CFI guard,
  * the scroll-vs-page dwell rule, the 'Chapter' placeholder filter at both
  * of its call sites, the panic save's 2s floor, and every catch — a
@@ -10,9 +10,9 @@
  *
  * Every describe runs against BOTH branches of `commit()` (see {@link MODES}):
  * the coalescing window the app ships, and the `commitWindowMs: 0`
- * write-through branch. They used to run only against zero, which nothing in
- * production selects — so the error arms in particular were being asserted
- * against catches the app never reaches.
+ * write-through branch. Running only against zero, which nothing in
+ * production selects, would assert the error arms in particular against
+ * catches the app never reaches.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { generateCfiRange } from '@kernel/cfi';

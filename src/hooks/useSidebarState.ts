@@ -13,14 +13,13 @@ export function useSidebarState() {
     setActive(sidebar);
   }, [setActive]);
 
-  // Close any open panel when the reader (re)mounts. Matches the previous behavior
-  // where a reload/navigation cleared open panels, and prevents a stale panel from
-  // lingering in the module-level store across reader sessions.
+  // Close any open panel when the reader (re)mounts, so a stale panel does not
+  // linger in the module-level store across reader sessions.
   useEffect(() => {
     setActive('none');
   }, [setActive]);
 
-  // Preserve "Back closes the open panel": while a panel is open, intercept the browser
+  // "Back closes the open panel": while a panel is open, intercept the browser
   // and hardware Back button (via BackNavigationManager) and close the panel instead of
   // leaving the reader. When nothing is open the guard is disabled, so Back navigates
   // normally (back to the library).

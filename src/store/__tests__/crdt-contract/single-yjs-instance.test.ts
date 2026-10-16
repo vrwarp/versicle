@@ -4,14 +4,14 @@ import { createStore } from 'zustand/vanilla';
 import yjsMiddleware from 'zustand-middleware-yjs';
 
 /**
- * Single-yjs-instance runtime assertion (Phase 2 vendoring,
- * plan/overhaul/prep/phase2-fork-surgery.md §6.6d).
+ * Single-yjs-instance runtime assertion (plan/overhaul/prep/phase2-fork-surgery.md
+ * §6.6d).
  *
- * The vendored middleware's mapping/patching code branches on
- * `instanceof Y.Map` / `Y.Array` / `Y.Text` (packages/zustand-middleware-yjs/
- * src/patching.ts). If npm ever resolved a SECOND physical copy of yjs for
- * the middleware (they were regular deps of the fork before vendoring made
- * them peers), every one of those branches would fail against objects created
+ * The middleware's mapping/patching code branches on
+ * `instanceof Y.Map` / `Y.Array` / `Y.Text` (zustand-middleware-yjs's
+ * patching module). If npm ever resolved a SECOND physical copy of yjs for
+ * the middleware (it declares yjs as a peer, so the tree should hold exactly
+ * one), every one of those branches would fail against objects created
  * by the app's yjs — and sync would corrupt silently instead of erroring.
  *
  * This test drives the app's own yjs import through the middleware and

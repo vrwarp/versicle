@@ -1,14 +1,12 @@
 /**
- * Selection single-fire (Phase 6 PR-4 / D3, prep/phase6-reader-engine.md
- * §2b "Selection semantics").
+ * Selection single-fire.
  *
- * The legacy hook reported one selection gesture through TWO parallel
- * pipelines — epub.js's `selected` rendition event AND the per-document
- * mouseup pipeline (which exists for WebKit reliability) — so `onSelection`
- * could fire twice per gesture (reader.md D3). The selectionBridge module
- * is now the SINGLE source: this suite dispatches a gesture through BOTH
- * legacy paths and pins exactly one `onSelection` call, plus zero calls for
- * an engine-only `selected` event.
+ * One selection gesture can surface through TWO parallel paths — epub.js's
+ * `selected` rendition event AND the per-document mouseup pipeline (which
+ * exists for WebKit reliability) — which would fire `onSelection` twice per
+ * gesture. The selectionBridge module is the SINGLE source: this suite
+ * dispatches a gesture through BOTH paths and pins exactly one
+ * `onSelection` call, plus zero calls for an engine-only `selected` event.
  */
 import React, { useRef } from 'react';
 import { render, waitFor } from '@testing-library/react';
@@ -147,9 +145,9 @@ describe('regression: selection single-fire per gesture (D3)', () => {
     render(<TestHost />);
 
     // Three content hooks: the engine's own (titled iframe/contentRendered)
-    // plus the lifecycle hook's two (extras → selection). The chinese pass
-    // left the lifecycle with PR-10 — it rides the engine's contentRendered
-    // seam, registered from app/ (domains/chinese).
+    // plus the lifecycle hook's two (extras → selection). The chinese pass is
+    // not among them — it rides the engine's contentRendered seam,
+    // registered from app/ (domains/chinese).
     await waitFor(() => expect(slot.contentHooks.length).toBe(3));
 
     // Simulate epub.js firing the content pipeline for the rendered section.
@@ -167,7 +165,7 @@ describe('regression: selection single-fire per gesture (D3)', () => {
     contents.document.dispatchEvent(new window.Event('mouseup'));
 
     // Pipeline 2: epub.js 'selected' for the same gesture (the engine
-    // forwards it; the hook must NOT consume it anymore).
+    // forwards it; the hook must NOT consume it).
     expect(slot.handlers['selected']).toBeTypeOf('function');
     slot.handlers['selected'](GESTURE_CFI, contents);
 
@@ -175,7 +173,7 @@ describe('regression: selection single-fire per gesture (D3)', () => {
     await waitFor(() => expect(onSelection).toHaveBeenCalledTimes(1));
     expect(onSelection).toHaveBeenCalledWith(GESTURE_CFI, expect.anything(), contents);
 
-    // Settle: no late second fire from the dropped pipeline.
+    // Settle: no late second fire from the 'selected' pipeline.
     await new Promise((r) => setTimeout(r, 30));
     expect(onSelection).toHaveBeenCalledTimes(1);
   });

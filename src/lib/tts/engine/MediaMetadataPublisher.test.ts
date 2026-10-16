@@ -1,10 +1,9 @@
 /**
- * MediaMetadataPublisher unit suite (Phase 5b decomposition) — fake-driven,
- * ZERO vi.mock. Carries the named regression block for the deleted
- * AudioPlayerService_MediaSession.test.ts (absorption ledger row 11; the
- * handler-registration half lives in PlaybackController.test.ts, which pins
- * that the controller wires all seven platform callbacks incl. seekTo) and
- * the calculateBookProgress cases from the deleted AudioPlayerService.test.ts.
+ * MediaMetadataPublisher unit suite — fake-driven, ZERO vi.mock. Carries the
+ * named regression block absorbed from AudioPlayerService_MediaSession.test.ts
+ * (the handler-registration half lives in PlaybackController.test.ts, which
+ * pins that the controller wires all seven platform callbacks incl. seekTo)
+ * and the calculateBookProgress cases absorbed from AudioPlayerService.test.ts.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { MediaMetadataPublisher, POSITION_DEADBAND_S } from './MediaMetadataPublisher';

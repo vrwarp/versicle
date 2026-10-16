@@ -55,9 +55,7 @@ export const BackNavigationManager = () => {
 
     // Block navigation if:
     // - Action is POP (Back/Forward button)
-    // - We have handlers registered with priority > DEFAULT (0)
-    // We don't want to block standard page navigation if only default low-priority listeners exist (if any).
-    // But typically, overlays will register with higher priority.
+    // - At least one back handler is registered (typically an overlay or modal)
     const shouldBlock = useCallback<BlockerFunction>(({ historyAction, nextLocation }) => {
         if (historyAction !== 'POP') return false;
 
@@ -65,10 +63,8 @@ export const BackNavigationManager = () => {
         if (nextLocation.key === location.key) return false;
 
         const handlers = getHandlers();
-        // Check if we have any "guard" level handlers. 
-        // We assume anything registered here intended to trap the back button.
-        // If you have a handler that shouldn't block browser back, it should probably not be here or have a specific flag.
-        // For now, presence of any handler implies we might want to intercept.
+        // Anything registered in the store is assumed to intend to trap the back button,
+        // so the presence of any handler means we intercept.
         const hasHandlers = handlers.length > 0;
 
         return hasHandlers;

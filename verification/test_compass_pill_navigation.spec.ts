@@ -1,14 +1,12 @@
 /**
- * Verifies the compass-pill navigation rework (separating page navigation from
- * audio transport):
+ * Verifies that page navigation and audio transport are separate controls:
  *
  *  1. Paginated mode has dedicated page-turn rails (PageTurnRails) at the left/
- *     right edges of the reading column — the affordance that let the pill stop
- *     moonlighting as a page-turner. Clicking a rail turns the page.
- *  2. The compass-pill prev/next arrows are now a PURE AUDIO TRANSPORT: they
- *     skip TTS sections and carry one stable name ("Previous/Next chapter").
- *     They are DISABLED while audio is idle and ENABLED during playback — they
- *     no longer flip between page-turn and section-skip with a hidden TTS state.
+ *     right edges of the reading column. Clicking a rail turns the page.
+ *  2. The compass-pill prev/next arrows are a PURE AUDIO TRANSPORT: they skip
+ *     TTS sections and carry one stable name ("Previous/Next chapter"). They
+ *     are DISABLED while audio is idle and ENABLED during playback — they never
+ *     flip between page-turn and section-skip with a hidden TTS state.
  */
 import { test, expect } from "./utils";
 import {
@@ -95,7 +93,7 @@ test("compass-pill arrows are a pure audio transport (disabled idle, enabled dur
   const nextChapter = page.getByRole("button", { name: "Next chapter" });
 
   // Idle: the arrows are present but DISABLED — there is no audio to skip, and
-  // page turning lives on the rails / arrow keys now, not these arrows.
+  // page turning lives on the rails / arrow keys, not these arrows.
   await expect(nextChapter).toBeDisabled();
   await expect(prevChapter).toBeDisabled();
   await captureScreenshot(page, "compass_arrows_disabled_idle");

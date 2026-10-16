@@ -1,6 +1,6 @@
 /**
- * Composition holder for the EmbeddingClient singleton (Increment C §1),
- * mirroring the GenAIClient holder (holder.ts:19). The REAL client (the lazy
+ * Composition holder for the EmbeddingClient singleton, mirroring the
+ * GenAIClient holder (../holder.ts). The REAL client (the lazy
  * GeminiEmbeddingClient facade with the useGenAIStore-backed config provider +
  * log sink) is installed by src/app/google/wireGoogle.ts; the fallback is an
  * inline NOT-CONFIGURED client (isConfigured() === false, embed() throws

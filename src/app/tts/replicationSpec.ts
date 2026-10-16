@@ -34,13 +34,13 @@ function plain<T>(value: T): T {
 type TTSSettingsStoreState = ReturnType<typeof useTTSSettingsStore.getState>;
 
 /**
- * Build the EXPLICIT data-only settings payload the engine consumes (5b-PR3,
- * phase5-tts-strangler.md §5b.5): exactly the fields of {@link TTSSettingsData},
- * hand-picked from the settings store — replacing the old `plain(getState())`
- * full-store push (which shipped the playback mirror, the queue, and every
- * action-shaped key along with it; the per-sentence replication echo rode on
- * that). The return type makes the compiler enforce the contract: a field the
- * engine starts reading must be added HERE and to the interface, loudly.
+ * Build the EXPLICIT data-only settings payload the engine consumes
+ * (phase5-tts-strangler.md §5b.5): exactly the fields of {@link TTSSettingsData},
+ * hand-picked from the settings store rather than pushing `plain(getState())`
+ * (a full-store push would ship the playback mirror, the queue, and every
+ * action-shaped key along with it, and the per-sentence replication echo would
+ * ride on that). The return type makes the compiler enforce the contract: a
+ * field the engine starts reading must be added HERE and to the interface, loudly.
  */
 export function toTTSSettingsData(s: Pick<TTSSettingsStoreState,
     | 'profiles' | 'customAbbreviations' | 'alwaysMerge' | 'sentenceStarters'
@@ -62,9 +62,9 @@ export function toTTSSettingsData(s: Pick<TTSSettingsStoreState,
  * `currentSectionIndex`; nothing else in src/lib/tts touches replicated progress.
  *
  * The engine's OWN host commands write this store per sentence (`updateTTSProgress`) and per
- * finished sentence (`addCompletedRange`), so the old `plain(progress)` push deep-cloned and
- * structured-cloned the whole row — `completedRanges` grows for the life of the book and
- * `readingSessions` holds up to 500 entries — twice per sentence. Two numbers now cross, and
+ * finished sentence (`addCompletedRange`), so pushing `plain(progress)` would deep-clone and
+ * structured-clone the whole row — `completedRanges` grows for the life of the book and
+ * `readingSessions` holds up to 500 entries — twice per sentence. Only two numbers cross, and
  * the slice's equality guard drops the echo entirely.
  */
 function toProgressEngineView(progress: Progress): ProgressEngineView {
@@ -124,10 +124,10 @@ const SLICE_BUILDERS: Record<
     (deps: ReplicationDeps) => ReplicatedSliceSpec
 > = {
     // The settings slice targets the PERSISTED settings store and pushes the
-    // explicit TTSSettingsData payload (5b-PR3). The playback mirror lives in
-    // useTTSPlaybackStore, which is never replicated — an engine broadcast can
-    // no longer re-enter this slice, so the per-sentence echo loop (S6) is
-    // dead by construction (pinned in replication.test.ts).
+    // explicit TTSSettingsData payload. The playback mirror lives in
+    // useTTSPlaybackStore, which is never replicated — an engine broadcast
+    // cannot re-enter this slice, so the per-sentence echo loop is impossible
+    // by construction (pinned in replication.test.ts).
     settings: () => ({
         kind: 'settings',
         replication: 'boot',
@@ -156,8 +156,8 @@ const SLICE_BUILDERS: Record<
         kind: 'genAI',
         replication: 'boot',
         snapshot: () => [{ kind: 'genAI', settings: plain(useGenAIStore.getState()) }],
-        // Equality guard on the fields the ENGINE reads (5b-PR3): the addGenAILog
-        // host command writes log entries back into this store, which used to
+        // Equality guard on the fields the ENGINE reads: the addGenAILog host
+        // command writes log entries back into this store, which would otherwise
         // round-trip every log line as a fresh genAI push (the second echo path).
         // Logs are not engine inputs, so pushes fire only when the engine view
         // actually changed.
@@ -173,7 +173,7 @@ const SLICE_BUILDERS: Record<
         },
     }),
 
-    // Lexicon invalidation ping (5c-PR3): the worker PULLS assembled rules
+    // Lexicon invalidation ping: the worker PULLS assembled rules
     // through the lexicon port (LexiconService.getCompiled on the host); this
     // slice only tells it when its handle went stale — on any lexicon-store
     // change (rule CRUD, per-book bible preference) or a global bible-flag
@@ -200,9 +200,9 @@ const SLICE_BUILDERS: Record<
     // The content-analysis store is CROSS-BOOK (keys `${bookId}/${sectionId}`, entries carry
     // tableAdaptations text), and the engine's own host commands write it
     // (markAnalysisLoading / markAnalysisError / saveTableAdaptations). Pushing
-    // `plain(state.sections)` on every write deep-cloned the whole library's analyses (2.3 ms
+    // `plain(state.sections)` on every write would deep-clone the whole library's analyses (2.3 ms
     // at 400 sections, 6.1 ms at 1000) plus the structured clone — for a change the engine can
-    // only consume for ONE section of ONE book. The live path now diffs entry identities
+    // only consume for ONE section of ONE book. The live path therefore diffs entry identities
     // against the previous state, scopes to the current book, and pushes a DELTA; the
     // cross-book full map stays for the boot snapshot (the readiness gate needs it, and the
     // engine has no book yet).
@@ -237,8 +237,9 @@ const SLICE_BUILDERS: Record<
 
     // The worker only ever asks for the CURRENT book's language (PlaybackController's
     // language sync + the queue-building path). Pushing one update per book in the library
-    // meant 300 Comlink messages — and 300 `bookListeners` firings inside the worker — for a
-    // 300-book library on every book-store write (a remote Yjs library update multiplies it).
+    // would mean 300 Comlink messages — and 300 `bookListeners` firings inside the worker —
+    // for a 300-book library on every book-store write (a remote Yjs library update
+    // multiplies it).
     bookLanguage: (deps) => ({
         kind: 'bookLanguage',
         replication: 'per-book',

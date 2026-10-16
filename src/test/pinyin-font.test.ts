@@ -1,5 +1,5 @@
 /**
- * Pinyin font contract (Phase 8 §I) — the OFL compliance + glyph-coverage
+ * Pinyin font contract — the OFL compliance + glyph-coverage
  * invariants of the shipped derivative, asserted against the BINARIES:
  *
  *  1. naming records carry 'Versicle Sans Narrow' and never the Reserved
@@ -9,9 +9,9 @@
  *     records them as provenance text.
  *  2. the five injected pinyin tone codepoints (ǎ ǐ ǒ ǔ ǚ — the entire
  *     point of the derivative) stay mapped in the cmap. This is the
- *     machine-checkable core of the §I "pinyin visual golden": the rename
- *     script (scripts/build-pinyin-font.py) asserts glyf/cmap byte
- *     equality at build time, and this test pins the mapping forever.
+ *     machine-checkable stand-in for a visual golden of the pinyin overlay:
+ *     the rename script (scripts/build-pinyin-font.py) asserts glyf/cmap
+ *     byte equality at build time, and this test pins the mapping.
  *  3. index.css references only the renamed family/files.
  *
  * Pure-Node TTF parsing (name table + cmap format 4/12) — no font

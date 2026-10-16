@@ -1,6 +1,5 @@
 /**
- * domains/chinese — the self-contained Chinese reading feature module
- * (Phase 6 §7, prep/phase6-reader-engine.md PR-10).
+ * domains/chinese — the self-contained Chinese reading feature module.
  *
  * `registerChineseReading(engine, hooks)` is the ONLY reader-facing entry:
  * the reader core (hooks/useEpubReader, domains/reader) has ZERO imports
@@ -10,10 +9,9 @@
  * only for Chinese books.
  *
  * CH-8 interim helper: `getBookBaseLanguage` normalizes BCP-47-ish
- * inventory values ('zh-CN', 'zh_TW', 'ZH') to their base subtag so the
- * legacy exact-match activation bug ('zh-CN' ≠ 'zh' → no pinyin) dies.
- * Full store-boundary normalization + inventory migration is P7's
- * `updateBook` territory (prep doc §7).
+ * inventory values ('zh-CN', 'zh_TW', 'ZH') to their base subtag so an
+ * exact-match activation check ('zh-CN' ≠ 'zh' → no pinyin) cannot skip
+ * them.
  */
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 import {

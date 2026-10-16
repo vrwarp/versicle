@@ -35,11 +35,8 @@ describe('extractCoverPalette', () => {
         expect(mockContext.drawImage).toHaveBeenCalled();
         expect(result.palette).toHaveLength(5);
 
-        // Verify packing (approximate due to weighted averaging)
-        // With weighted K-Means, we expect 5 colors.
-        // We mocked a simple 4-pixel buffer but the code expects 16x16.
-        // The mock context needs to provide enough data for 16x16.
-        // 16 * 16 * 4 = 1024 bytes.
+        // The mock context must provide enough RGBA data for the 16x16 sample
+        // grid: 16 * 16 * 4 = 1024 bytes. One color per region (4 corners + center).
 
         expect(result.palette).toHaveLength(5);
     });
@@ -100,8 +97,8 @@ describe('extractCoverPalette', () => {
 });
 
 /**
- * The full-resolution ImageBitmap decoded from the cover was never closed —
- * it lived until GC on the import AND reprocess paths.
+ * The full-resolution ImageBitmap decoded from the cover must be closed after
+ * extraction — otherwise it lives until GC on the import AND reprocess paths.
  */
 describe('regression: the source bitmap is closed', () => {
     afterEach(() => {

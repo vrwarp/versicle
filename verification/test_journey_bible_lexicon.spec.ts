@@ -41,7 +41,7 @@ test('Journey Bible Lexicon Test', async ({ page }) => {
   // which the reader sets on mount and clears on unmount). The Audio Deck (a
   // Sheet inside the reader) keeps the book context alive, so it is a reliable
   // entry point for the per-book override. (The reader header's settings button
-  // also preserves the book context now that settings nest under
+  // also preserves the book context since settings nest under
   // /read/:id/settings — see test_journey_reader_settings_lexicon.spec.ts.)
   console.log('Opening Audio Deck > Settings > Manage Pronunciation Rules...');
   await utils.openAudioSettings(page);

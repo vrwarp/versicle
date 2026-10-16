@@ -1,23 +1,19 @@
 /**
- * DragnetGesture — the pause→play "Dragnet" audio-bookmark capture, extracted
- * from AudioPlayerService (Phase 5b decomposition; phase5-tts-strangler.md
- * §5b.1).
+ * DragnetGesture — the pause→play "Dragnet" audio-bookmark capture.
  *
  * Owns the pause-gesture timestamp and the capture itself (run INSIDE the
- * sequenced play task, 5b-PR3), plus the invalidation policy:
+ * sequenced play task), plus the invalidation policy:
  *
- *  - SECTION-CHANGE invalidation is INTERNAL since 5b-PR4: the controller
- *    feeds every QueueModel section index through {@link noteSectionIndex},
- *    and a change disarms the gesture. This replaced the external
- *    `clearPauseGesture()` call sites (ReaderView's TOC handler, useTTS's
- *    section-change effect) — the engine API surface lost the method
- *    entirely. Known tradeoff (recorded in the prep doc deviations): the
- *    TOC handler used to clear on navigation INTENT, ahead of WebKit's slow
- *    relocation; engine-internal invalidation fires when the engine's own
- *    section actually changes.
- *  - Explicit navigation (loadSection) still disarms via {@link clear}.
+ *  - SECTION-CHANGE invalidation is INTERNAL: the controller feeds every
+ *    QueueModel section index through {@link noteSectionIndex}, and a change
+ *    disarms the gesture, so no UI caller has to clear it. Known tradeoff:
+ *    invalidation fires when the engine's own section actually changes, not on
+ *    navigation INTENT (e.g. a TOC tap), which can precede WebKit's slow
+ *    relocation.
+ *  - Explicit navigation (setBookId, seekTo, loadSection) disarms via
+ *    {@link clear}.
  *
- * P19/P20 pin the behavior across the move.
+ * Parity scenarios P19/P20 pin the behavior.
  */
 import type { TTSQueueItem } from '~types/tts';
 import type { QueueModel } from '../QueueModel';

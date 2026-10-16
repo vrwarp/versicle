@@ -1,11 +1,11 @@
 /**
- * Social-login (native Google sign-in) initialization — moved out of
- * main.tsx module scope (it ran `SocialLogin.initialize()` plus a store
- * subscription at import time; layering-deps.md LD-6).
+ * Social-login (native Google sign-in) initialization, run as a boot task
+ * rather than at module scope (importing a module must not have side effects;
+ * plan/overhaul/analysis/layering-deps.md LD-6).
  *
- * Initialization is fire-and-forget exactly as before: sign-in is
- * user-triggered, so boot never blocks on the plugin, and a failure only
- * logs (the user sees the error at the sign-in surface, not a dead app).
+ * Initialization is fire-and-forget: sign-in is user-triggered, so boot never
+ * blocks on the plugin, and a failure only logs (the user sees the error at
+ * the sign-in surface, not a dead app).
  */
 import type { BootTask } from '../bootstrap';
 import { SocialLogin } from '@capgo/capacitor-social-login';

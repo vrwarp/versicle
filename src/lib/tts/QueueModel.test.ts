@@ -1,15 +1,10 @@
 /**
- * QueueModel unit suite (Phase 5b-PR2) — the immutable (copy-on-write) queue
- * model, renamed from PlaybackStateManager.
+ * QueueModel unit suite — the immutable (copy-on-write) queue model.
  *
- * Carries, per the absorption ledger (plan/overhaul/prep/phase5-absorption-ledger.md
- * row 14), the surviving assertions of the two per-bug suites deleted in this
- * commit as named regression blocks:
+ * Alongside the base behavior specs it carries the named regression blocks:
  *   - describe('regression: PlaybackStateManager_Masking')
  *   - describe('regression: PlaybackStateManager_Adaptation')
- * plus the immutability/identity suite that flips the P14 parity rider green.
- * The base behavior specs below are the former PlaybackStateManager.test.ts,
- * renamed with the class (merge, not delete-without-absorb).
+ * plus the immutability/identity suite for the copy-on-write guarantee.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueueModel } from './QueueModel';
@@ -122,7 +117,7 @@ describe('QueueModel', () => {
 
         it('a no-op mask (nothing changes) keeps array identity and queueId', () => {
             // Explicit isSkipped:false — items with UNDEFINED isSkipped get normalized
-            // to false on first mask application (legacy behavior), which counts as a
+            // to false on first mask application, which counts as a
             // change; a true no-op needs the flags already explicit.
             manager.setQueue(items().map((i) => ({ ...i, isSkipped: false })), 0, 0);
             const ref = manager.queue;
@@ -253,10 +248,9 @@ describe('QueueModel', () => {
         });
     });
 
-    // NOTE (5b-PR4): the Persistence describe moved to
-    // engine/PlaybackController.test.ts — the QueueModel is PURE now; the
+    // NOTE: persistence is not tested here — the QueueModel is PURE; the
     // queueId-deduped session writes live in the controller's subscription
-    // over the SessionStore port.
+    // over the SessionStore port (engine/PlaybackController.test.ts).
 
     describe('Events', () => {
         it('should notify subscribers on state change (incl. queueId)', () => {
@@ -298,7 +292,7 @@ describe('QueueModel', () => {
     });
 
     // =======================================================================
-    // Absorbed per-bug suites (ledger row 14, deleted in this commit).
+    // Regression suites: skip-mask and table-adaptation behavior.
     // =======================================================================
 
     describe('regression: PlaybackStateManager_Masking', () => {

@@ -1,15 +1,10 @@
 /**
  * `SyncBackend` — the C3 sync-transport contract
  * (plan/overhaul/proposals/contract-first.md row C3;
- * plan/overhaul/prep/phase4-sync-strangler.md §D1).
- *
- * Grown from the P0 contract-suite skeleton
- * (src/lib/sync/syncBackendContract.ts): the operations
- * FirestoreSyncManager's inline `__VERSICLE_MOCK_FIRESTORE__` branches used
- * to implement twice. Implementations:
+ * plan/overhaul/prep/phase4-sync-strangler.md §D1). Implementations:
  *
  *  - {@link ../backend/FirestoreBackend} — the ONLY sync module importing
- *    `firebase/firestore` (and, when P4-6 lands the purge, `firebase/storage`).
+ *    `firebase/firestore` or `firebase/storage`.
  *  - {@link ../backend/MockBackend} — the localStorage directory +
  *    MockFireProvider transport; selected EXCLUSIVELY at the composition
  *    root (src/app/sync/createSync.ts) behind
@@ -40,9 +35,8 @@ export interface SaveRejectedEvent {
  * The normalized transport event surface. `synced` wraps the providers'
  * `sync(isSynced=true)` handshake event; the failure events pass the
  * provider payloads through untouched (isPermissionDeniedEvent walks them);
- * `saved` is the save-success event — emitted by the mock and, since the
- * P9 y-cinder fork delta (§D6.1; packages/y-cinder/PROVENANCE.md surgery
- * 1), by the real provider. It drives `lastSyncTime`-from-flush.
+ * `saved` is the save-success event — emitted by the mock and by the real
+ * provider (the pinned y-cinder fork). It drives `lastSyncTime`-from-flush.
  */
 export interface SyncConnectionEvents {
   synced: () => void;
@@ -68,8 +62,8 @@ export interface SyncConnection {
    * supports it. Returns the flush promise when the transport's teardown is
    * asynchronous (FirestoreBackend: y-cinder's destroy() commits the final
    * batch) so callers that NEED durability-before-proceeding can await it;
-   * fire-and-forget call sites (detach on switch) are unchanged. Additive
-   * C3 evolution, P9 — pinned by the emulator runner's round-trip cases.
+   * fire-and-forget call sites (detach on switch) need not await it. An
+   * additive C3 capability — pinned by the emulator runner's round-trip cases.
    */
   destroy(): void | Promise<void>;
   /**
@@ -91,7 +85,7 @@ export interface ConnectOptions {
 // ─── Backend ─────────────────────────────────────────────────────────────────
 
 /**
- * What an honest delete actually removed (P4-6). Purges are idempotent and
+ * What an honest delete actually removed. Purges are idempotent and
  * re-runnable — a husk left by a crash mid-purge reports smaller numbers on
  * the retry, never an error.
  */
@@ -149,7 +143,7 @@ export interface SyncBackend {
   createWorkspace(meta: WorkspaceMetadata): Promise<void>;
   /** List workspace metadata; tombstoned entries filtered unless asked for. */
   listWorkspaces(opts?: { includeDeleted?: boolean }): Promise<WorkspaceMetadata[]>;
-  /** Patch workspace metadata (P4-4: the post-migration schemaVersion stamp). */
+  /** Patch workspace metadata (e.g. the post-migration schemaVersion stamp). */
   updateWorkspaceMetadata(
     workspaceId: string,
     patch: Partial<WorkspaceMetadata>
@@ -177,16 +171,15 @@ export interface SyncBackend {
    * data write into it from this point. Idempotent — the rules explicitly
    * allow re-asserting the tombstone (a retried delete).
    *
-   * Always called BEFORE {@link purgeWorkspace} (the §D1 order): the
-   * tombstone first closes the workspace to writers, so a crash mid-purge
-   * leaves a re-runnable tombstoned husk, never a half-deleted live
-   * workspace.
+   * Always called BEFORE {@link purgeWorkspace}: the tombstone first closes
+   * the workspace to writers, so a crash mid-purge leaves a re-runnable
+   * tombstoned husk, never a half-deleted live workspace.
    */
   tombstoneWorkspace(workspaceId: string): Promise<void>;
   /**
-   * The honest delete (P4-6): remove every residual the tombstone leaves
-   * behind — the updates/history/maintenance/metadata subcollection docs
-   * and the Cloud Storage blobs under exactly
+   * The honest delete: remove every residual the tombstone leaves behind —
+   * the updates/history/maintenance/metadata subcollection docs and the
+   * Cloud Storage blobs under exactly
    * `users/{uid}/versicle/{workspaceId}/` (risk R8: sibling workspaces'
    * blobs must survive). Idempotent and re-runnable.
    */
@@ -300,8 +293,8 @@ export const workspaceMetadataSchema: z.ZodType<WorkspaceMetadata> = z.looseObje
 });
 
 /**
- * OBSERVE-then-enforce (plan/overhaul/README.md §3 operating rules; §4 risk
- * register): inbound validation on a live sync path must not reject until a
+ * OBSERVE-then-enforce (plan/overhaul/README.md §3, "Observe-then-enforce"):
+ * inbound validation on a live sync path must not reject until a
  * telemetry/logging review confirms real-world doc variance. This helper
  * therefore only LOGS schema violations — every row is returned untouched.
  * The flip to enforcement is gated on reviewing these logs in the wild

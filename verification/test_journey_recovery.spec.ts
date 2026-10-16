@@ -5,7 +5,7 @@ test("recovery flow", async ({ page }) => {
   console.log("Opening App...");
   await page.goto("http://localhost:5173");
 
-  // Wait for app to load: the library (whose header holds Settings) renders (was a fixed 3s sleep)
+  // Wait for app to load: the library (whose header holds Settings) renders
   await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 15000 }).catch(() => {});
 
   // 2. Open Settings

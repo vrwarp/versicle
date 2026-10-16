@@ -29,11 +29,8 @@ export class Sanitizer {
         }
 
         // 2. Replace URLs with just the domain
-        // We use a loop or replace with callback to handle multiple URLs
-        // The regex captures the domain in group 1.
-        // We use the 'g' flag equivalent by constructing a new RegExp or using replaceAll if the pattern was global.
-        // Since our pattern in RegexPatterns isn't global, we can use split/join or a loop.
-        // But to be safe and efficient, let's make a local global regex.
+        // A replace callback handles multiple URLs; the regex captures the domain in group 1.
+        // RegexPatterns.URL isn't global, so a precompiled global copy (RE_URL_GLOBAL) is used.
 
         // OPTIMIZATION: Only run URL regex if 'http' or 'www' is present.
         // This avoids expensive regex scans on 99% of sentences that don't contain URLs.

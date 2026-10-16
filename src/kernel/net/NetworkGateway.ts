@@ -1,5 +1,5 @@
 /**
- * NetworkGateway — the ONE production egress point (Phase 7 §I; C9/C12).
+ * NetworkGateway — the ONE production egress point (C9/C12).
  *
  * `egress(destinationId, url, init?, opts?)` applies the destination's
  * registry policy before any bytes leave the device:
@@ -12,15 +12,13 @@
  *     the injected resolver's grant. The resolver is wired at the
  *     composition root (app/) to the synced per-book `aiConsent` map with
  *     contentAnalysis grandfathering; kernel/ itself never reads state.
- *     OBSERVE MODE: with no resolver registered the gate allows and the
- *     gateway only counts — enforcement arrives with the resolver (program
- *     observe-then-enforce rule).
+ *     With no resolver registered (tests, or before the composition root
+ *     wires one) the gate allows and the gateway only counts.
  *  5. per-destination AbortController timeout (`NET_TIMEOUT`), composed with
  *     the caller's own AbortSignal.
  *
- * It also keeps per-destination session counters (requests/bytes out — the
- * deleted CostEstimator's replacement; surfaced by P8's settings "Network
- * activity" panel).
+ * It also keeps per-destination session counters (requests/bytes out; read
+ * via `getEgressCounters()`).
  *
  * Raw `fetch`/XHR outside src/kernel/net is a lint error (eslint.config.js);
  * same-origin fetches use ./local.ts.
@@ -119,9 +117,9 @@ let quotaScheduler: QuotaScheduler | null = null;
 
 /**
  * Install the quota scheduler (composition root only — app/ wires it to the
- * shared QuotaGovernor). Pass null to remove (tests). OBSERVE MODE: with no
- * scheduler installed the gateway applies no throttle and only counts —
- * enforcement arrives with the scheduler (mirrors the consent observe-mode).
+ * shared QuotaGovernor). Pass null to remove (tests). With no scheduler
+ * installed the gateway applies no throttle and only counts (mirrors the
+ * consent resolver's unwired behaviour).
  */
 export function setQuotaScheduler(scheduler: QuotaScheduler | null): void {
   quotaScheduler = scheduler;
@@ -182,7 +180,8 @@ function assertHostAllowed(destination: EgressDestination, url: string): void {
 function checkConsent(destination: EgressDestination, consent: EgressConsentContext): void {
   if (destination.consent !== 'per-book') return;
   if (consent.interactive === true) return;
-  // Observe mode until the composition root installs the resolver.
+  // No resolver installed (tests, or before the composition root wires one):
+  // the gate allows.
   if (consentResolver === null) return;
   if (!consentResolver(destination, consent)) {
     throw new NetConsentRequiredError(destination.id, { bookId: consent.bookId });

@@ -1,7 +1,6 @@
 /**
- * Formatter unit suite (Phase 8 §F / prep PR-1) — pinned locales: every
- * assertion passes an explicit locale so the host's ICU defaults cannot
- * flake the suite.
+ * Formatter unit suite — pinned locales: every assertion passes an explicit
+ * locale so the host's ICU defaults cannot flake the suite.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import {
@@ -39,12 +38,11 @@ describe('kernel/locale formatters (pinned locales)', () => {
 
   it('formatRelativeTime: minute/hour/day buckets and the date fallback', () => {
     expect(formatRelativeTime(T - 10_000, T, 'en-US')).toBe('now');
-    // narrow en matches the hand-rolled "5m ago"/"3h ago" output exactly.
+    // Narrow style renders compact "5m ago"/"3h ago" in en.
     expect(formatRelativeTime(T - 5 * 60_000, T, 'en-US')).toBe('5m ago');
     expect(formatRelativeTime(T - 3 * 3_600_000, T, 'en-US')).toBe('3h ago');
     expect(formatRelativeTime(T - 2 * 86_400_000, T, 'en-US')).toBe('2d ago');
-    // ≥ 7 days falls back to the absolute date (the behavior the three
-    // hand-rolled implementations converged on).
+    // ≥ 7 days falls back to the absolute date.
     expect(formatRelativeTime(T - 30 * 86_400_000, T, 'en-US')).toBe('5/13/26');
   });
 

@@ -4,8 +4,7 @@ import type { BatchImportSummary } from '@domains/library/ports';
 import { useBookStore } from './useBookStore';
 
 /**
- * The library UI PROJECTION (Phase 7 §D — shrunk from the 841-line workflow
- * store). Transient, local-only state that components render:
+ * The library UI PROJECTION. Transient, local-only state that components render:
  *
  *  - the static-metadata cache + offloaded set (written by LibraryService
  *    through the projection port; see src/app/library/createLibrary.ts),
@@ -80,8 +79,8 @@ export const useLibraryStore = create<LibraryState>()((set) => ({
     }),
 
   // Boot hydration writes the whole manifest set at once. Done one key at a
-  // time this was quadratic: each write spread the entire staticMetadata map
-  // AND changed its identity, and every identity change makes
+  // time this would be quadratic: each write spreads the entire staticMetadata map
+  // AND changes its identity, and every identity change makes
   // libraryViewStore drop its per-book memo and re-sort all N books.
   setStaticMetadataMany: (entries) =>
     set((state) => {
@@ -151,6 +150,6 @@ export const useLibraryStore = create<LibraryState>()((set) => ({
   clearBatchImportSummary: () => set({ batchImportSummary: null }),
 }));
 
-// Re-export kept for the modules that imported the inventory store through
-// this file historically (debug affordance; selectors).
+// Re-exported for the modules that import the inventory store through this
+// file (debug affordance; selectors).
 export { useBookStore };

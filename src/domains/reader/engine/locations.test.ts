@@ -1,8 +1,8 @@
 /**
  * The CFI↔percentage registry: loaded from IDB when present, generated in
  * the background otherwise. The `isCurrent()` guards are the interesting
- * part — the legacy code wrote after destroy, so a book closed mid-generate
- * would persist a registry belonging to a book the user had already left.
+ * part — without them a book closed mid-generate would persist a registry
+ * belonging to a book the user had already left.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 

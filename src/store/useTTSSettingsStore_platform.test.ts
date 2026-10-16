@@ -49,15 +49,14 @@ vi.mock('@lib/tts/providers/OpenAIProvider', () => ({
     }
 }));
 
-// NOTE: the providerId → engine routing (setProviderById / loadVoices chains)
-// moved to the TtsController facade at Phase 5b-PR1 — those assertions live in
-// src/app/tts/TtsController.test.ts. What remains here is the registry/factory
-// platform detection plus the store-backed build context.
+// NOTE: the providerId → engine routing (setProviderId / loadVoices chains)
+// is asserted in src/app/tts/TtsController.test.ts. This file covers the
+// registry/factory platform detection plus the store-backed build context.
 
 describe('Provider selection (factory platform detection + store build context)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        // Reset store state (the persisted settings half of the 5b split)
+        // Reset store state
         useTTSSettingsStore.setState({
             activeLanguage: 'en',
             profiles: {
@@ -71,8 +70,8 @@ describe('Provider selection (factory platform detection + store build context)'
         });
     });
 
-    // The platform branching that used to live in the store now lives in the registry
-    // ('local' alias resolution); the store read lives in the app-layer context source.
+    // The platform branching lives in the registry ('local' alias resolution);
+    // the store read lives in the app-layer context source.
     it('factory: builds WebSpeechProvider on web for the local provider', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (Capacitor.isNativePlatform as any).mockReturnValue(false);

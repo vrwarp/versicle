@@ -1,13 +1,10 @@
 /**
- * The per-book AI consent PROMPT — the "ask on first TTS play" affordance
- * the Phase 7 §Follow-ups (item 3) deferred to the TTS UI and P9 lands.
+ * The per-book AI consent PROMPT — the "ask on first TTS play" affordance.
  *
- * The companion of app/google/aiConsent.ts (the gateway-side RESOLVER):
- * with this prompt in place, the resolver leaves observe-mode for
- * bookId-carrying calls — an un-consented book is DENIED at the egress
- * boundary, and this dialog is how a user grants (or refuses) before the
- * TTS pipeline's non-interactive GenAI analysis (reference detection,
- * table narration) would run.
+ * The companion of app/google/aiConsent.ts (the gateway-side RESOLVER): an
+ * un-consented book is DENIED at the egress boundary, and this dialog is how
+ * a user grants (or refuses) before the TTS pipeline's non-interactive GenAI
+ * analysis (reference detection, table narration) would run.
  *
  * Resolution short-circuits (no dialog) when:
  *  - GenAI is disabled or unconfigured (nothing would call the model),
@@ -15,13 +12,12 @@
  *  - the book has synced contentAnalysis records (grandfathered — the
  *    aiConsent.ts derivation rule; pre-consent books keep working).
  *
- * The answer is persisted to the synced per-device preferences
+ * The answer is persisted to the synced preferences
  * (usePreferencesStore.aiConsent[bookId]) — both grants AND refusals, so a
  * book is asked exactly once. A refusal never blocks playback; it only
- * keeps the book's text on-device (analysis features skip). Surfacing the
- * stored bits for later editing is a settings follow-up (recorded at the
- * P9 close); until then a refusal can be revisited by toggling the global
- * AI enablement off/on only insofar as new books are concerned.
+ * keeps the book's text on-device (analysis features skip). No settings
+ * surface exposes the stored bits yet, so a stored answer cannot be revisited
+ * from the UI.
  */
 import { confirmDialog } from '@components/ui/ConfirmDialog';
 import { usePreferencesStore } from '@store/usePreferencesStore';

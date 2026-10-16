@@ -103,8 +103,8 @@ test('Chinese Book Journey', async ({ page }) => {
     await backBtn.click();
   }
 
-  // Settings is now a Radix-Tabs SettingsShell at /settings/:tab (Phase-10 overhaul);
-  // open from the library header and drive the TTS Engine tab.
+  // Settings is a Radix-Tabs SettingsShell at /settings/:tab; open from the
+  // library header and drive the TTS Engine tab.
   await utils.openSettings(page);
   await utils.gotoSettingsTab(page, 'tts');
 
@@ -197,20 +197,19 @@ test('Journey Smart Pinyin', async ({ page }) => {
 
   // 4. Trigger text selection of Chinese characters inside the iframe.
   //
-  // Re-acquire the reader frame AFTER the pinyin toggle so we never operate on
-  // a stale/detached frame reference. utils.getReaderFrame walks the live
-  // page.frames() and returns the current epub.js content frame; the pinyin
-  // overlay is portaled into the parent document (PinyinOverlay.tsx) and does
-  // NOT rewrite the iframe's text nodes, so the '测试用的中文书' node stays a
-  // single contiguous text node. We still match a short, resilient substring
-  // ('测试') and retry the gesture until the annotation popover appears,
-  // because the selection→mouseup→cfiFromRange→popover pipeline can need a
-  // beat to commit on WebKit.
+  // Re-acquire the reader frame (resolved from the iframe locator on every
+  // attempt) AFTER the pinyin toggle so we never operate on a stale/detached
+  // frame reference. The pinyin overlay is portaled into the parent document
+  // (PinyinOverlay.tsx) and does NOT rewrite the iframe's text nodes, so the
+  // '测试用的中文书' node stays a single contiguous text node. We still match a
+  // short, resilient substring ('测试') and retry the gesture until the
+  // annotation popover appears, because the selection→mouseup→cfiFromRange→
+  // popover pipeline can need a beat to commit on WebKit.
   console.log('Selecting Chinese text...');
   // Synthetic, PRECISE selection of the run '测试用的中文书' (so the downstream
   // vocab-triage shows the exact glyphs the test asserts on, incl. '中'). The
-  // selection bridge is now attached to the initial section (the useEpubReader
-  // fix), so the in-iframe dispatched mouseup reaches it: cfiFromRange →
+  // selection bridge is attached to the initial section (waited on above), so
+  // the in-iframe dispatched mouseup reaches it: cfiFromRange →
   // TEXT_SELECTED → annotation pill with the vocab button.
   await page
     .locator('[data-testid="reader-iframe-container"] iframe')

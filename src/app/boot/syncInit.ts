@@ -46,9 +46,9 @@ export const syncInitTask: BootTask = {
       logger.info('Sync init skipped: migration awaiting confirmation.');
       return;
     }
-    // First-use gate (Phase 8 §A): the heavy sync composition (firebase
-    // SDK) loads inside THIS run() body, and only when sync could actually
-    // run — un-configured users never download the firebase chunk at all.
+    // First-use gate: the heavy sync composition (firebase SDK) loads inside
+    // THIS run() body, and only when sync could actually run — un-configured
+    // users never download the firebase chunk at all.
     // The orchestrator re-checks isEnabled internally; this outer check
     // only prevents the chunk fetch.
     if (!isSyncEnabled()) {

@@ -58,13 +58,13 @@ export class CheckpointInspector {
    *
    * The LIVE doc holds concrete types, but a doc hydrated from a checkpoint
    * blob holds `AbstractType` roots — and `Doc.get` COERCES those into
-   * whichever constructor it is asked for rather than throwing. So the
-   * previous try/catch ladder (getMap → getArray → getText) never fell
-   * through on the checkpoint side: an Array or Text root came back as an
-   * empty map, and that store then diffed as "everything removed" — the
-   * worst possible answer from a screen whose whole job is to say what a
-   * destructive restore would cost. Infer from the STRUCTURE instead, so
-   * both sides of the diff read the same root the same way.
+   * whichever constructor it is asked for rather than throwing. So a
+   * try/catch ladder (getMap → getArray → getText) would never fall
+   * through on the checkpoint side: an Array or Text root would come back
+   * as an empty map, and that store would then diff as "everything
+   * removed" — the worst possible answer from a screen whose whole job is
+   * to say what a destructive restore would cost. Infer from the STRUCTURE
+   * instead, so both sides of the diff read the same root the same way.
    *
    * Xml roots are deliberately absent from the diff, on both sides —
    * symmetry is what stops a skipped root reading as a change. Versicle

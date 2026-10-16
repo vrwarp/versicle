@@ -1,20 +1,17 @@
 /**
- * Table-image → teleprompter-narration adaptation (Phase 7 §H feature
- * module). Prompt ported verbatim from the legacy
- * GenAIService.generateTableAdaptations.
+ * Table-image → teleprompter-narration adaptation (GenAI feature module).
  *
  * Membership clamp (GG-5): echoed `cfi` values must come from the input
- * set — hallucinated CFIs are dropped (legacy consumers silently ignored
- * them via Map lookup); shape breaches throw GENAI_INVALID_RESPONSE.
+ * set — hallucinated CFIs are dropped; shape breaches throw
+ * GENAI_INVALID_RESPONSE.
  * NOTE the prompt embeds full-resolution table screenshots as inlineData —
  * the client REDACTS those from the activity log (logging.ts).
  *
- * `isTable`: the ingest-side table detector hands this feature images that
- * are not tables — on the Jul–Sep 2026 export three of the four narrated
- * "tables" were portrait illustrations with quotes, a full index page and a
- * strip of social-media icons — and the old prompt forced a narration of
- * whatever it got. The model now says whether the image IS a data table; a
- * non-table comes back as a skipped entry (empty adaptation) that the
+ * `isTable`: the ingest-side table detector can hand this feature images that
+ * are not tables (portrait illustrations, a full index page, a strip of
+ * social-media icons), and a prompt that forces a narration would narrate
+ * whatever it got. The model therefore says whether the image IS a data
+ * table; a non-table comes back as a skipped entry (empty adaptation) that the
  * processor persists so the image is never sent again and never narrated.
  */
 import { z } from 'zod';
@@ -37,8 +34,7 @@ export interface TableAdaptationResult {
 const responseZod = z.array(
   z.object({
     cfi: z.string(),
-    // Optional for tolerance: a model that omits the flag is treated as the
-    // legacy "everything is a table" behavior.
+    // Optional for tolerance: a model that omits the flag is treated as a table.
     isTable: z.boolean().optional(),
     adaptation: z.string(),
   }),

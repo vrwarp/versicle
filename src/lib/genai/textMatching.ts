@@ -33,7 +33,6 @@ export function findApproximateMatch(text: string, query: string): { start: numb
         // Escape regex special characters
         const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         // Replace explicit whitespace in query with \s+ to match any whitespace sequence
-        // also allow optional whitespace around punctuation
         const regexPattern = escapedQuery.replace(/\s+/g, '\\s+');
 
         const regex = new RegExp(regexPattern, 'i'); // Case insensitive

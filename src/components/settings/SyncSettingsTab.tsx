@@ -100,7 +100,6 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
         }
     };
 
-    // ... inside component ...
     const {
         isServiceConnected,
         googleClientId,
@@ -176,11 +175,11 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     const handlePurgeDeletedWorkspaces = async () => {
         setIsPurgingDeleted(true);
         try {
-            // One-time maintenance (P4-6): pre-honest-delete versions left
-            // history/maintenance/metadata docs and Storage blobs behind on
-            // every workspace deletion. Walks ALL tombstoned workspaces and
-            // purges the residue; the result toast rides the
-            // 'workspace-purged' SyncEvent. Safe to run repeatedly.
+            // One-time maintenance: workspace deletions made by older app
+            // versions left history/maintenance/metadata docs and Storage
+            // blobs behind. Walks ALL tombstoned workspaces and purges the
+            // residue; the result toast rides the 'workspace-purged'
+            // SyncEvent. Safe to run repeatedly.
             await (await getSyncOrchestratorAsync()).purgeDeletedWorkspaces();
         } catch (err) {
             console.error('Failed to purge deleted workspaces:', err);
@@ -302,8 +301,6 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
     const handleDriveDisconnect = async () => {
         try {
             await getGoogleAuthClient().disconnect('drive');
-            // Optionally clear linked folder on disconnect?
-            // useDriveStore.getState().clearLinkedFolder();
         } catch (error) {
             console.error("Failed to disconnect Drive", error);
         }
@@ -529,7 +526,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                     </Button>
                                 </div>
 
-                                {/* Maintenance: purge residuals of past deletions (P4-6) */}
+                                {/* Maintenance: purge residuals of past deletions */}
                                 <div className="flex items-center justify-between gap-2 pt-2">
                                     <p className="text-[11px] text-muted-foreground leading-snug">
                                         Older versions left cloud data behind when deleting
@@ -671,7 +668,7 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                                 </div>
                             )}
 
-                            {/* R7: opt-in background preview hydration. */}
+                            {/* Opt-in background preview hydration. */}
                             {linkedFolderName && (
                                 <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
                                     <div className="space-y-0.5 pr-4">
@@ -805,7 +802,6 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
                     )}
                 </div>
             </div>
-            {/* Folder Picker Dialog */}
             {/* Folder Picker Modal */}
             <Modal open={isPickerOpen} onOpenChange={(open) => !open && setIsPickerOpen(false)}>
                 <ModalContent className="max-w-2xl h-[600px] p-0 overflow-hidden flex flex-col gap-0 border-border bg-background">

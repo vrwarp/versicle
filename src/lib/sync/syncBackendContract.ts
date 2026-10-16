@@ -3,14 +3,11 @@
  * (plan/overhaul/proposals/contract-first.md): connect / workspace CRUD /
  * tombstone semantics, executed against every backend implementation.
  *
- * Since P4-2 the `SyncBackend` interface exists at
- * src/domains/sync/backend/SyncBackend.ts and this file is the C3 PINNING
- * suite: the mock runner (syncBackendContract.mock.test.ts) drives the real
- * `MockBackend`; the emulator runner (syncBackendContract.emulator.test.ts)
- * still mirrors the FirestoreBackend semantics over
- * `@firebase/rules-unit-testing` (its header explains why it cannot host
- * the modular-SDK backend until the auth+storage emulator wiring lands with
- * the y-cinder vendoring item).
+ * The `SyncBackend` interface lives at src/domains/sync/backend/SyncBackend.ts
+ * and this file is the C3 PINNING suite: the mock runner
+ * (syncBackendContract.mock.test.ts) drives the real `MockBackend`; the
+ * emulator runner (syncBackendContract.emulator.test.ts) drives the real
+ * `FirestoreBackend` against the Firebase emulators.
  *
  * Pattern follows src/lib/tts/engine/engineParityScenarios.ts: one
  * behavioral spec, N transports.
@@ -23,18 +20,18 @@ interface SyncBackendConnection {
   /** Detach and flush; the workspace doc must be durable afterwards. */
   disconnect(): Promise<void> | void;
   /**
-   * Subscribe to transport events. Optional until every backend exposes the
-   * P4 `SyncConnection` surface; required for the event-surface cases
-   * (capabilities.eventInjection / capabilities.savedEvent).
+   * Subscribe to transport events. Optional; required for the
+   * event-surface cases (capabilities.eventInjection /
+   * capabilities.savedEvent).
    */
   on?(event: SyncConnectionEventName, cb: (payload: unknown) => void): void;
 }
 
 /**
  * The transport event surface (phase4-sync-strangler.md §D1): the failure
- * events the y-cinder FireProvider always emitted (`connection-error`,
+ * events the y-cinder FireProvider emits (`connection-error`,
  * `sync-failure`, `save-rejected`, `corrupted-document`) plus `saved` — the
- * save-success event the fork delta added (P9 vendoring, surgery 1; drives
+ * save-success event the y-cinder fork emits (drives
  * lastSyncTime-from-flush). The C3 event cases pin both backends to this
  * one surface so mock/real drift becomes a red CI.
  */
@@ -64,9 +61,8 @@ const ARTIFACT_BLOB_REL_PATH = 'embeddings/contract-key.bin';
 const ARTIFACT_HEAD_REL_PATH = 'embedCache/contract-key';
 
 /**
- * What a backend must provide to run the contract. Mirrors the surface P4
- * extracts into `SyncBackend` (workspace metadata CRUD, tombstone
- * pre-flight, doc replication).
+ * What a backend must provide to run the contract. Mirrors the `SyncBackend`
+ * surface (workspace metadata CRUD, tombstone pre-flight, doc replication).
  */
 export interface SyncBackendContractHarness {
   /**
@@ -79,7 +75,7 @@ export interface SyncBackendContractHarness {
   createWorkspace(name: string): Promise<WorkspaceMetadata>;
   listWorkspaces(opts?: { includeDeleted?: boolean }): Promise<WorkspaceMetadata[]>;
   /**
-   * Patch workspace metadata in place (P4's post-migration `schemaVersion`
+   * Patch workspace metadata in place (the post-migration `schemaVersion`
    * stamp — quarantine layer 3 of phase4-sync-strangler.md §D5).
    */
   updateWorkspaceMetadata(
@@ -88,12 +84,12 @@ export interface SyncBackendContractHarness {
   ): Promise<void>;
   /**
    * The clean-sync probe: does the workspace's replicated doc hold any
-   * data? (FirestoreSyncManager.performCleanSync's main-doc + updates
-   * check / mock snapshot check.)
+   * data? (SyncOrchestrator.performCleanSync's probe: the main-doc + updates
+   * check on Firestore / the snapshot check on the mock.)
    */
   probeHasData(workspaceId: string): Promise<boolean>;
   /**
-   * The PRODUCTION delete semantics (P4-6 honest delete): tombstone first,
+   * The PRODUCTION delete semantics (honest delete): tombstone first,
    * then purge every residual. The workspace must never be resurrectable.
    */
   deleteWorkspace(workspaceId: string): Promise<void>;
@@ -112,7 +108,7 @@ export interface SyncBackendContractHarness {
    */
   countResiduals?(workspaceId: string): Promise<number>;
   /**
-   * Re-run the purge alone on an already-deleted workspace (the P4-6
+   * Re-run the purge alone on an already-deleted workspace (the
    * "Purge deleted workspaces" maintenance path). Required when
    * capabilities.purge is on.
    */
@@ -150,8 +146,9 @@ export interface SyncBackendContractHarness {
    * metadata+blob pairs that are past their TTL, and evicting oldest-first when
    * over a byte budget. Required when capabilities.artifacts is on; both
    * backends implement them (the mock collapses metadata record + blob into one
-   * Map entry, so the leave-the-blob guarantee is pinned ONLY by the emulator
-   * path). (design: plan/shared-ai-cache-design.md)
+   * Map entry, so the leave-the-blob guarantee cannot be pinned here; it is
+   * pinned by FirestoreBackend.purge.test.ts). (design:
+   * plan/shared-ai-cache-design.md)
    */
   deleteArtifactHead?(workspaceId: string, relPath: string): Promise<void>;
   sweepArtifacts?(
@@ -187,7 +184,7 @@ interface SyncBackendContractCapabilities {
   serverSideTombstoneEnforcement: boolean;
   /**
    * The transport announces committed saves (`saved`). True for the mock
-   * and, since the P9 y-cinder fork delta (§D6.1), for Firestore.
+   * and for Firestore (the y-cinder fork emits it).
    */
   savedEvent: boolean;
   /** Transport failure events can be injected (mock test hooks). */
@@ -401,11 +398,10 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
         );
       });
 
-      // P4 quarantine layer 3 (phase4-sync-strangler.md §D5.3): after a
+      // Quarantine layer 3 (phase4-sync-strangler.md §D5): after a
       // successful local migration the orchestrator stamps the workspace
       // metadata with the migrated schemaVersion, keeping the workspace-list
-      // version gate honest. This is the emulator metadata-stamp case named
-      // in the P4-4 exit criteria.
+      // version gate honest.
       it('updateWorkspaceMetadata patches schemaVersion and the patch survives listWorkspaces', async () => {
         const ws = await harness.createWorkspace('Migratable');
         await harness.updateWorkspaceMetadata(ws.workspaceId, {
@@ -491,9 +487,9 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
         );
       }
 
-      // sync.md debt #2, paid by P4-6: the legacy delete purged only the
-      // `updates` subcollection — `history`/`maintenance`/`metadata` docs
-      // and Cloud Storage blobs survived every deletion.
+      // An honest delete purges every residual — not just the `updates`
+      // subcollection but also `history`/`maintenance`/`metadata` docs and
+      // Cloud Storage blobs.
       if (capabilities.purge) {
         it('deleteWorkspace purges every residual while the tombstone survives (honest delete)', async () => {
           const doomed = await harness.createWorkspace('Doomed');
@@ -649,8 +645,7 @@ export function describeSyncBackendContract(options: SyncBackendContractOptions)
       // entry (no Storage tier), so the "delete the metadata record but KEEP the
       // shared blob" reference-safety guarantee CANNOT be proven on the mock —
       // these cases pin metadata-record-removal semantics on the mock;
-      // blob-survival is pinned only on the Firestore/emulator path (capability
-      // not yet wired there).
+      // blob-survival is pinned by FirestoreBackend.purge.test.ts.
       it('deleteArtifactHead removes the HEAD doc; an untouched second key survives', async () => {
         const ws = await harness.createWorkspace('Artifacts');
         const SECOND_BLOB = 'embeddings/second-key.bin';

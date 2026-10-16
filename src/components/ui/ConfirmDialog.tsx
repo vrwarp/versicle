@@ -10,9 +10,9 @@ import { Button } from './Button';
 import { formatMessage, type MessageKey, type MessageParams } from '@kernel/locale/messages';
 
 /**
- * useConfirm / ConfirmHost (Phase 8 §D) — the accessible replacement for
- * every native `confirm()` site (banned by eslint `no-alert` +
- * `no-restricted-globals` at ERROR since this landed).
+ * useConfirm / ConfirmHost — the accessible replacement for every native
+ * `confirm()` site (banned by eslint `no-alert` + `no-restricted-globals`
+ * at ERROR).
  *
  * Keyed per the i18n ADR: requests carry MessageKeys + params, never
  * prose. The implementation is a module-level request queue (no React

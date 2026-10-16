@@ -1,15 +1,14 @@
 /**
- * The C4 engine RPC contract (Phase 5b; plan/overhaul/prep/phase5-tts-strangler.md §5b.2):
- * ONE immutable {@link PlaybackSnapshot} stream replaces the four positional notification
- * paths the engine used to have (state-manager notify, setStatus notify, notifyError,
- * notifyDownloadProgress) and the 6-argument `PlaybackListener` tuple.
+ * The C4 engine RPC contract: ONE immutable {@link PlaybackSnapshot} stream is the engine's
+ * only notification path — state, status, errors and download progress all arrive as
+ * snapshots (no positional listener tuples).
  *
  *  - `seq` is monotonic per engine instance: the worker handle drops out-of-order Comlink
  *    deliveries so consumers can never observe time running backwards.
  *  - `queueId` changes iff the queue's content identity changed; `queue` itself is included
  *    only in snapshots where it changed (and in the subscribe replay) — the broadcast diet
  *    that lets repeated status updates cross the worker boundary without re-cloning the
- *    queue (P23).
+ *    queue.
  *  - `error` is a one-shot field: it is non-null exactly on the snapshot that surfaces the
  *    failure (codes `TTS_*`, C10 alignment) and null again on the next publish.
  *
@@ -21,7 +20,7 @@ import type { FlightRecorderExport } from '../TTSFlightRecorder';
 
 export type { FlightRecorderExport };
 
-/** The possible states of TTS playback (canonical home since 5b-PR2). */
+/** The possible states of TTS playback. */
 export type TTSStatus = 'playing' | 'paused' | 'stopped' | 'loading' | 'completed';
 
 /** Voice-data download progress (Piper). */
@@ -42,7 +41,7 @@ export interface PlaybackSnapshot {
     /** Monotonic, engine-side; staleness detection across the worker boundary. */
     readonly seq: number;
     readonly status: TTSStatus;
-    /** Changes iff queue content identity changes (P23's broadcast diet). */
+    /** Changes iff queue content identity changes (the broadcast diet above). */
     readonly queueId: string;
     /**
      * Included only when `queueId` changed since the previous published snapshot
@@ -62,9 +61,9 @@ export interface PlaybackSnapshot {
 export type SnapshotListener = (snapshot: PlaybackSnapshot) => void;
 
 /**
- * The one tested derivation of "the UI should look like audio is active" — the
- * former inline "treat loading as playing" comment in the store mirror, now an
- * explicit selector (named regression: useTTSStore initialize / flicker guard):
+ * The one tested derivation of "the UI should look like audio is active" — an
+ * explicit selector rather than an inline "treat loading as playing" rule in the
+ * store mirror (pinned by TtsController.test.ts's flicker guard):
  *  - 'loading' counts as playing to prevent play/pause button flicker during
  *    transitions between sentences or while buffering;
  *  - 'completed' counts as playing to keep background audio and the immersive
@@ -75,10 +74,10 @@ export function isAudiblePlayback(status: TTSStatus): boolean {
 }
 
 /**
- * The public engine surface the app talks to — a STANDALONE interface since 5b-PR2
- * (no longer a `Pick` of the engine class; the S8 coupling is gone). Both the
- * in-process `PlaybackController` and the worker-backed `WorkerEngineHandle`
- * implement it, so the app can be pointed at either via `getAudioPlayer()`.
+ * The public engine surface the app talks to — a STANDALONE interface, not a `Pick`
+ * of the engine class. Both `PlaybackController` (the worker-resident engine) and the
+ * main-thread `WorkerEngineHandle` implement it, so the app (via `getAudioPlayer()`)
+ * depends only on this interface.
  *
  * Commands are ACKs: a resolved promise means the command was accepted (enqueued),
  * not completed — results flow exclusively through the snapshot stream.
@@ -101,10 +100,10 @@ export interface TtsEngine {
 
     // --- Navigation ---
     /**
-     * Switch the active book. Since 5b-PR3 the engine performs the context
-     * switch (epoch bump) synchronously and runs the stop/reset as a sequenced
-     * task; the in-process engine returns that task's promise, the worker
-     * handle stays fire-and-forget.
+     * Switch the active book. The engine performs the context switch (epoch
+     * bump) synchronously and runs the stop/reset as a sequenced task; the
+     * in-process engine returns that task's promise, the worker handle stays
+     * fire-and-forget.
      */
     setBookId(bookId: string | null): Promise<void> | void;
     loadSection(sectionIndex: number, autoPlay?: boolean): Promise<boolean | void>;
@@ -130,7 +129,7 @@ export interface TtsEngine {
     deleteVoice(voiceId: string): Promise<void>;
     isVoiceDownloaded(voiceId: string): Promise<boolean>;
 
-    // --- Diagnostics (S9: the engine runs in the worker, whose flight
+    // --- Diagnostics (the engine runs in the worker, whose flight
     // recorder is a different module instance than the main thread's —
     // DiagnosticsTab reads the LIVE engine buffer through the handle) ---
     /** The engine-side flight recorder's live ring buffer + stats. */

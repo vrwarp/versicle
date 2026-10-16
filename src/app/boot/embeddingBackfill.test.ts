@@ -73,9 +73,9 @@ function makeDeps(overrides: Partial<EmbeddingBackfillDeps> = {}) {
     enqueue: vi.fn(async (bookId, opts) => {
       enqueued.push({ bookId, opts });
     }),
-    // Artifact Lane B-6: the shared-cache consult defaults to a MISS so the
-    // existing cases (which exercise the embed lane) are unchanged. The H-1
-    // suite overrides probeArtifact to a HIT.
+    // The shared-cache consult defaults to a MISS so the cases that exercise
+    // the embed lane are unaffected. The H-1 suite overrides probeArtifact to
+    // a HIT.
     probeArtifact: async () => false,
     hydrateFromArtifact: async () => false,
     shouldContinue: () => true,

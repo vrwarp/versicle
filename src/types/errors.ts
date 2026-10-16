@@ -7,8 +7,8 @@
  *   never rename or remove a member, only add. Codes are namespaced by domain
  *   (`APP_*`, `DB_*`, `SYNC_*`, `TTS_*`, `GENAI_*`, `DRIVE_*`, `INGEST_*`, `NET_*`) so callers
  *   branch with `instanceof` / `code` equality — never by message-substring matching.
- * - `cause` — the standard ES2022 `Error.cause`, replacing the legacy `originalError` field
- *   (which remains as a deprecated alias).
+ * - `cause` — the standard ES2022 `Error.cause`. `originalError` remains as a deprecated
+ *   alias.
  * - `context` — optional structured details (ids, filenames, HTTP status, …) safe to log.
  * - `retryable` — whether an automatic retry of the failed operation is reasonable.
  *   Defaults to `false`.
@@ -21,8 +21,7 @@
  * ## Mapping-helper convention (the `handleDbError` pattern)
  *
  * Vendor/raw errors are mapped to typed `AppError`s at **exactly one module per boundary** —
- * the proven shape came from the deleted DBService's `handleDbError` (it lives
- * on at src/data/errors.ts): a small
+ * the reference shape is `handleDbError` in src/data/errors.ts: a small
  * `handleXxxError(error: unknown): never` helper that
  *
  *   1. logs via the boundary's scoped logger,
@@ -33,8 +32,8 @@
  *      attached as `cause`.
  *
  * Every `catch` in a boundary module funnels through its helper; layers above the boundary
- * only ever see `AppError`s. Repo-wide adoption (sync, TTS providers, GenAI, Drive,
- * ingestion) happens in later phases — this module only defines the contract.
+ * only ever see `AppError`s. This module only defines the contract; each boundary owns
+ * its own mapping helper.
  */
 
 /**
@@ -96,10 +95,10 @@ export const APP_ERROR_CODES = [
   'INGEST_FILE_MISMATCH',
   'INGEST_CANCELLED',
   'INGEST_VERIFICATION_FAILED',
-  // SEARCH_* — the in-book search engine/session (Phase 7).
+  // SEARCH_* — the in-book search engine/session.
   'SEARCH_UNKNOWN',
   'SEARCH_SESSION_DISPOSED',
-  // NET_* — generic network/fetch failures + the kernel/net egress gateway (Phase 7).
+  // NET_* — generic network/fetch failures + the kernel/net egress gateway.
   'NET_UNKNOWN',
   'NET_UNKNOWN_DESTINATION',
   'NET_HOST_NOT_ALLOWED',
@@ -111,7 +110,7 @@ export const APP_ERROR_CODES = [
   'NET_RATE_LIMITED',
   // BACKUP_* — backup/snapshot capture, validation, and restore.
   'BACKUP_SNAPSHOT_INVALID',
-  // GOOGLE_* — Google OAuth boundary (GoogleAuthClient, Phase 7).
+  // GOOGLE_* — Google OAuth boundary (GoogleAuthClient).
   'GOOGLE_AUTH_REQUIRED',
   'GOOGLE_AUTH_REVOKED',
   'GOOGLE_AUTH_TRANSIENT',
@@ -198,7 +197,7 @@ export class AppError extends Error {
   }
 
   /**
-   * @deprecated Pre-taxonomy alias of ES2022 `Error.cause`; use `cause` instead.
+   * @deprecated Alias of ES2022 `Error.cause`; use `cause` instead.
    */
   get originalError(): unknown {
     return this.cause;
@@ -258,7 +257,7 @@ export class AppError extends Error {
  * Error thrown when a database operation fails.
  *
  * The optional third parameter lets subclasses refine the taxonomy fields while the
- * legacy `(message, originalError?)` call sites keep working unchanged.
+ * positional `(message, originalError?)` form keeps working.
  */
 export class DatabaseError extends AppError {
   /**
@@ -325,8 +324,8 @@ export class WorkspaceDeletedError extends AppError {
  *
  * It extends {@link AppError} directly (not `NetworkGatewayError`, which lives in
  * `kernel/net`) because the throw site — `kernel/quota` — is bound by
- * `kernel-imports-nothing` (kernel may import only `~types`); `kernel/net`
- * re-exports it so the net layer can reference it under its own surface.
+ * `kernel-imports-nothing` (kernel may import only `~types`); consumers import it
+ * from here.
  */
 export class NetRateLimitedError extends AppError {
   constructor(retryAfterMs: number, context: Record<string, unknown> = {}) {

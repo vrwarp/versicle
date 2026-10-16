@@ -1,12 +1,13 @@
 /**
- * Sync composition root (phase4-sync-strangler.md §D1/§D2; master plan §2
- * boundary rules 3 + 9): the ONE place that decides which `SyncBackend`
- * implementation the app runs on and holds the orchestrator singleton.
+ * Sync composition root (plan/overhaul/prep/phase4-sync-strangler.md
+ * §D1/§D2; master plan §2 boundary rules 3 + 9): the ONE place that
+ * decides which `SyncBackend` implementation the app runs on and holds the
+ * orchestrator singleton.
  *
- * Phase 8 §A split this module in two: THIS file is the LIGHT half (state,
- * gates, public accessors — zero firebase in its static graph) and
- * composeSync.ts is the HEAVY half (orchestrator + FirestoreBackend +
- * firebase SDK), reachable only through the dynamic import inside
+ * This module is split in two: THIS file is the LIGHT half (state, gates,
+ * public accessors — zero firebase in its static graph) and composeSync.ts
+ * is the HEAVY half (orchestrator + FirestoreBackend + firebase SDK),
+ * reachable only through the dynamic import inside
  * {@link getSyncOrchestratorAsync}. Un-configured users (sync off) never
  * download the firebase chunk; configured users load it inside the
  * `syncInit` boot task body. Check 4 of scripts/check-worker-chunk.mjs
@@ -15,9 +16,8 @@
  * - The orchestrator (src/domains/sync/core/SyncOrchestrator.ts) is
  *   store-free; every store/flag/yjs-provider touch it needs is injected
  *   in composeSync.ts as a port adapter (the EngineContext pattern).
- *   `getSyncOrchestratorAsync` replaces the legacy
- *   `FirestoreSyncManager.getInstance()`; construction is owned by the
- *   `syncInit` boot task.
+ *   `getSyncOrchestratorAsync` is the app-wide accessor; construction is
+ *   owned by the `syncInit` boot task.
  *
  * - Backend selection: production needs nothing — the orchestrator runs on
  *   `FirestoreBackend`. DEV/E2E with `window.__VERSICLE_MOCK_FIRESTORE__`
@@ -62,11 +62,11 @@ export function isSyncEnabled(): boolean {
 }
 
 /**
- * The app-wide orchestrator accessor serving boot and the UI
- * (SyncSettingsTab, WorkspaceMigrationConfirmModal, useFirestoreSync,
- * wireSyncEvents). Composes lazily on first use — the await covers the
- * one-time dynamic import of the heavy half (local chunk load, no
- * network round-trips beyond the asset fetch).
+ * The app-wide orchestrator accessor serving boot and the UI (syncInit,
+ * SyncSettingsTab, WorkspaceMigrationConfirmModal, useFirestoreSync).
+ * Composes lazily on first use — the await covers the one-time dynamic
+ * import of the heavy half (local chunk load, no network round-trips
+ * beyond the asset fetch).
  */
 export async function getSyncOrchestratorAsync(): Promise<SyncOrchestrator> {
   if (instance) return instance;
@@ -100,7 +100,7 @@ export function peekSyncOrchestrator(): SyncOrchestrator | null {
 /**
  * Sever live sync (provider + auth listener) without dropping the
  * orchestrator. The §D7 `pauseSync` handle for destructive restores
- * (CheckpointService.restoreCheckpoint / applyRemoteState callers).
+ * (CheckpointService.restoreCheckpoint and the staged-swap apply).
  * No-op when sync never started.
  */
 export function stopSyncConnections(): void {
@@ -110,8 +110,7 @@ export function stopSyncConnections(): void {
 /**
  * Full teardown for wipeAllData (registered as a wipe hook in
  * registerBootTasks) and for test isolation: stop everything and drop the
- * instance so the next getSyncOrchestratorAsync() composes fresh. Replaces
- * the legacy `FirestoreSyncManager.resetInstance()`.
+ * instance so the next getSyncOrchestratorAsync() composes fresh.
  */
 export function stopSyncForWipe(): void {
   if (instance) {

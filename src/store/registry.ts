@@ -1,7 +1,8 @@
 /**
  * The store registry — the single declaration surface for every zustand
- * store in the app (master plan §2 "three explicit store tiers, declared in
- * one registry"; phase2-fork-surgery.md §2.5).
+ * store in the app (plan/overhaul/README.md §2: a registry declaring every
+ * store synced | local | ephemeral; plan/overhaul/prep/phase2-fork-surgery.md
+ * §2.5).
  *
  * Three tiers:
  *   - 'synced'          — CRDT user data, replicated through the Yjs
@@ -50,10 +51,8 @@ export type { SyncedStoreDef } from './yjs-provider';
 // ─── Synced-store aggregation ────────────────────────────────────────────────
 
 /**
- * All nine synced-store defs, keyed for lookup. Flip state
- * (phase2-fork-surgery.md §2.6 order: contentAnalysis → vocabulary →
- * devices → lexicon → reading-list → preferences → annotations → books →
- * progress) lives in each store module's exported def; this table and the
+ * All synced-store defs, keyed for lookup. Each store's hydration mode and
+ * replication options live in its module's exported def; this table and the
  * generated README are the program-wide view of it.
  */
 export const SYNCED_STORE_DEFS = {

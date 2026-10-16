@@ -1,5 +1,5 @@
 /**
- * Shared test harness (Phase 0, plan/overhaul/README.md §7).
+ * Shared test harness (see plan/overhaul/README.md §7).
  *
  * One import for the patterns that replace per-file `vi.mock` piles:
  *

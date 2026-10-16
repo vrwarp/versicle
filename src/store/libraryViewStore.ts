@@ -1,21 +1,15 @@
 /**
- * libraryViewStore — the derived library projection AND its consumer hooks
- * (Phase 7 §D, PR-L5; the hooks moved in from `selectors.ts` when that
- * façade died with the post-merge follow-ups).
+ * libraryViewStore — the derived library projection AND its consumer hooks.
  *
- * Replaces `selectors.ts`'s render-time machinery: the module-level mutable
- * cache block (`createModuleCache`, 12 eslint-disables of `any`) and the
- * render-time fuzzy `generateMatchKey` joins. The store recomputes
- * OFF-RENDER on subscription deltas from its input stores — strictly less
- * work than render-time recompute — and keeps the WeakMap per-book
- * memoization that made the old hook cheap (reference stability for
- * unchanged books is pinned by libraryViewStore.test.ts).
+ * The store recomputes OFF-RENDER on subscription deltas from its input
+ * stores — strictly less work than a render-time recompute — and keeps a
+ * WeakMap per-book memoization (reference stability for unchanged books is
+ * pinned by libraryViewStore.test.ts).
  *
- * Reading-list join order (§D): the `bookId` FK written at registration
- * time (and backfilled by the v8 one-time linker) wins; exact
- * `sourceFilename` next; the fuzzy title+author key LAST — the fallback
- * that keeps pre-linking entries working (it dies one release after the
- * v8 linking migration).
+ * Reading-list join order: the `bookId` FK written at registration time (and
+ * backfilled by the v8 one-time linker) wins; exact `sourceFilename` next;
+ * the fuzzy title+author key LAST — the fallback for entries that carry no
+ * FK.
  */
 import { useMemo, useSyncExternalStore } from 'react';
 import { create } from 'zustand';
@@ -30,9 +24,9 @@ import { getDeviceId } from '@lib/device-id';
 import { generateMatchKey } from '@lib/entity-resolution';
 import { coverUrl as buildCoverUrl } from '@data/covers';
 
-/** The typed view row — kills the `(book as unknown as {allProgress?})` casts (BookCard). */
+/** The typed view row of the library projection. */
 export interface LibraryBook extends UserInventoryItem {
-  /** Alias of bookId for legacy call sites. */
+  /** Alias of bookId. */
   id: string;
   coverBlob?: Blob;
   coverUrl?: string;
@@ -142,19 +136,19 @@ function recomputeLibraryView(): void {
       const meta = staticMetadata[book.bookId];
       // perf (P-mem): the SW route is driven by `hasCover`, not by holding the
       // bytes. BookRepository omits `coverBlob` whenever the page is SW
-      // controlled; the `instanceof Blob` arm is the pre-`hasCover` fallback
-      // (metadata written by an older build, or the no-controller lane).
+      // controlled; the `instanceof Blob` arm covers metadata that carries no
+      // `hasCover` (the field is optional).
       const hasCover = meta?.hasCover ?? meta?.coverBlob instanceof Blob;
 
       const baseBook: BaseBook = {
         ...book,
         id: book.bookId,
-        // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
+        // Prioritize user overrides (Yjs) > Static Metadata > Snapshot
         title: book.customTitle || meta?.title || book.title,
         author: book.customAuthor || meta?.author || book.author,
         coverBlob: meta?.coverBlob,
         version: meta?.version || undefined,
-        // SW cover route via the shared coverUrl() helper (P3) — never
+        // SW cover route via the shared coverUrl() helper — never
         // re-inline the endpoint string.
         coverUrl: hasCover ? buildCoverUrl(book.bookId) : undefined,
         fileHash: meta?.fileHash,
@@ -253,13 +247,13 @@ function recomputeLibraryView(): void {
 //
 // The projection listens to FOUR input stores, and a single page turn writes
 // two of them (useReadingStateStore, then useReadingListStore when a displayed
-// field moved), so an unbatched listener rebuilt the reading-list join maps and
-// allocated a fresh N-element array TWICE per turn. Worse, the subscriptions
-// start on first use and are never torn down, so it did that work while the
-// library view was unmounted (the router swaps the Outlet out for the reader —
-// exactly when page turns happen).
+// field moved), so an unbatched listener would rebuild the reading-list join
+// maps and allocate a fresh N-element array TWICE per turn. Worse, the
+// subscriptions start on first use and are never torn down, so that work would
+// also run while the library view is unmounted (the router swaps the Outlet
+// out for the reader — exactly when page turns happen).
 //
-// Now an input notification only marks the projection dirty:
+// So an input notification only marks the projection dirty:
 //  - with subscribers, the rebuild is deferred to a microtask (one flush per
 //    task, whatever the number of notifications — and still before paint);
 //  - with none, nothing is rebuilt at all. The dirty flag survives, and the
@@ -299,7 +293,8 @@ function scheduleLibraryView(): void {
 
 /**
  * Start the input-store subscriptions (idempotent). Lazily invoked by the
- * first `useAllBooks()` render — no module-scope side effects (rule 8).
+ * first `useAllBooks()` render — no module-scope side effects
+ * (plan/overhaul/README.md §2 rule 8).
  */
 function ensureLibraryViewStarted(): void {
   if (started) return;
@@ -332,15 +327,16 @@ function subscribeToLibraryView(listener: () => void): () => void {
   };
 }
 
-// ── Consumer hooks (moved from the deleted selectors.ts façade) ────────────
+// ── Consumer hooks ─────────────────────────────────────────────────────────
 
 /**
- * perf: the per-book reading-list join, indexed. `useBook`'s selector used to
- * walk the whole entries map (up to twice — once for the FK, once for the
- * fuzzy key, re-parsing every title/author) on EVERY store notification, and
- * the reader plus the app-wide control bar hold several of those selectors.
- * The maps are rebuilt only when the entries map's identity moves; join ORDER
- * (FK → exact filename → fuzzy, first match wins) is unchanged.
+ * perf: the per-book reading-list join, indexed. Walking the whole entries map
+ * inside `useBook`'s selector (up to twice — once for the FK, once for the
+ * fuzzy key, re-parsing every title/author) on EVERY store notification would
+ * be costly, and the reader plus the app-wide control bar hold several of
+ * those selectors. The maps are rebuilt only when the entries map's identity
+ * moves; join ORDER (FK → exact filename → fuzzy, first match wins) matches
+ * the projection's.
  */
 const perBookJoin = {
   entries: undefined as Record<string, ReadingListEntry> | undefined,
@@ -371,8 +367,8 @@ function readingListIndex(entries: Record<string, ReadingListEntry>) {
  * synthetic-TOC preference — no progress and no reading-list join.
  *
  * perf: ReaderControlBar is mounted app-wide (RootLayout), so wiring it to the
- * full {@link useBook} join subscribed the pill to `state.progress[id]` — a
- * fresh object on every page turn and every TTS sentence — and re-ran the
+ * full {@link useBook} join would subscribe the pill to `state.progress[id]` — a
+ * fresh object on every page turn and every TTS sentence — and re-run the
  * reading-list join twice per write, even on the library route.
  */
 export interface BookChrome {
@@ -435,9 +431,9 @@ export const useBook = (id: string | null) => {
   // Subscribe to progress changes ONLY for this specific book
   const bookProgressMap = useReadingStateStore(state => id && state.progress ? state.progress[id] : undefined);
 
-  // Get reading list entry — §D join order: bookId FK first (written at
+  // Get reading list entry — join order: bookId FK first (written at
   // registration, backfilled by the v8 linker), exact filename next, the
-  // fuzzy title+author key LAST (pre-linking fallback). One combined
+  // fuzzy title+author key LAST (fallback for FK-less entries). One combined
   // selector so the component subscribes to the RESOLVED entry, not the
   // whole entries map.
   const sourceFilename = book?.sourceFilename;
@@ -474,7 +470,7 @@ export const useBook = (id: string | null) => {
     return {
       ...book,
       id: book.bookId,  // Alias
-      // Prioritize user overrides (Yjs) > Static/Legacy Metadata > Snapshot
+      // Prioritize user overrides (Yjs) > Static Metadata > Snapshot
       title: book.customTitle || staticMeta?.title || book.title,
       author: book.customAuthor || staticMeta?.author || book.author,
       coverBlob: staticMeta?.coverBlob || null,

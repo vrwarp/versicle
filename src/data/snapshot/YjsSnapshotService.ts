@@ -1,20 +1,14 @@
 /**
- * Doc-agnostic Yjs snapshot primitives (Phase 3, D6 in
- * plan/overhaul/prep/phase3-storage-gateway.md).
+ * Doc-agnostic Yjs snapshot primitives.
  *
- * One tested implementation of the capture → validate → apply dance that
- * BackupService, CheckpointService, and the (since-deleted, ADR 0002)
- * android-backup module each hand-rolled:
- * BackupService re-implemented y-idb's store layout with a raw
- * `indexedDB.open('versicle-yjs')` plus a 1000 ms "wait for flush" sleep;
- * CheckpointService span up a temp Y.Doc + temp IndexeddbPersistence and
- * relied on `IDBDatabase.close()` semantics for durability. Both now call
- * these three primitives; the layout knowledge lives in the vendored y-idb
- * fork (`writeSnapshot`), and durability is the fork's commit-awaited
- * contract (packages/y-idb/PROVENANCE.md surgeries 2–3).
+ * One tested implementation of the capture → validate → apply dance shared
+ * by BackupService, CheckpointService, and the staged workspace swap. The
+ * layout knowledge lives in the y-idb fork (`writeSnapshot`), and durability
+ * is the fork's commit-awaited contract: the write promise resolves only
+ * after the transaction has committed.
  *
  * Layering: the LIVE doc is always PASSED IN, never imported — this module
- * must not know about `@store/yjs-provider` (data/ stays below state/, so
+ * must not know about `@store/yjs-provider` (data/ stays below store/, so
  * every primitive here remains importable from the TTS worker and from
  * future non-store contexts). The orchestration (which doc, when to
  * disconnect, when to reload) stays with the callers.
@@ -28,8 +22,8 @@ import { runExclusiveIdbWrite } from '../write-gate';
 export const YJS_DB_NAME = 'versicle-yjs';
 
 /**
- * The durable local staging database for the Phase 4 crash-resumable
- * workspace switch (phase4-sync-strangler.md §D4): the verified remote blob
+ * The durable local staging database for the crash-resumable workspace
+ * switch (domains/sync/workspaces/stagedSwap.ts): the verified remote blob
  * is staged here BEFORE the state machine commits, and the boot
  * interceptor's STAGED arm applies main ← staging idempotently. Named here
  * (next to YJS_DB_NAME) so `wipeAllData` can include it without importing
@@ -128,8 +122,8 @@ export async function readSnapshot(opts?: { dbName?: string }): Promise<Uint8Arr
  *
  * PRECONDITION: no live y-idb binding on `dbName` in THIS tab (the deletion
  * would otherwise block on our own open connection). Other tabs holding the
- * database open delay the deletion — the same exposure the legacy
- * `clearData()` path had.
+ * database open delay the deletion — the same exposure
+ * `persistence.clearData()` has.
  */
 export async function deleteYjsDatabase(opts?: { dbName?: string }): Promise<void> {
   const dbName = opts?.dbName ?? YJS_DB_NAME;

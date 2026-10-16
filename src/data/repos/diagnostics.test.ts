@@ -1,7 +1,6 @@
 /**
- * diagnostics repo contract suite (Phase 3 D5.4 / Test plan R):
- * round-trip, metadata-only projection, and the prune-at-cap invariant
- * carved out of TTSFlightRecorder's raw IDB code.
+ * diagnostics repo contract suite: round-trip, metadata-only projection,
+ * and the prune-at-cap invariant.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { diagnostics, MAX_SNAPSHOTS } from './diagnostics';

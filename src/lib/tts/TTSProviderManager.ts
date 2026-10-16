@@ -6,7 +6,7 @@ import { asLocaleAware, asVoiceDownloadable, resolveDescriptor } from './provide
 import type { ProviderBuildContext } from './providers/registry';
 import { Capacitor } from '@capacitor/core';
 import type { PlaybackBackend, TTSProviderEvents } from './engine/PlaybackBackend';
-// Re-exported for the existing importers (tests, providers).
+// Re-exported for importers that take the events type from this module.
 export type { TTSProviderEvents };
 import type { AudioSink } from './engine/AudioSink';
 import { AudioElementPlayer } from './AudioElementPlayer';
@@ -14,22 +14,20 @@ import { AudioElementPlayer } from './AudioElementPlayer';
 /**
  * Supplies the construction inputs (API key, language) for a provider id. The
  * composition roots inject a store-backed source
- * (`@app/tts/providerBuildContext`); lib/tts itself never reads a store — the
- * 5a-PR3 ctx-passing flip that deleted `providerFactory.ts` and its
- * lib→store edge.
+ * (`@app/tts/providerBuildContext`); lib/tts itself never reads a store.
  */
 export type ProviderBuildContextSource = (providerId: string) => Omit<ProviderBuildContext, 'sink'>;
 
 
 /**
- * Manages the lifecycle and selection of Text-to-Speech providers: a dumb holder
- * (Phase 5a-PR2). On swap it detaches its listener from and disposes the outgoing
+ * Manages the lifecycle and selection of Text-to-Speech providers: a dumb holder.
+ * On swap it detaches its listener from and disposes the outgoing
  * provider, and injects ONE shared {@link AudioSink} into providers that play
  * synthesized audio. It normalizes provider events (interruption filtering) and
  * rethrows play failures as typed {@link ProviderPlaybackError}s — it performs NO
  * self-swap and emits NO synthetic `{type:'fallback'}` events. The fallback POLICY
  * lives in the engine (`PlaybackController.recoverWithLocalProvider`), which calls
- * back through {@link setProviderById} — the S2 double-fire is structurally dead.
+ * back through {@link setProviderById}, so a failure is recovered exactly once.
  */
 export class TTSProviderManager implements PlaybackBackend {
     private provider: ITTSProvider;
@@ -104,7 +102,7 @@ export class TTSProviderManager implements PlaybackBackend {
     /**
      * Starts playback of the given text. Resolves when audible playback starts.
      *
-     * Single failure path (5a-PR2): a failure to start REJECTS exactly once —
+     * Single failure path: a failure to start REJECTS exactly once —
      * interruptions rethrow raw (never fallback-worthy); real failures rethrow as
      * {@link ProviderPlaybackError} with the failing provider's id. No self-swap,
      * no `{type:'fallback'}` event: the engine decides whether to recover.
@@ -174,9 +172,9 @@ export class TTSProviderManager implements PlaybackBackend {
     /**
      * Explicitly sets the provider instance (in-process/test seam).
      *
-     * Swap hygiene (5a-PR2): the outgoing provider's listener is detached and the
+     * Swap hygiene: the outgoing provider's listener is detached and the
      * provider disposed BEFORE the incoming one wires up — a stale provider can
-     * neither emit into the engine nor hold engine resources (S12 leak).
+     * neither emit into the engine nor hold engine resources.
      *
      * @param {ITTSProvider} provider The new provider to use.
      */
@@ -207,7 +205,7 @@ export class TTSProviderManager implements PlaybackBackend {
 
     /**
      * Voice download routing, driven by the registry's capability descriptor
-     * ({@link asVoiceDownloadable}) instead of `id === 'piper' … as any` probing.
+     * ({@link asVoiceDownloadable}), not by probing provider ids.
      * Non-capable providers are a silent no-op (their voices aren't artifacts).
      */
     async downloadVoice(voiceId: string): Promise<void> {
@@ -226,9 +224,9 @@ export class TTSProviderManager implements PlaybackBackend {
 
     /**
      * Whether the voice's artifact is present locally. `false` for providers without
-     * downloadable voices — the pre-registry `true` was a UI lie ("downloaded" for
-     * voices that aren't artifacts at all); the settings UI gates the download panel
-     * on the descriptor capability, never on this answer.
+     * downloadable voices (their voices aren't artifacts, so "downloaded" would be a
+     * lie); the settings UI gates the download panel on the descriptor capability,
+     * never on this answer.
      */
     async isVoiceDownloaded(voiceId: string): Promise<boolean> {
         const downloadable = asVoiceDownloadable(this.provider);

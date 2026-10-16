@@ -4,16 +4,13 @@ import type { Annotation } from '~types/user-data';
  * compassMachine — the explicit state-transition model for the compass pill
  * (the ReaderControlBar variant router).
  *
- * Before this module, the rendered pill variant emerged from three overlapping
- * sources of truth: an imperative `compassState.variant` override written from
- * eight call sites, a separate `popover.visible` boolean that implied the
- * annotation toolbar, and the ambient reader conditions. Which variant showed
- * depended on the ORDER those writers fired in ("reset before showPopover on
- * every fresh gesture") and on how a mode was entered (acting on a
- * highlight-tap left a stale 'annotation' override behind; a triage variant
- * without its payload rendered nothing at all).
+ * The rendered pill variant is derived from ONE explicit interaction state
+ * plus the ambient reader conditions, so it never depends on the ORDER in
+ * which writers fired or on how a mode was entered (acting on a highlight-tap
+ * must not leave a stale 'annotation' mode behind; a triage variant without
+ * its payload is unrepresentable).
  *
- * The model here splits the decision into two layers:
+ * The model splits the decision into two layers:
  *
  *  1. INTERACTION (this machine) — what the user is doing right now:
  *     `idle`, `annotation` (selection toolbar / note editor), `vocab-triage`
@@ -28,9 +25,7 @@ import type { Annotation } from '~types/user-data';
  *     summary, or nothing.
  *
  * `resolvePillVariant` combines them with ONE rule: a live interaction always
- * outranks ambient state. (This also ends the old path-dependent ranking
- * where sync-alert beat a selection toolbar opened by selecting text but lost
- * to the same toolbar opened by tapping a highlight.)
+ * outranks ambient state, however the interaction was entered.
  */
 
 /** Selection payload carried by the selection-owning modes. */
@@ -127,9 +122,9 @@ export function transitionCompass(
     case 'OUTSIDE_TAP':
     case 'CONTEXT_INVALIDATED':
       // Every way out lands in the same place. In particular ACTION_COMMITTED
-      // always returns to idle — under the old model, acting on a tapped
-      // highlight (play/copy/delete/pronounce) cleared only the popover and
-      // left the 'annotation' variant override stuck on screen.
+      // always returns to idle — acting on a tapped highlight
+      // (play/copy/delete/pronounce) must not leave the annotation toolbar
+      // stuck on screen.
       return state.mode === 'idle' ? state : COMPASS_IDLE;
   }
 }
@@ -139,7 +134,7 @@ export function transitionCompass(
  * iframe (the annotation toolbar and the vocab card both operate on one).
  * Leaving these modes is the signal to clear the engine selection.
  * `audio-triage` manages its own programmatic selection via the engine and
- * is deliberately NOT included (parity with the old popover.visible flag).
+ * is deliberately NOT included.
  */
 export function compassOwnsSelection(
   state: CompassInteraction,

@@ -1,8 +1,7 @@
 /**
  * WorkerTtsEngine — the worker-resident host for the TTS orchestration brain.
  *
- * It constructs the real {@link PlaybackController} DIRECTLY inside the Worker
- * (5b-PR4: the AudioPlayerService façade is gone), wired to:
+ * It constructs the real {@link PlaybackController} DIRECTLY inside the Worker, wired to:
  *  - a {@link WorkerEngineContext} (host state replicated from the main thread), and
  *  - a *proxy* {@link PlaybackBackend} + {@link MediaPlatform} whose methods call back to the
  *    main thread (where the real providers, `HTMLAudioElement`, and `navigator.mediaSession`
@@ -187,7 +186,7 @@ export class WorkerTtsEngine {
     }
 
     // --- Engine API (invoked by the main thread over Comlink) ---
-    // PlaybackSnapshots structured-clone across the boundary as-is (5b-PR2: the
+    // PlaybackSnapshots structured-clone across the boundary as-is (the
     // single snapshot channel). The unsubscribe function must cross the boundary
     // as a Comlink proxy, not be serialized.
     subscribe(listener: SnapshotListener): () => void {
@@ -201,7 +200,7 @@ export class WorkerTtsEngine {
     /**
      * Fire-and-forget across the boundary, like every navigation command: the
      * Comlink call resolves after the engine's SYNCHRONOUS context switch
-     * (epoch bump + currentBookId + load kickoffs, 5b-PR3); the sequenced
+     * (epoch bump + currentBookId + load kickoffs); the sequenced
      * stop/reset completion is observable on the snapshot channel. Awaiting
      * the reset task here would let a caller deadlock the sequencer against a
      * task parked on the old book's still-loading playlist.
@@ -231,7 +230,7 @@ export class WorkerTtsEngine {
     deleteVoice(voiceId: string): Promise<void> { return this.e.deleteVoice(voiceId); }
     isVoiceDownloaded(voiceId: string): Promise<boolean> { return this.e.isVoiceDownloaded(voiceId); }
 
-    // --- Diagnostics (5b §5b.6, the S9 fix): the WORKER-side flight recorder
+    // --- Diagnostics: the WORKER-side flight recorder
     // is the one that sees engine traffic; the main thread reads it through
     // these methods via the handle, never through its own module singleton. ---
     exportDiagnostics(): Promise<FlightRecorderExport> { return this.e.exportDiagnostics(); }

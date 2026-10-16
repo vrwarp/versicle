@@ -74,11 +74,11 @@ describe('WorkerEngineContext (replicated-state context for the worker)', () => 
 
     describe('regression: a book-scoped analysis map replaces only that book', () => {
         // The host's live subscription is scoped to the OPEN book, so its multi-change
-        // fallback carries that book's map — but the map form used to replace the WHOLE
-        // cache. Every other book's boot-replicated entries went with it, and a book switch
-        // pushes language + progress only (never analysis), so they never came back: the
-        // AnalysisApplier then found nothing on section load and neither applied nor cleared
-        // the skip mask and table adaptations.
+        // fallback carries that book's map — which must not replace the WHOLE cache.
+        // Otherwise every other book's boot-replicated entries would go with it, and a book
+        // switch pushes language + progress only (never analysis), so they would never come
+        // back: the AnalysisApplier would then find nothing on section load and neither
+        // apply nor clear the skip mask and table adaptations.
         const boot = () => {
             const { ctx } = makeCtx();
             const entries = {

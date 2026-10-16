@@ -1,8 +1,7 @@
 /**
  * Sentence extraction — the INGESTION-side half of TTS content preparation
- * (Phase 5c; phase5-tts-strangler.md §5c.1, relocated from src/lib/tts/).
- * The final `src/domains/library/ingestion/` address arrives with the Phase 7
- * rewrite; this is the one move (README "nothing moves twice").
+ * (contract C8): walks a chapter's DOM and produces sentences with their CFIs,
+ * plus the citation markers suppressed from spoken text.
  */
 import { TextSegmenter } from '../tts/TextSegmenter';
 import { Sanitizer } from '../tts/processors/Sanitizer';
@@ -11,20 +10,20 @@ import type { SentenceNode, ExtractionResult, CitationMarker } from '~types/tts-
 
 const logger = createLogger('TTS-Utils');
 
-// Consumption types live in the types layer since 5c-PR4 (the engine →
-// extractor reverse type-import died); re-exported for ingestion-side callers.
+// Consumption types live in the types layer (so the TTS engine never imports
+// the extractor); re-exported for ingestion-side callers.
 export type { SentenceNode, ExtractionResult,  };
 
 /**
  * Version of the sentence-extraction algorithm, stamped onto newly written
  * `cache_tts_preparation` rows (`CacheTtsPreparation.extractionVersion`).
  *
- * v3 ("raw at rest", 5c-PR4): rows store UNREFINED sentences — the ingest-time
- * refineSegments pass (which baked the import-time abbreviation/starter
- * settings into persisted rows) is gone. Playback always refines against the
- * CURRENT settings (SectionQueueBuilder), so v1/v2 rows keep working — they
- * were simply refined once more than necessary. Old rows are RETAINED (the
- * graft rule); the background re-ingestion driver is Phase 7 scope.
+ * v3 ("raw at rest"): rows store UNREFINED sentences — no ingest-time
+ * refineSegments pass bakes the import-time abbreviation/starter settings into
+ * persisted rows. Playback always refines against the CURRENT settings
+ * (SectionQueueBuilder), so v1/v2 rows keep working — they were simply refined
+ * once more than necessary. Old rows are retained until the re-ingestion wave
+ * (`src/domains/library/reingest.ts`) replaces them.
  *
  * v2: segmentation offsets are computed against the RAW text (NFKD applies only
  * to the outbound sentence text), so Range/CFI positions are correct for
@@ -47,8 +46,8 @@ const CITATION_TEXT_RE = /^\[?\(?\d{1,3}\)?\]?$|^[*†‡§¶]+$/;
  *  - marker: full marker metadata, present only when a CFI could be generated.
  *
  * Suppression is intentionally decoupled from capture: a qualifying <sup>/<a>
- * is always suppressed even if CFI generation fails (matching legacy behavior),
- * but it is only recorded as a marker when its CFI is available.
+ * is always suppressed even if CFI generation fails, but it is only recorded
+ * as a marker when its CFI is available.
  */
 interface CitationDetection {
     isCitation: boolean;
@@ -90,8 +89,8 @@ const CITATION_ALLOWED_TEXT_RE = /^[\s\d()[\]*†‡§¶]*$/;
  * `el.textContent`, or null as soon as a character appears that
  * CITATION_TEXT_RE could never match — such a character is not whitespace, so
  * it survives the trim and the regex is guaranteed to fail. Detection runs on
- * every <sup>/<sub>/<a>/<span> of every chapter, and a <span> wrapping a
- * whole paragraph used to be flattened into a string just to fail that test.
+ * every <sup>/<sub>/<a>/<span> of every chapter, so a <span> wrapping a whole
+ * paragraph is rejected without being flattened into a string first.
  */
 function citationCandidateText(el: Element): string | null {
     let text = '';
@@ -295,9 +294,9 @@ function createExtractionRun(
 
         // Segments arrive in order, so the node cursor only ever moves
         // FORWARD: the node holding the previous segment's start is the
-        // earliest one this segment's start can be in. (The old loop restarted
-        // from node 0 for every segment — O(segments × nodes) per block, which
-        // is quadratic in a long paragraph of many inline runs.)
+        // earliest one this segment's start can be in. (Restarting from node 0
+        // for every segment would be O(segments × nodes) per block — quadratic
+        // in a long paragraph of many inline runs.)
         let startIndex = 0;
         let startBase = 0;
 
@@ -320,8 +319,7 @@ function createExtractionRun(
                 startBase += textNodes[startIndex].length;
                 startIndex += 1;
             }
-            // Past the end of the buffered nodes: the old loop left startSet
-            // false and dropped the sentence.
+            // Start lies past the end of the buffered nodes: drop the sentence.
             if (startIndex >= textNodes.length) continue;
 
             let endIndex = startIndex;
@@ -330,7 +328,7 @@ function createExtractionRun(
                 endBase += textNodes[endIndex].length;
                 endIndex += 1;
             }
-            if (endIndex >= textNodes.length) continue; // endSet false
+            if (endIndex >= textNodes.length) continue; // end lies past the buffered nodes
 
             const range = doc.createRange();
             range.setStart(textNodes[startIndex].node, Math.max(0, start - startBase));
@@ -443,8 +441,8 @@ export const extractSentencesFromNode = (
  *
  * The synchronous pass is one unbroken traversal of a whole chapter — DOM
  * walk, Intl.Segmenter, sanitization, createRange and a CFI per sentence —
- * and the offscreen renderer could only yield BETWEEN chapters, so a
- * single-XHTML book blocked the main thread for the entire book. `control`
+ * so yielding only BETWEEN chapters would let a single-XHTML book block the
+ * main thread for the entire book. `control`
  * is consulted at each block boundary; the output is byte-identical to
  * {@link extractSentencesFromNode} (the C8 fixtures pin it).
  */

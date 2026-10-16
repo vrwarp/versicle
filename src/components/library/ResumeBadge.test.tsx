@@ -67,10 +67,10 @@ describe('ResumeBadge Performance', () => {
   });
 
   /**
-   * F5(b): the badge used to subscribe to the WHOLE `devices` map, so every
-   * device write — including the rolling embed-spend publisher, which fires per
-   * embedding request — re-rendered one badge per mounted book card. It renders
-   * exactly two fields of ONE device; only those are subscribed now.
+   * The badge renders exactly two fields of ONE device, so only those are
+   * subscribed. Subscribing to the WHOLE `devices` map would re-render one
+   * badge per mounted book card on every device write — including the rolling
+   * embed-spend publisher, which fires per embedding request.
    */
   describe('regression: an unrelated device write does not re-render the badge', () => {
     const renderCounted = () => {

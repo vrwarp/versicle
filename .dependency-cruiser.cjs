@@ -1,11 +1,11 @@
 /**
- * Boundary-enforcement ruleset (Phase 0 of plan/overhaul/README.md).
+ * Boundary-enforcement ruleset (plan/overhaul/README.md).
  *
  * This encodes the master plan §2 boundary rules (the C12 layering &
- * worker-purity contract). End state (P9): every rule whose count
- * reached zero is severity "error"; the two named legacy ratchets
- * (lib-not-to-store, worker-no-state-typegraph) stay "warn" with their
- * counts frozen in .dependency-cruiser-baseline.json (decrease-only).
+ * worker-purity contract). Every rule whose count is zero is severity
+ * "error"; the two named ratchets (lib-not-to-store,
+ * worker-no-state-typegraph) stay "warn" with their counts frozen in
+ * .dependency-cruiser-baseline.json (decrease-only).
  * The rule -> enforcement table lives in
  * plan/overhaul/prep/phase9-close.md §3.
  *
@@ -95,10 +95,6 @@ module.exports = {
       from: { path: '^src/lib' },
       to: { path: '^src/(components|layouts)' },
     },
-    // `db-not-to-store` was retired at Phase 3 exit (P3-12): src/db/** is
-    // deleted (the wipe's dynamic store/sync imports — the rule's last
-    // violation — became the data/wipe.ts hook registry, D9).
-    // `components-not-to-db` followed at P9: vacuous since the same deletion.
     {
       name: 'data-no-upward',
       severity: 'error',
@@ -167,26 +163,26 @@ module.exports = {
         'asserted post-build by `npm run check:worker-chunk`.',
       from: { path: '^src/workers' },
       to: {
-        // packages/zustand-middleware-yjs and packages/y-idb are the
-        // VENDORED forks (Phase 2 / Phase 3): since vendoring, they resolve
-        // to packages/…/src, not node_modules — keep them inside this rule
-        // (and includeOnly below) so the worker type-graph ratchet cannot
-        // silently lose them. y-idb in the worker closure means a second
-        // Y.Doc persistence inside the worker — the exact data-corruption
-        // scenario the rule exists for.
+        // zustand-middleware-yjs and y-idb are the forked packages (the
+        // `packages/…` alternatives match a workspace checkout of them;
+        // installed from git they resolve under node_modules/, where only
+        // the `node_modules/zustand` / `node_modules/yjs` prefixes apply):
+        // keep them inside this rule (and includeOnly below) so the worker
+        // type-graph ratchet cannot silently lose them. y-idb in the worker
+        // closure means a second Y.Doc persistence inside the worker — the
+        // exact data-corruption scenario the rule exists for.
         path: '^(src/store|packages/(zustand-middleware-yjs|y-idb)|node_modules/zustand|node_modules/yjs)',
         reachable: true,
       },
     },
   ],
   options: {
-    // The vendored workspaces (zustand-middleware-yjs, y-idb) are treated
-    // exactly like the external dependencies they replaced (Phase 2/3
-    // vendoring): visible as boundary targets (includeOnly + the worker rule
-    // above) but not cruised internally — their internal layering is each
-    // package's own concern, and following them would inflate the per-module
-    // violation counts the ratchet baseline froze (1 entry module ≙ the old
-    // node_modules leaf).
+    // The forked packages (zustand-middleware-yjs, y-idb) are treated
+    // exactly like external dependencies: visible as boundary targets
+    // (includeOnly + the worker rule above) but not cruised internally —
+    // their internal layering is each package's own concern, and following
+    // them would inflate the per-module violation counts the ratchet
+    // baseline froze (1 entry module ≙ one node_modules leaf).
     doNotFollow: { path: 'node_modules|^packages/(zustand-middleware-yjs|y-idb)' },
     // Only cruise production source; tests/e2e/tooling are out of scope for
     // the layering contract.
@@ -198,13 +194,13 @@ module.exports = {
         '\\.test\\.(ts|tsx)$',
         '^src/test',
         '^src/setupTests\\.ts$',
-        // the vendored fork's ported upstream specs
+        // spec files, e.g. a forked package's upstream specs
         '\\.spec\\.(ts|tsx)$',
       ],
     },
     // Include type-only imports in the graph: the types-layer and cycle
     // rules are specifically about `import type` poisoning (LD-1), and the
-    // worker runtime rule filters them back out via viaOnly.
+    // no-circular-runtime rule filters them back out via viaOnly.
     tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.app.json' },
     enhancedResolveOptions: {

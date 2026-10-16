@@ -1,6 +1,6 @@
 /**
- * The HEAVY half of the sync composition root (Phase 8 §A first-use
- * splitting): this module statically imports the firebase-backed pieces
+ * The HEAVY half of the sync composition root (first-use splitting): this
+ * module statically imports the firebase-backed pieces
  * (SyncOrchestrator → AuthSession → firebase/auth; FirestoreBackend →
  * firebase/firestore+storage) and is reachable ONLY through the dynamic
  * import in createSync.ts — un-configured users (sync off) never download
@@ -8,8 +8,7 @@
  * boot task body. Check 4 of scripts/check-worker-chunk.mjs asserts the
  * emitted entry chunk stays firebase-free.
  *
- * Everything in here moved verbatim from the pre-P8 createSync.ts; the
- * port-adapter wiring commentary lives there.
+ * The port-adapter wiring commentary lives in createSync.ts.
  */
 import {
   createSyncOrchestrator,
@@ -53,8 +52,7 @@ export function composeSyncOrchestrator(args: ComposeSyncArgs): ComposedSync {
     whenLocalSynced: () => waitForYjsSync(),
     onObsolete: handleObsoleteClient,
     currentSchemaVersion: CURRENT_SCHEMA_VERSION,
-    // merge-defaults hydration guarantees `books` is always present
-    // (flip wave 4) — the old `|| {}` fallback canary is gone.
+    // merge-defaults hydration guarantees `books` is always present.
     isCleanClient: () => Object.keys(useBookStore.getState().books).length === 0,
     isEnabled: args.isEnabled,
     debounceOverrideMs: () => getFirestoreDebounceOverrideMs() || 0,

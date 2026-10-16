@@ -8,14 +8,14 @@ import type { ContentType } from '~types/content-analysis';
 import type { QuotaLimits, LaneUsage } from '@kernel/quota';
 
 /**
- * GenAI configuration + activity-log store (Phase 7 §H, privacy D3/GG-3).
+ * GenAI configuration + activity-log store.
  *
- * PERSISTENCE CONTRACT (PR-A5): `partialize` is an explicit ALLOWLIST —
- * settings only. `logs` is an in-memory ring buffer (`maxLogs`-capped) that
- * is NEVER persisted THROUGH THIS STORE: the pre-Phase-7 spread-partialize
- * wrote full prompts — book text and base64 table screenshots — to plaintext
- * localStorage unconditionally, with quadratic re-serialization on every
- * set() and latent QuotaExceededError corruption. Entries arrive PRE-REDACTED
+ * PERSISTENCE CONTRACT: `partialize` is an explicit ALLOWLIST — settings
+ * only. `logs` is an in-memory ring buffer (`maxLogs`-capped) that is NEVER
+ * persisted THROUGH THIS STORE: a spread-partialize would write full prompts
+ * — book text and base64 table screenshots — to plaintext localStorage
+ * unconditionally, with quadratic re-serialization on every set() and latent
+ * QuotaExceededError corruption. Entries arrive PRE-REDACTED
  * from the GenAI client (inlineData → {byteCount, hash} — domains/google/
  * genai/logging.ts). persist version 1 strips `logs`/`usageStats` from
  * existing blobs on rehydrate (strip-only, tolerated by older code reading
@@ -29,10 +29,11 @@ import type { QuotaLimits, LaneUsage } from '@kernel/quota';
  * above. The partialize allowlist here still excludes `logs`.
  *
  * `apiKey` stays in the allowlist deliberately (BYO-key product model);
- * secrets isolation is the privacy report's D11, out of Phase 7 scope.
+ * secrets isolation (plaintext credentials in localStorage) is a known gap,
+ * see D11 in plan/overhaul/analysis/gap-privacy-posture-data-egress-ma.md.
  *
- * The store no longer configures any singleton: the GeminiClient reads
- * config PER CALL via the provider wired in src/app/google/wireGoogle.ts.
+ * The store configures no singleton: the GeminiClient reads config PER CALL
+ * via the provider wired in src/app/google/wireGoogle.ts.
  *
  * Quota config: the plain-data quota fields (`quotaLimits`,
  * `bgThrottlePercent`, `fgRpdHeadroom`, `pauseAllGenAI`) ARE in the allowlist
@@ -216,7 +217,7 @@ export const DEFAULT_QUOTA_LIMITS: Record<string, QuotaLimits> = {
 
   // --- Text-out models ---------------------------------------------------
   // `gemini-flash-lite-latest` is the app's DEFAULT model and a real alias
-  // endpoint, so it needs its own pool: without one it fell through to
+  // endpoint, so it needs its own pool: without one it would fall through to
   // `default` (100 rpm / 1000 rpd) — ~7x the real Flash-Lite ceiling. Google
   // bills the alias against whichever Flash-Lite it resolves to, and both
   // current Flash-Lite generations carry the same 15/250K/500 free tier, so
@@ -456,9 +457,9 @@ export const useGenAIStore = create<GenAIState>()(
       version: 5,
       // Deduped: `logs` is an in-memory ring buffer OUTSIDE the allowlist
       // below, but persist re-serializes and re-writes the whole settings blob
-      // after every set — so each log line (GenAI request, embedding request,
-      // TTS worker log) used to cost a JSON.stringify of ~20 keys plus a
-      // synchronous localStorage commit of an unchanged payload.
+      // after every set — so without dedup each log line (GenAI request,
+      // embedding request, TTS worker log) would cost a JSON.stringify of ~20
+      // keys plus a synchronous localStorage commit of an unchanged payload.
       storage: createDedupedJSONStorage<PersistedGenAIState>(),
       partialize: (state): PersistedGenAIState => ({
         apiKey: state.apiKey,

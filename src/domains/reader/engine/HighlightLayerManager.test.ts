@@ -1,8 +1,7 @@
 /**
- * HighlightLayerManager unit suite (Phase 6 §4): per-layer bookkeeping,
- * idempotent add, layer isolation, the ONE orphan sweep (tts only), and the
- * preserved epub.js call shapes (5-arg vs 6-arg) the entry-gate
- * characterization pins depend on.
+ * HighlightLayerManager unit suite: per-layer bookkeeping, idempotent add,
+ * layer isolation, the ONE orphan sweep (tts only), and the epub.js call
+ * shapes (5-arg vs 6-arg).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 // @ts-expect-error — epubjs ships declarations only for its package barrel
@@ -216,8 +215,9 @@ describe('regression: TTS highlight never draws after a remove with no views mou
 describe('regression: stopping TTS erased the reading-history highlight on the sentence it left', () => {
   // A pause records the spoken sentence as lastPlayedCfi and the history layer
   // draws it while the TTS highlight still sits on that same sentence. epub.js
-  // keys both by `cfi + 'highlight'`, so the stop's TTS remove used to delete
-  // the history mark too, while the history layer still believed it was drawn
+  // keys both by `cfi + 'highlight'`, so without redrawSharers the stop's TTS
+  // remove would delete the history mark too, while the history layer still
+  // believed it was drawn
   // (surfaced by the E2E suite under parallel load).
   const SPOKEN = 'epubcfi(/6/4!/4/2/1:0)';
 

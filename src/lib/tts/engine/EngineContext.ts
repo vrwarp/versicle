@@ -3,23 +3,23 @@
  * environment (React/Zustand stores, native platform bridges).
  *
  * The engine core (PlaybackController, SectionAnalysisDriver, TableAdaptationProcessor)
- * must reach the outside world ONLY through this interface — including, since the
- * 5b decomposition, its storage reads/writes: {@link BookContentPort} (derived
- * content reads) and {@link SessionStore} (the playback-session persistence with
- * the WebKit-detach discipline). The production implementations wrap the
- * `src/data` repos (see engine/repoPorts.ts — worker-safe, both threads use the
- * same modules); tests inject in-memory fakes, which is what lets the engine-dir
- * `vi.mock` allowlist sit at ZERO (phase5 doc N3 deadline).
+ * must reach the outside world ONLY through this interface — including its storage
+ * reads/writes: {@link BookContentPort} (derived content reads) and
+ * {@link SessionStore} (the playback-session persistence with the WebKit-detach
+ * discipline). The production implementations wrap the `src/data` repos (see
+ * engine/repoPorts.ts — worker-safe, both threads use the same modules); tests
+ * inject in-memory fakes, which is what lets `vi.mock` be lint-banned in the
+ * engine directory.
  *
- * Two implementations exist:
- *  - `createZustandEngineContext()` — the production wiring. Forwards every call to the
- *    real stores / Capacitor, so behavior is identical to the pre-refactor code and
- *    existing module-level store mocks in tests keep working unchanged.
+ * Three implementations exist:
+ *  - `createZustandEngineContext()` — the main-thread wiring. Forwards every call to the
+ *    real stores / Capacitor, so module-level store mocks in tests keep intercepting
+ *    those reads/writes.
+ *  - `WorkerEngineContext` — the production worker implementation: serves the synchronous
+ *    getters from state replicated over a message port.
  *  - `FakeEngineContext` — a deterministic in-memory implementation for unit tests.
  *
- * When the engine later moves into a worker (Phase 5), a third implementation backed by
- * a message port replaces the Zustand one; the engine code does not change because it
- * only ever sees this interface.
+ * The engine code does not change between them because it only ever sees this interface.
  *
  * All argument/return types are derived from the existing store signatures via `typeof`
  * type queries on type-only imports. These imports are erased at runtime and create no
@@ -44,12 +44,10 @@ export type { SectionAnalysis, TableAdaptation, LexiconRule, ContentAnalysis, Bo
 // --- Snapshot / argument types ---
 
 /**
- * The EXPLICIT data-only TTS settings payload the engine consumes (Phase 5b
- * store split; phase5-tts-strangler.md §5b.5, engine D14 second half). This
- * replaced `ReturnType<typeof useTTSStore.getState>` — the engine no longer
- * type-depends on the store shape, and the replication slice pushes exactly
- * these fields instead of `plain(getState())`'s everything-including-the-queue.
- * The field list is the grep audit of `ctx.config.getSettings()` accesses
+ * The EXPLICIT data-only TTS settings payload the engine consumes. The engine
+ * does not type-depend on the settings store's shape, and the replication slice
+ * pushes exactly these fields rather than the whole store state.
+ * The field list covers the `ctx.config.getSettings()` accesses
  * (the queue-building path: segmentation lists, Bible flag, per-language profile
  * minSentenceLength) plus the sanitization flag the extraction options accept.
  */
@@ -142,13 +140,13 @@ export interface GenAIPort {
     subscribe(listener: () => void): () => void;
     /** Whether the underlying GenAI client currently holds a usable configuration. */
     isConfigured(): Promise<boolean> | boolean;
-    /** Configure the underlying GenAI client (no-op if the host rejects the key). */
+    /** Configure the underlying GenAI client (a deliberate no-op in the production hosts, which read config per call). */
     configure(apiKey: string, model: string): void;
     /**
      * Classify content groups (main text vs references/footnotes…) via the
      * model. `context.bookId` flows to the NetworkGateway's per-book consent
-     * gate (P9 threading — phase7 §Follow-ups item 3); callers MUST pass it
-     * so un-consented books are denied at the egress boundary.
+     * gate; callers MUST pass it so un-consented books are denied at the
+     * egress boundary.
      */
     detectContentTypes(
         nodes: { id: string; sampleText: string; leadsWithMarker?: boolean }[],
@@ -227,9 +225,9 @@ interface ReaderUIPort {
  * boundary) without importing the store. Applying rules to text is done locally via the
  * yjs-free LexiconApplier.
  *
- * 5c-PR3: the port serves {@link CompiledLexicon} value objects (stable identity per
+ * The port serves {@link CompiledLexicon} value objects (stable identity per
  * (bookId, language, store version)) and exposes an invalidation stream so a mid-playback
- * rule edit reaches the engine (S15) — the controller drops its handle and refetches on the
+ * rule edit reaches the engine — the controller drops its handle and refetches on the
  * next sentence.
  */
 interface LexiconPort {
@@ -241,8 +239,8 @@ interface LexiconPort {
 
 /**
  * Native platform detection and capability requests. NOTE: this is distinct from the
- * audio-output `PlatformPort` introduced in Phase 3 — this port is only about *which*
- * platform we're on and one-shot native capability prompts.
+ * media-session/background-audio `MediaPlatform` (see ../PlatformIntegration.ts) — this
+ * port is only about *which* platform we're on and one-shot native capability prompts.
  */
 interface PlatformInfoPort {
     /** 'web' | 'ios' | 'android'. */
@@ -279,13 +277,11 @@ export interface PlaybackSessionRow {
 }
 
 /**
- * SessionStore — the playback-session persistence port (Phase 5b decomposition;
- * phase5-tts-strangler.md §5b.1). The ONE owner of `cache_session_state`
- * traffic in the engine: restore reads, queue writes, and pause-time writes
- * all flow through here (this closes the P3 dual-owner gap where
- * AudioPlayerService and the QueueModel each talked to `playbackCache`).
+ * SessionStore — the playback-session persistence port. The ONE owner of
+ * `cache_session_state` traffic in the engine: restore reads, queue writes, and
+ * pause-time writes all flow through here.
  *
- * ## The WebKit-detach discipline (preserved VERBATIM from the legacy engine)
+ * ## The WebKit-detach discipline
  *
  * The `cache_session_state` IndexedDB write can hang indefinitely on WebKit
  * (its transaction never settles — see src/data/repos/playbackCache.ts, the
@@ -323,8 +319,8 @@ export interface EngineContext {
     readerUI: ReaderUIPort;
     lexicon: LexiconPort;
     platform: PlatformInfoPort;
-    /** Derived-content reads (5b decomposition; replaces direct repo imports). */
+    /** Derived-content reads (repo-backed). */
     content: BookContentPort;
-    /** Playback-session persistence (5b decomposition; the single session owner). */
+    /** Playback-session persistence (the single session owner). */
     session: SessionStore;
 }

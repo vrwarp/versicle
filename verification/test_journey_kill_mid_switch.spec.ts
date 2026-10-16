@@ -18,9 +18,9 @@
  *
  * Runs in the Docker/nightly verification lane (run_verification.sh) like
  * every journey here; the vitest half of the acceptance gate is
- * src/domains/sync/workspaces/stagedSwap.test.ts. One WebKit-lane run is
- * required for P4-5 exit (IDB semantics differ — the playwright.config
- * `webkit` project picks this spec up automatically).
+ * src/domains/sync/workspaces/stagedSwap.test.ts. IDB semantics differ on
+ * WebKit, and the playwright.config `webkit` project picks this spec up
+ * automatically.
  */
 import type { BrowserContext, Page } from "@playwright/test";
 import { test, expect } from "./utils";
@@ -44,9 +44,8 @@ async function openAppPage(context: BrowserContext, pause?: PausePoint): Promise
   return page;
 }
 
-// Bypass an intro dialog if one is up. The app no longer shows one at boot
-// (its only "Continue" buttons are action confirms), so probe without the old
-// 2s click timeout that every call burned.
+// Bypass an intro dialog if one is up. The app shows none at boot (its only
+// "Continue" buttons are action confirms), so this just probes visibility.
 async function dismissIntroDialog(page: Page): Promise<void> {
   const intro = page.getByRole("button", { name: "Continue" });
   if (await intro.isVisible()) {
@@ -151,7 +150,7 @@ test("journey kill-mid-switch: every crash window resumes; rollback restores the
   await page4.getByRole("button", { name: "Roll Back" }).dispatchEvent("click");
 
   // The boot interceptor restores the pinned checkpoint and reverts the
-  // active-workspace tie (previousWorkspaceId, P4-5) — the user is back on
+  // active-workspace tie (previousWorkspaceId) — the user is back on
   // My Library with their data.
   await expect(page4.locator("[data-testid^='book-card-']").first()).toBeVisible({
     timeout: 60000,

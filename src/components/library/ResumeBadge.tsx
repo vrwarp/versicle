@@ -55,8 +55,8 @@ export const ResumeBadge: React.FC<ResumeBadgeProps> = React.memo(({ allProgress
     return bestRemote;
   }, [allProgress, currentDeviceId]);
 
-  // Subscribing to the whole `devices` map re-rendered EVERY mounted badge on
-  // any device write — and the rolling embed-spend publisher writes that map
+  // Subscribing to the whole `devices` map would re-render EVERY mounted badge
+  // on any device write — and the rolling embed-spend publisher writes that map
   // during a backfill. Only the resolved remote's two RENDERED fields are
   // subscribed here; useShallow keeps the reference while they are unchanged,
   // so an unrelated device (or another field of this one) notifies nothing.

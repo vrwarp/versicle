@@ -143,7 +143,7 @@ describe('TOCPanel', () => {
 
     describe('regression: unresolved entries render greyed out and toast on click', () => {
         // A TOC link that lands nowhere in the book (missing file, or a
-        // document outside the spine) used to look normal and silently do
+        // document outside the spine) must not look normal and silently do
         // nothing. It stays visible — the book's structure is still useful —
         // but greyed, with a tooltip, and a click explains instead of jumping.
         const brokenToc: NavigationItem[] = [

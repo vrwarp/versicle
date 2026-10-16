@@ -1,23 +1,24 @@
 #!/usr/bin/env node
 /**
- * Emitted-artifact purity checks (master plan §2 rules 6 + 9; C12).
+ * Emitted-artifact purity checks (master plan §2 boundary rules 6 + 9; C12).
  *
- * Four assertions over the production build:
+ * Five assertions over the production build:
  *  1. WORKER PURITY — the TTS worker chunk closure contains no
  *     zustand/yjs/src-store code (details below).
- *  2. PROD MOCK PURITY (P4-2, phase4-sync-strangler.md §D1) — NO production
- *     chunk contains MockBackend/MockFireProvider. The mock sync backend is
+ *  2. PROD MOCK PURITY — NO production chunk contains
+ *     MockBackend/MockFireProvider/MockGenAIClient. The mock sync backend is
  *     reachable only through the composition root's dynamic import inside an
  *     `import.meta.env.DEV || VITE_E2E` branch (src/app/sync/createSync.ts);
  *     this check is the GATE that the dead branch actually got eliminated
- *     (Rollup inlining surprises — risk R7 — fail here, not in the field).
- *  3. LAZY-LEXICON PURITY (5c-PR3) — bible-lexicon.json stays an async
+ *     (Rollup inlining surprises fail here, not in the field).
+ *  3. LAZY-LEXICON PURITY — bible-lexicon.json stays an async
  *     chunk, out of the entry/worker static closures.
- *  4. ENTRY-CHUNK BUDGET (Phase 8 §A / prep PR-7) — the ENTRY static
- *     closure contains NO firebase/epubjs/GenAI-implementation/reader-
- *     surface sources (content assertion) and its gzip size never
- *     regresses past the recorded baseline + headroom (size ratchet,
- *     bundle-baseline.json).
+ *  4. ENTRY-CHUNK BUDGET — the ENTRY static closure contains NO
+ *     firebase/epubjs/GenAI-implementation/reader-surface sources (content
+ *     assertion) and its gzip size never regresses past the recorded
+ *     baseline + headroom (size ratchet, bundle-baseline.json).
+ *  5. PWA SHELL — the built index.html links exactly one manifest, the
+ *     manifest carries the installability fields, and the SW is emitted.
  *
  * Worker-purity details:
  *
@@ -62,13 +63,11 @@ const FORBIDDEN = [
   { pattern: 'node_modules/zustand', label: 'zustand (incl. zustand-middleware-yjs)' },
   { pattern: 'node_modules/yjs/', label: 'yjs' },
   { pattern: 'src/store/', label: 'src/store' },
-  // The vendored forks (Phase 2/3): since vendoring, their sourcemap paths
-  // are packages/<name>/src/*, not node_modules/* — keep them covered by the
-  // worker-purity check. y-idb in the worker chunk means a second Y.Doc
-  // persistence inside the worker, the data-corruption scenario this script
-  // exists to prevent.
-  { pattern: 'packages/zustand-middleware-yjs/', label: 'zustand-middleware-yjs (vendored)' },
-  { pattern: 'packages/y-idb/', label: 'y-idb (vendored)' },
+  // The Yjs persistence/bridge forks. y-idb in the worker chunk means a
+  // second Y.Doc persistence inside the worker, the data-corruption scenario
+  // this script exists to prevent.
+  { pattern: 'node_modules/zustand-middleware-yjs/', label: 'zustand-middleware-yjs (fork)' },
+  { pattern: 'node_modules/y-idb/', label: 'y-idb (fork)' },
 ];
 
 if (!skipBuild) {
@@ -165,7 +164,7 @@ console.log(
 const MOCK_FORBIDDEN = [
   { pattern: 'src/domains/sync/backend/MockBackend', label: 'MockBackend' },
   { pattern: 'src/domains/sync/backend/MockFireProvider', label: 'MockFireProvider' },
-  // Phase 7 (§H, boundary rule 9): the GenAI mock is reachable only via the
+  // Boundary rule 9: the GenAI mock is reachable only via the
   // DEV/VITE_E2E-gated installTestApi() — never from the prod graph.
   { pattern: 'src/domains/google/genai/MockGenAIClient', label: 'MockGenAIClient' },
 ];
@@ -217,12 +216,11 @@ console.log(
     'production chunk(s); no MockBackend / MockFireProvider / MockGenAIClient in the prod bundle.',
 );
 
-// ── Check 3: lazy-lexicon purity (Phase 5c-PR3; phase5-tts-strangler.md §5c.3) ──
+// ── Check 3: lazy-lexicon purity ──
 // The Bible lexicon data (src/lib/tts/bible-lexicon.json, ~85 KB) must reach the
 // bundle ONLY through the dynamic import in src/lib/tts/bible-lexicon.ts: it has
 // to exist as its own async chunk, and it must NOT be inlined into the main entry
-// chunk or the TTS worker entry closure (the eager 2,899-line TS data file this
-// replaced sat in the entry graph of both threads).
+// chunk or the TTS worker entry closure.
 // JSON chunks carry no sourcemap `sources`, so detect by a DATA MARKER that
 // only the Bible lexicon contains (a zh book-name replacement string).
 const BIBLE_MARKER = '\u7d04\u7ff0\u4e09\u66f8'; // 約翰三書 (3 John)
@@ -263,7 +261,7 @@ function collectStaticClosure(entryFiles) {
 }
 
 // The REAL entry chunk(s) come from the built index.html script tags —
-// post-P8 code splitting, `index-*.js` also matches shared/lazy chunks
+// with code splitting, `index-*.js` also matches shared/lazy chunks
 // that Rollup named after `index.ts` modules (e.g. domains/google/index),
 // so a filename heuristic would scan the wrong graph.
 const indexHtml = readFileSync(join(repoRoot, 'dist', 'index.html'), 'utf8');
@@ -291,9 +289,9 @@ console.log(
     `${chunksWithBible.join(', ')}; absent from the entry/worker static closures.`,
 );
 
-// ── Check 4: entry-chunk budget (Phase 8 §A; phase8-shell-pwa.md PR-7) ──────
+// ── Check 4: entry-chunk budget ─────────────────────────────────────────────
 // 4a. CONTENT ASSERTION (the durable one): the ENTRY static closure must
-//     contain none of the first-use-loaded heavyweights. These moved out of
+//     contain none of the first-use-loaded heavyweights. They stay out of
 //     the entry graph via: React.lazy routes (/read/:id → ReaderShell →
 //     epubjs), the createSync/composeSync split (firebase loads inside the
 //     syncInit boot-task run() body, only when sync is enabled+configured),
@@ -303,17 +301,16 @@ console.log(
 //     (`ANALYZE=true vite build` → stats.html) — do not weaken the list.
 // NOTE on epubjs: the kernel CFI shim (src/kernel/cfi/epubcfiShim.ts) is
 // SANCTIONED to import the lean `epubjs/src/epubcfi` submodule (it rides
-// the entry AND the worker — that was the whole point of the 5c kernel).
+// the entry AND the worker — that is the point of the kernel CFI module).
 // The submodule's closure is epubcfi.js + utils/core.js only, so the
 // forbidden markers below name the FULL-ENGINE modules instead of the
 // package prefix.
 const ENTRY_FORBIDDEN = [
   { pattern: 'node_modules/firebase/', label: 'firebase' },
   { pattern: 'node_modules/@firebase/', label: '@firebase' },
-  // The vendored provider rides FirestoreBackend (the lazy composeSync
-  // chunk); its source path no longer matches node_modules/ after the P9
-  // workspace vendoring, so name it explicitly.
-  { pattern: 'packages/y-cinder/', label: 'y-cinder (vendored sync provider)' },
+  // The y-cinder sync provider rides FirestoreBackend (the lazy composeSync
+  // chunk).
+  { pattern: 'node_modules/y-cinder/', label: 'y-cinder (fork sync provider)' },
   { pattern: 'node_modules/epubjs/src/epub.js', label: 'epubjs (engine entry)' },
   { pattern: 'node_modules/epubjs/src/book.js', label: 'epubjs (Book)' },
   { pattern: 'node_modules/epubjs/src/rendition.js', label: 'epubjs (Rendition)' },
@@ -376,9 +373,8 @@ if (entryViolations.length > 0) {
 }
 
 // 4b. SIZE RATCHET: gzip total of the entry static closure, recorded in
-//     bundle-baseline.json (set right after the PR-7 split landed). Allows
-//     ~10% headroom; regenerate deliberately with --update-entry-baseline
-//     after intentional entry growth/shrink.
+//     bundle-baseline.json. Allows ~10% headroom; regenerate deliberately
+//     with --update-entry-baseline after intentional entry growth/shrink.
 const BUNDLE_BASELINE_PATH = join(repoRoot, 'bundle-baseline.json');
 const ENTRY_HEADROOM = 1.1;
 let entryGzipBytes = 0;
@@ -420,14 +416,14 @@ if (process.argv.includes('--update-entry-baseline')) {
   );
 }
 
-// ── Check 5: PWA shell (Phase 8 §G; phase8-shell-pwa.md PR-8) ───────────────
+// ── Check 5: PWA shell ──────────────────────────────────────────────────────
 // The locally-verifiable half of the Lighthouse installability pass:
 //  - built index.html links exactly ONE manifest;
 //  - the manifest carries the installability fields (id, start_url, scope,
 //    display, lang, dir, name, icons 192+512);
 //  - the SW is emitted at the root scope (dist/sw.js).
-// The interactive halves (offline smoke, two-build update-prompt journey)
-// run in the Docker/nightly Playwright lane.
+// The interactive halves (offline boot, SW update prompt) are not asserted
+// by this script.
 const manifestLinks = [...indexHtml.matchAll(/<link[^>]+rel="manifest"[^>]*>/g)];
 if (manifestLinks.length !== 1) {
   console.error(

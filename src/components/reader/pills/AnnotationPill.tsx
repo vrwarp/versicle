@@ -1,8 +1,7 @@
 /**
- * AnnotationPill — the selection/annotation toolbar + note editor,
- * extracted from the dissolved ui/CompassPill (Phase 8 §C). Owns the
+ * AnnotationPill — the selection/annotation toolbar + note editor. Owns the
  * note-editing state machine (including the note-recall sync-on-render —
- * see the absorbed regression block in pills/AnnotationPill.test.tsx) and
+ * see the regression block in pills/AnnotationPill.test.tsx) and
  * the smart Chinese-selection vocab entry point.
  */
 import React, { useState, useEffect, useRef } from 'react';
@@ -41,9 +40,8 @@ export const AnnotationPill: React.FC<AnnotationPillProps> = ({ onAction, availa
   const selectionText = compass.mode === 'annotation' ? compass.selection.text : '';
   const targetAnnotation = compass.mode === 'annotation' ? compass.annotation : undefined;
 
-  // Full-script Han test (CH-1 family: astral Han selections count too).
-  // The dictionary itself loads only when the triage card opens (PR-11) —
-  // the legacy any-CJK-selection fetch trigger is gone.
+  // Full-script Han test (astral Han selections count too). The dictionary
+  // itself loads only when the triage card opens, not on selection.
   const isChineseSelection = HAN_RE.test(selectionText);
 
   // Internal state for note editing - initialize based on target annotation if present

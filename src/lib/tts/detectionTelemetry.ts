@@ -1,10 +1,9 @@
 /**
- * The default DetectionTelemetry observer (Phase 5c; phase5-tts-strangler.md
- * §5c.2): computes the offline-analysis payload from the detector's raw
- * observation and writes it to the GenAI activity log. The ~125 lines of
- * feature engineering that lived inline in AudioContentPipeline now hang off
- * the detector as an INJECTED observer — the detector itself stays free of
- * logging concerns and tests can pass a recording stub (or nothing).
+ * The default DetectionTelemetry observer: computes the offline-analysis
+ * payload from the detector's raw observation and writes it to the GenAI
+ * activity log. It hangs off the detector as an INJECTED observer — the
+ * detector itself stays free of logging concerns and tests can pass a
+ * recording stub (or nothing).
  */
 import { generateSecureId } from '../crypto';
 import type { GenAIPort } from './engine/EngineContext';

@@ -1,7 +1,7 @@
 /**
- * Registry-driven documentation renderers (Phase 9 docs item; master plan
- * §4 rule 10 — "AGENTS.md is generated from one canonical TESTING.md and
- * the registries").
+ * Registry-driven documentation renderers (plan/overhaul/README.md §4
+ * rule 10 — "AGENTS.md is generated from one canonical TESTING.md and the
+ * registries").
  *
  * PURE renderers — no filesystem access here. The drift gate
  * (`src/app/docs/docs.test.ts`) gathers the inputs that come from the tree

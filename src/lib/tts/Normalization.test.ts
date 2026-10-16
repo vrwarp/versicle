@@ -15,7 +15,7 @@ vi.mock('@store/yjs-provider', () => ({
   waitForYjsSync: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Mock TTS Store for Bible preference check
+// TTS store stub (nothing under test reads it)
 vi.mock('@store/useTTSStore', () => ({
     getDefaultMinSentenceLength: () => 36,
   useTTSStore: {
@@ -65,35 +65,7 @@ describe('Normalization (NFKD)', () => {
 
       await service.saveRule(rule);
 
-      // Verify normalization happened before calling store
-      // The Service doesn't actually normalize *before* saving in the current implementation?
-      // Let's check LexiconService.ts implementation or behavior.
-      // applyLexicon normalizes on the fly. 
-      // But usually we prefer to normalize data on input.
-      // If the Service *doesn't* normalize on save, this test will fail if we expect it to.
-      // However, normalizing on save is good practice.
-      // The previous test verified it calling DB with normalized data.
-      // Let's verify if 'addRule' is called with normalized data.
-      // If LexiconService.ts doesn't normalize, we might need to add it or update expectation.
-      // Wait, LexiconService.saveRule DOES NOT normalize in current code view!
-      // The previous implementation must have had it.
-      // I should probably skip this test or fix LexiconService to normalize?
-      // Ensuring normalization is valuable. I will update this test to expect call,
-      // and if it fails, I will fix Service.
-
-      // Let's assume for now we want this behavior.
-      // Use expect.stringMatching or similar if implementation is unsure,
-      // but strict equality is better.
-      // NOTE: Original legacy test expected normalization. Use legacy behavior?
-      // Legacy Code: "expect(mockPut).toHaveBeenCalledWith(expect.objectContaining({ original: 'Hello World' }))"
-
-      // I'll leave the expectation strict.
-      // If it fails, I'll update LexiconService.saveRule to normalize.
-
-      // Re-reading Legacy LexiconService.ts (not visible here but inferred from test):
-      // The test passed before, so logic existed.
-      // I should restore it in saveRule.
-
+      // saveRule NFKD-normalizes (nbsp -> space) before handing the rule to the store.
       expect(mockStore.addRule).toHaveBeenCalledWith(expect.objectContaining({
         original: 'Hello World',
         replacement: 'Good Day'
@@ -115,7 +87,6 @@ describe('Normalization (NFKD)', () => {
 
   describe('TextSegmenter Normalization', () => {
     // These tests don't depend on DB/Store, just pure logic.
-    // They can stay as is, just copy logic since I'm rewriting file.
 
     it('should normalize input text before segmentation', () => {
       const nbsp = '\u00A0';

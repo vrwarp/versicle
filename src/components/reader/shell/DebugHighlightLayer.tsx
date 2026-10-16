@@ -1,9 +1,8 @@
 /**
- * DebugHighlightLayer — GenAI content-analysis debug highlights (Phase 6
- * §5 table, prep/phase6-reader-engine.md PR-9). Extracted verbatim from
- * the legacy ReaderView: when debug mode is enabled, the current section's
- * referenceStartCfi (from the content-analysis repository) renders on the
- * engine's 'debug' highlight layer; disabling clears the layer.
+ * DebugHighlightLayer — GenAI content-analysis debug highlights: when debug
+ * mode is enabled, the current section's referenceStartCfi (from the
+ * content-analysis repository) renders on the engine's 'debug' highlight
+ * layer; disabling clears the layer.
  */
 import type React from 'react';
 import { useEffect } from 'react';
@@ -36,7 +35,7 @@ export const DebugHighlightLayer: React.FC<DebugHighlightLayerProps> = ({
   const currentTheme = usePreferencesStore(state => state.currentTheme);
 
   // Apply content analysis debug highlights (the manager's 'debug' layer
-  // carries the bookkeeping the old addedDebugHighlights ref duplicated).
+  // carries the bookkeeping, so `highlights.has` dedupes re-applies).
   useEffect(() => {
     if (!engine || !highlights || !isReady) return;
 

@@ -1,8 +1,7 @@
 /**
- * CFI range algebra — generate / merge, ported verbatim from
- * src/lib/cfi-utils.ts (phase5-tts-strangler.md §5c.4). `tryFastMergeCfi`
- * is the string fast path; `mergeCfiSlow` (parse + regenerate) is its
- * oracle, pinned by the property suite in cfi.equivalence.fuzz.test.ts:
+ * CFI range algebra — generate / merge. `tryFastMergeCfi` is the string
+ * fast path; `mergeCfiSlow` (parse + regenerate) is its oracle, pinned by
+ * the property suite in cfi.equivalence.fuzz.test.ts:
  * fast === null || fast === slow.
  */
 import { parseCfiRange, stripCfiWrapper } from './parse';

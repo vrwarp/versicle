@@ -225,12 +225,12 @@ test('performance baseline: boot, import, open, page turns, warm reload', async 
 
 /**
  * Regression guard for the 3s boot cliff: `navigator.serviceWorker.ready`
- * never settles after a FAILED registration, so the boot gate used to burn
- * its full 3s timeout on every load for affected users (observed
- * intermittently on WebKit: sw.js load fails with SecurityError).
- * SWUpdatePrompt's onRegisterError now signals the gate to release
- * immediately (signalServiceWorkerRegistrationFailed). This simulates the
- * failure by making register() reject before the app boots.
+ * never settles after a FAILED registration, so without an explicit signal the
+ * boot gate would burn its full 3s timeout on every load for affected users
+ * (observed intermittently on WebKit: sw.js load fails with SecurityError).
+ * SWUpdatePrompt's onRegisterError signals the gate to release immediately
+ * (signalServiceWorkerRegistrationFailed). This simulates the failure by
+ * making register() reject before the app boots.
  */
 test('boot stays fast when service worker registration fails', async ({ page }) => {
   await page.addInitScript(() => {

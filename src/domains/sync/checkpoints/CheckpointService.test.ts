@@ -11,8 +11,8 @@ const mocks = vi.hoisted(() => {
     const get = vi.fn();
     const getAll = vi.fn();
     const del = vi.fn();
-    // The injected §D7 pauseSync handle (was a vi.mock of the deleted
-    // FirestoreSyncManager's destroy) — restore/apply sever sync through it.
+    // The injected pauseSync handle — restore/apply sever sync through it.
+    // (Named for the Firestore provider teardown it stands in for.)
     const firestoreDestroy = vi.fn();
     const disconnectYjs = vi.fn(async () => undefined);
 
@@ -29,11 +29,11 @@ const mocks = vi.hoisted(() => {
         add, count, openCursor, get, getAll, del, store, firestoreDestroy,
         disconnectYjs,
         // null = the suite's default (soft-restore fallback). The hard-reset
-        // (S.2) tests install an object with a clearData spy.
+        // tests install an object with a clearData spy.
         persistence: null as null | { clearData: () => Promise<void> },
         // false = the suite's default: with no live binding AND no
         // IndexedDB, restore falls back to the in-memory soft path (the
-        // legacy tests below pin that fallback). The P4-5 boot-path tests
+        // soft-fallback tests below pin that). The boot-path rollback tests
         // flip this to true: IndexedDB exists but no binding does — the
         // hard path must run against the database directly.
         storageSupported: false
@@ -63,7 +63,7 @@ vi.mock('@store/yjs-provider', async () => {
     const doc = new YActual.Doc();
     return {
         getYDoc: () => doc,
-        // Default null (soft-restore fallback); S.2 tests install a stub.
+        // Default null (soft-restore fallback); the hard-reset tests install a stub.
         getYjsPersistence: () => mocks.persistence,
         disconnectYjs: mocks.disconnectYjs,
     };
@@ -75,7 +75,7 @@ const yDoc = getYDoc();
 let tempDocCounter = 0;
 let probeCounter = 0;
 
-/** Drop the main Yjs database (shared by the S.2 and P4-5 hard-path suites). */
+/** Drop the main Yjs database (shared by the hard-path suites). */
 const deleteMainDb = () => new Promise<void>((resolve, reject) => {
     const request = indexedDB.deleteDatabase('versicle-yjs');
     request.onsuccess = () => resolve();
@@ -450,12 +450,10 @@ describe('CheckpointService', () => {
     });
 
     /**
-     * S.2 (phase3-storage-gateway.md §Test plan, PR P3-11): the hard-reset
-     * restore path — previously a temp-doc + temp-IndexeddbPersistence +
-     * whenSynced dance, now YjsSnapshotService.applySnapshot (the vendored
-     * fork's commit-awaited writeSnapshot). These tests run the REAL
-     * snapshot service against fake-indexeddb; only the provider handle and
-     * the checkpoint store are mocked.
+     * The hard-reset restore path, through YjsSnapshotService.applySnapshot
+     * (the vendored fork's commit-awaited writeSnapshot). These tests run the
+     * REAL snapshot service against fake-indexeddb; only the provider handle
+     * and the checkpoint store are mocked.
      */
     describe('regression: hard-reset restore via YjsSnapshotService (S.2)', () => {
         let clearData: ReturnType<typeof vi.fn<() => Promise<void>>>;
@@ -504,8 +502,8 @@ describe('CheckpointService', () => {
             expect(fresh.getMap('library').get('restored')).toBe('hard');
             fresh.destroy();
 
-            // ▲9 ordering preserved: migration state cleared only AFTER the
-            // snapshot was fully persisted.
+            // Ordering: migration state is cleared only AFTER the snapshot
+            // was fully persisted.
             expect(MigrationStateService.getState()).toBeNull();
         });
 
@@ -532,20 +530,14 @@ describe('CheckpointService', () => {
             expect(mocks.disconnectYjs).not.toHaveBeenCalled();
             expect(MigrationStateService.getState()?.status).toBe('RESTORING_BACKUP');
         });
-
-        // NOTE: the S.2 applyRemoteState cases (durable remote-blob write,
-        // corrupted-blob rejection before anything destructive) moved with
-        // the method: the staged swap absorbed applyRemoteState into
-        // stagedSwap.ts, and stagedSwap.test.ts carries the assertions as
-        // 'regression: …' blocks (test-absorption ledger, program rule 8).
     });
 
     /**
-     * P4-5: the boot-path rollback. The RESTORING_BACKUP interceptor arm
-     * runs BEFORE `startYjsPersistence`, so no live binding exists — the
-     * hard-reset restore must still persist durably (pre-P4-5 this fell
-     * into the in-memory soft path: nothing written, state cleared anyway,
-     * and the next manual reload silently booted the TARGET workspace).
+     * The boot-path rollback. The RESTORING_BACKUP interceptor arm runs
+     * BEFORE `startYjsPersistence`, so no live binding exists — the
+     * hard-reset restore must still persist durably (falling into the
+     * in-memory soft path would write nothing, clear the state anyway, and
+     * the next manual reload would silently boot the TARGET workspace).
      */
     describe('regression: boot-time rollback persists durably without a live binding (P4-5)', () => {
         const deleteMainDb = () => new Promise<void>((resolve, reject) => {

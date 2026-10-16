@@ -40,7 +40,7 @@ vi.mock('@jofr/capacitor-media-session', () => ({
     }
 }));
 
-// Mock the bookContent repo (the DBService carve)
+// Mock the data-layer repos
 vi.mock('@data/repos/bookContent', () => ({
     bookContent: {
     getTTSPreparation: vi.fn(),
@@ -66,7 +66,7 @@ vi.mock('@lib/tts/LexiconService', () => ({
   },
 }));
 
-// Mock WebSpeechProvider and CapacitorTTSProvider
+// Mock CapacitorTTSProvider
 vi.mock('@lib/tts/providers/CapacitorTTSProvider', () => {
   // Return a class or a constructor function
   return {

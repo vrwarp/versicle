@@ -6,14 +6,13 @@
  * `{message, name, stack}` only — every own property (our stable `code`,
  * the `context` bag, `retryable`) is dropped, and the other side receives a
  * plain `Error`. Every consumer that branches on `code` across the boundary
- * was therefore dead code in production: the ReferenceSectionDetector's
+ * would therefore be dead code: the ReferenceSectionDetector's
  * GENAI_INVALID_RESPONSE terminal fallback runs in the TTS worker while the
- * model call runs on the main thread, so a validation-rejected answer arrived
- * code-less, was treated as transient, and was re-sent on every revisit (the
- * Jul–Sep 2026 log export shows each rejected section re-sent after the
- * 5-minute retry delay on builds that already carried the fallback).
+ * model call runs on the main thread, so a validation-rejected answer would
+ * arrive code-less, be treated as transient, and be re-sent on every revisit
+ * after the 5-minute retry delay.
  *
- * The fix wraps the built-in handler (same `canHandle`, so no private Comlink
+ * This handler wraps the built-in one (same `canHandle`, so no private Comlink
  * symbol is needed): an AppError is serialized through `toJSON()` and revived
  * with `AppError.fromJSON()` — a base AppError with `code`, `context`,
  * `retryable`, `name` and the flattened cause chain intact. Anything else

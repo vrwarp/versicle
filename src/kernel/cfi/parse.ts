@@ -1,7 +1,7 @@
 /**
  * Canonical CFI parsing — the parsed-component reference model plus the
- * string-level helpers ported verbatim from src/lib/cfi-utils.ts
- * (phase5-tts-strangler.md §5c.4).
+ * string-level helpers (`stripCfiWrapper`, `parseCfiRange`,
+ * `preprocessBlockRoots`).
  *
  * The component model ({@link parseCfiTokens}) is the ORACLE for every
  * string fast path in this kernel: `cfi.equivalence.fuzz.test.ts` pins

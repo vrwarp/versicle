@@ -14,7 +14,7 @@ vi.mock('./data/connection', async (importOriginal) => ({
 
 
 
-// Mock SW Utils - The key fix
+// Mock SW utils
 vi.mock('./lib/serviceWorkerUtils', () => ({
   waitForServiceWorkerController: vi.fn().mockResolvedValue(undefined),
 }));
@@ -28,7 +28,7 @@ vi.mock('@capacitor/app', () => ({
   }
 }));
 
-// Phase 7: boot hydration goes through the library composition.
+// Boot hydration goes through the library composition.
 vi.mock('./app/library/createLibrary', () => ({
   getLibrary: () => ({
     service: {
@@ -138,11 +138,10 @@ import {
 import { useToastStore } from './store/useToastStore';
 
 /**
- * Phase 8 §G — the HONEST soft gate. `waitForServiceWorkerController`
- * NEVER rejects (3 s ready-race + poll exhaustion both resolve), so the
- * legacy `swError` state and App's "Critical Error" screen were
- * unreachable dead code; both are deleted. The gate holds the boot screen
- * briefly and then proceeds regardless; degradation (no controller →
+ * The soft service-worker gate. `waitForServiceWorkerController`
+ * NEVER rejects (3 s ready-race + poll exhaustion both resolve), so there is
+ * no `swError` state and no "Critical Error" screen. The gate holds the boot
+ * screen briefly and then proceeds regardless; degradation (no controller →
  * covers will not load) surfaces as a one-shot keyed toast in production
  * builds only.
  */
@@ -227,8 +226,8 @@ describe('regression: SW degraded-mode notice — one keyed toast, production la
 });
 
 describe('regression: wipe-all-data — SafeMode reset must route through wipeAllData', () => {
-  // The SafeMode "Reset Database" used to delete only EpubLibraryDB, silently
-  // leaving the versicle-yjs database (all user data) and Versicle
+  // The SafeMode "Reset Database" must not delete only EpubLibraryDB and
+  // silently leave the versicle-yjs database (all user data) and Versicle
   // localStorage keys behind. It must delegate to wipeAllData().
   beforeEach(() => {
     vi.clearAllMocks();
@@ -247,9 +246,9 @@ describe('regression: wipe-all-data — SafeMode reset must route through wipeAl
     vi.restoreAllMocks();
   });
 
-  // Phase 8 §D: the native confirm() died — the reset flows through the
-  // accessible ConfirmDialog (ConfirmHost mounts above the boot gate, so
-  // even SafeMode gets it).
+  // The reset flows through the accessible ConfirmDialog (native confirm() is
+  // lint-banned; ConfirmHost mounts above the boot gate, so even SafeMode
+  // gets it).
   it('calls wipeAllData when the user confirms the destructive reset', async () => {
     render(<App />);
 

@@ -4,7 +4,7 @@
  * controller-level behavior (lag coalescing, dragnet suppression, queueId
  * invalidation) is pinned as an integration guard in PlaybackController.test.ts.
  *
- * ZERO vi.mock (the engine-dir allowlist is empty): the unit takes plain
+ * ZERO vi.mock (banned in the engine dir): the unit takes plain
  * injected deps, so the suite uses a vi.fn callback + a mutable queueId closure.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

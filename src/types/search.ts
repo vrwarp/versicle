@@ -1,10 +1,9 @@
 /**
- * A per-occurrence search hit (Phase 7 §F, PR-S2) — THE search result shape
- * (the legacy `{href, excerpt}` SearchResult died with the reader-side
- * SearchSession adoption). It carries enough position data to navigate to
- * the EXACT occurrence: `charOffset` into the section's indexed plain text,
- * the per-section `occurrence` ordinal, and an optional `cfi` resolved
- * lazily at click time (the engine/worker never see the DOM).
+ * A per-occurrence search hit — THE search result shape. It carries enough
+ * position data to navigate to the EXACT occurrence: `charOffset` into the
+ * section's indexed plain text, the per-section `occurrence` ordinal, and an
+ * optional `cfi` resolved lazily at click time (the engine/worker never see
+ * the DOM).
  */
 export interface DetailedSearchResult {
     /** The reference (href) to the section containing the match. */
@@ -35,7 +34,7 @@ export interface DetailedSearchResult {
     sentenceHighlights?: { start: number; end: number; score: number }[];
 }
 
-/** A bounded result page: the engine caps scans and SAYS so (no silent 50-cap). */
+/** A bounded result page: the engine caps scans and SAYS so (`truncated`) rather than silently dropping matches. */
 export interface SearchBatchResult {
     results: DetailedSearchResult[];
     /** True when more matches existed beyond the cap. */

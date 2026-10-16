@@ -58,7 +58,7 @@ describe('AnnotationList', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     useAnnotationStore.setState({ annotations: annotations as any, remove: deleteAnnotationMock });
 
-    // Phase 8 §D: deletion confirms through the ConfirmDialog.
+    // Deletion confirms through the ConfirmDialog.
     render(<><ConfirmHost /><AnnotationList onNavigate={vi.fn()} /></>);
 
     fireEvent.click(screen.getByTitle('Delete'));

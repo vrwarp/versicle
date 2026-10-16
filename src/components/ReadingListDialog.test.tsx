@@ -173,7 +173,7 @@ describe('ReadingListDialog', () => {
         headers.forEach(header => {
             const button = screen.getByRole('button', { name: new RegExp(header, 'i') });
             expect(button).toBeInTheDocument();
-            // Verify it's inside a TH with aria-sort (initially undefined unless sorted)
+            // Verify it's inside a TH
             const th = button.closest('th');
             expect(th).toBeInTheDocument();
         });

@@ -1,8 +1,7 @@
 /**
  * PiperRuntime — the owned, instance-scoped runtime for the vendored Piper WASM
- * synthesis worker (Phase 5a-PR3, phase5-tts-strangler.md §5a.2). Replaces the
- * module-global `piper-utils` (shared mutable `blobs`/`worker`/`pendingPromise`
- * state, per-call `onmessage` reassignment, fire-and-forget cache writes).
+ * synthesis worker. All mutable state (worker, pending request, model tiers) lives
+ * on the instance; there are no module globals.
  *
  * Responsibilities:
  *  - Worker lifecycle: one worker, created lazily, terminated on {@link dispose}
@@ -11,29 +10,29 @@
  *  - Request-id protocol: every `init` message carries a `requestId` the vendored
  *    worker echoes on its terminal messages (`output`/`complete`/`error` — patch 7
  *    in third-party/piper/PROVENANCE.md); late messages with a stale id are
- *    DROPPED, killing the cross-talk hazard of the old per-call listener swap.
+ *    DROPPED, so a late reply can never cross-talk into a newer request.
  *  - Model store: the Cache API (`piper-voices-v1`, keys = HuggingFace URLs —
- *    UNTOUCHED from the pre-vendoring format, so existing downloads keep working)
- *    is the durable tier; an in-memory LRU (budget {@link maxModelsInMemory})
- *    keeps the hot model blobs out of repeated Cache API reads.
+ *    a stable format, so existing downloads keep working) is the durable tier;
+ *    an in-memory LRU (budget {@link maxModelsInMemory}) keeps the hot model
+ *    blobs out of repeated Cache API reads.
  *  - Asset URLs: every runtime asset (worker, phonemizer js/wasm/data, the local
- *    onnxruntime build) is served same-origin from `/piper/**` — the cdnjs
- *    fallback is gone; synthesis performs zero third-party egress.
+ *    onnxruntime build) is served same-origin from `/piper/**`; synthesis
+ *    performs zero third-party egress.
  *
  * Main-thread only (Worker construction + Cache API + XHR inside the worker).
  */
 import { egress } from '@kernel/net';
 
-/** Same-origin asset layout (mirrors the pre-vendoring /piper/** URLs). */
+/** Same-origin asset layout (the vendored assets under /piper/**). */
 const DEFAULT_ASSETS_BASE = '/piper/';
 const DEFAULT_ONNX_BASE = '/piper/onnxruntime/';
 /** The durable model store. DO NOT rename: existing user downloads live here. */
 const DEFAULT_CACHE_NAME = 'piper-voices-v1';
 /**
  * How long the synthesis worker may sit idle before it is torn down. `dispose()` only runs
- * on a PROVIDER SWAP (TTSProviderManager), so before this a user who simply stopped
- * listening kept the nested Piper worker — the ort WASM heap (~10 MB), the loaded model and
- * the espeak MEMFS image (~18 MB) — alive for the rest of the session.
+ * on a PROVIDER SWAP (TTSProviderManager), so without this a user who simply stopped
+ * listening would keep the nested Piper worker — the ort WASM heap (~10 MB), the loaded
+ * model and the espeak MEMFS image (~18 MB) — alive for the rest of the session.
  */
 const DEFAULT_IDLE_TEARDOWN_MS = 5 * 60_000;
 
@@ -68,9 +67,10 @@ export interface PiperGenerateResult {
 }
 
 /**
- * The vendored piper_worker.js message protocol (legacy shape, kept
- * verbatim — see third-party/piper/PROVENANCE.md). All fields optional:
- * each `kind` populates its own subset.
+ * The vendored piper_worker.js message protocol (the upstream shape plus the
+ * patched `error` reports and the request-id envelope — see
+ * third-party/piper/PROVENANCE.md). All fields optional: each `kind` populates
+ * its own subset.
  */
 interface PiperWorkerMessage {
     kind?: 'fetch' | 'stderr' | 'output' | 'error' | 'complete' | 'isAlive';
@@ -97,9 +97,9 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 /**
  * Fetches a voice-model URL with exponential backoff retry logic.
  * Useful for downloading large model files over unstable connections.
- * Routes through `NetworkGateway.egress('hf-piper-models')` (Phase 7 §I):
- * the destination is unbounded-but-abortable (timeoutMs null) so large
- * downloads are never killed by a gateway timer.
+ * Routes through `NetworkGateway.egress('hf-piper-models')`: the destination
+ * is unbounded-but-abortable (timeoutMs null) so large downloads are never
+ * killed by a gateway timer.
  */
 export const fetchWithBackoff = async (url: string, retries = 3, delay = 1000): Promise<Blob> => {
     try {
@@ -121,7 +121,7 @@ export const fetchWithBackoff = async (url: string, retries = 3, delay = 1000): 
  * Concatenates multiple WAV blobs into a single WAV blob.
  * Assumes blobs are standard WAV files (RIFF header + data chunk).
  * It extracts the raw PCM data from each blob and stitches them together,
- * creating a new valid WAV header. (Keeper, verbatim from piper-utils.)
+ * creating a new valid WAV header.
  */
 export async function stitchWavs(blobs: Blob[]): Promise<Blob> {
     if (blobs.length === 0) return new Blob([], { type: 'audio/wav' });
@@ -224,7 +224,7 @@ export class PiperRuntime {
     }
 
     // -----------------------------------------------------------------------
-    // Cache API helpers (durable tier; keys are full URLs — legacy format).
+    // Cache API helpers (durable tier; keys are full URLs).
     // -----------------------------------------------------------------------
 
     private async openCache(): Promise<Cache | null> {
@@ -262,16 +262,17 @@ export class PiperRuntime {
     }
 
     /**
-     * Commit a staged model/config blob to the durable store AND the hot tier.
-     * Awaited (the old `cacheModel` fire-and-forget write could lose the commit).
+     * Commit a staged model/config blob to the durable store (the hot tier is
+     * filled lazily by the next generate()). Awaited, so a failed commit surfaces
+     * to the caller.
      */
     async saveModel(url: string, blob: Blob): Promise<void> {
         await this.cachePut(url, blob);
     }
 
     /**
-     * Delete a model from every tier. AWAITS the Cache API deletes (the old
-     * fire-and-forget delete raced re-downloads — D17) and drops the worker,
+     * Delete a model from every tier. AWAITS the Cache API deletes (a
+     * fire-and-forget delete would race re-downloads) and drops the worker,
      * whose ort session may hold the model.
      */
     async deleteModel(modelUrl: string, configUrl: string): Promise<void> {
@@ -353,7 +354,7 @@ export class PiperRuntime {
         switch (data?.kind) {
             case 'fetch': {
                 // The worker streams asset/model fetch progress and hands the final
-                // blob back for main-thread reuse (legacy protocol, kept verbatim).
+                // blob back for main-thread reuse.
                 if (data.blob && data.url !== undefined) this.assetBlobs[data.url] = data.blob;
                 if (current?.onProgress) {
                     const progress = data.blob ? 1 : data.total ? (data.loaded ?? 0) / data.total : 0;
@@ -371,7 +372,7 @@ export class PiperRuntime {
                 if (data.requestId !== undefined && data.requestId !== current.id) return;
                 this.pending = null;
                 // The worker always sends both on 'output'; defaults keep the
-                // typed protocol honest without changing the legacy behavior.
+                // typed (all-optional) protocol honest.
                 current.resolve({ file: data.file ?? new Blob(), duration: data.duration ?? 0 });
                 break;
             }
@@ -437,8 +438,7 @@ export class PiperRuntime {
 
     /**
      * Synthesize one text chunk. Requests are serialized; a failed request resets
-     * the queue instead of poisoning it (the old shared `pendingPromise` chain
-     * swallowed errors with a bare `.catch(() => {})`).
+     * the queue instead of poisoning it.
      */
     generate(req: PiperGenerateRequest): Promise<PiperGenerateResult> {
         if (this.disposed) {
@@ -475,7 +475,7 @@ export class PiperRuntime {
 
         // Blob map handed to the worker: shared assets it fetched before, plus
         // the hot model pair when we have it (otherwise the worker XHRs the
-        // model itself and streams progress — the legacy zero-touch path).
+        // model itself and streams progress).
         const blobs: Record<string, Blob> = { ...this.assetBlobs };
         if (pair) {
             blobs[req.modelUrl] = pair.model;

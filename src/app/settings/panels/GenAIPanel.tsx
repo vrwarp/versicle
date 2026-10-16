@@ -1,7 +1,6 @@
 /**
- * Generative AI settings panel (Phase 8 §B): self-contained wiring for the
- * presentational GenAISettingsTab. Handlers (log download, content-analysis
- * cache clear) moved verbatim from the deleted GlobalSettingsDialog.
+ * Generative AI settings panel: self-contained wiring for the presentational
+ * GenAISettingsTab. Handlers: log download, content-analysis cache clear.
  */
 import React from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -106,7 +105,7 @@ const GenAIPanel: React.FC = () => {
 
   // The activity log gets its OWN subscription: the tab's Debug Logs list is
   // always rendered, so an appended entry has to reach it — but it is the only
-  // thing an addLog re-renders here now.
+  // thing an addLog re-renders here.
   const logs = useGenAIStore((state) => state.logs);
 
   const handleResetPoolLimits = (ratePool: string) => {

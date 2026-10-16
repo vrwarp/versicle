@@ -1,6 +1,5 @@
 /**
- * AnalysisApplier — GenAI content-analysis application, extracted from
- * AudioPlayerService (Phase 5b decomposition; phase5-tts-strangler.md §5b.1).
+ * AnalysisApplier — GenAI content-analysis application for the playback engine.
  *
  * Owns:
  *  - the contentAnalysis snapshot subscription (reactive injection) and the
@@ -10,7 +9,7 @@
  *    change resets the dedup and re-applies the cached analysis;
  *  - the three mask/adaptation callback sites (loadSection, restore, and the
  *    reactive update), all submitting queue mutations as SEQUENCED commands
- *    (5b-PR3) with the book/section guard evaluated inside the task.
+ *    with the book/section guard evaluated inside the task.
  *
  * The applier never writes the queue itself — it hands masks/adaptations to
  * the controller-owned QueueModel inside sequenced tasks.
@@ -140,7 +139,7 @@ export class AnalysisApplier {
     /**
      * The pipeline reports skip masks through detached async callbacks
      * (triggerAnalysis runs in the background); the mutation is enqueued with
-     * the book/section guard evaluated inside the task (5b-PR3).
+     * the book/section guard evaluated inside the task.
      */
     maskCallback(bookId: string, sectionIndex: number, sectionId: string) {
         return (mask: Set<number>) => {

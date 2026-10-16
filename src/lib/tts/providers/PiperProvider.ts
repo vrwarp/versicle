@@ -78,7 +78,7 @@ export class PiperProvider extends BaseCloudProvider {
   /**
    * @param runtime The Piper WASM runtime (worker + model store). Injectable so the
    *   provider contract suite drives a fake; defaults to the production runtime on
-   *   the vendored same-origin `/piper/**` assets (5a-PR3).
+   *   the vendored same-origin `/piper/**` assets.
    */
   constructor(locale?: string, audioSink?: AudioSink, cache?: TTSCache, runtime?: PiperRuntime) {
     super(audioSink, cache);
@@ -91,14 +91,14 @@ export class PiperProvider extends BaseCloudProvider {
   }
 
   /**
-   * Voice catalog with offline support (5a-PR3):
+   * Voice catalog with offline support:
    *  1. The HuggingFace voices.json is cached stale-while-revalidate in the model
    *     cache — a cached catalog is served immediately and refreshed in the
    *     background for the next init.
    *  2. If NO catalog is reachable (offline with a cold catalog cache), locally
    *     downloaded voices are enumerated from the model store, so a downloaded
-   *     voice is always listed and synthesizable — `fetchAudioData` can no longer
-   *     throw 'Voice not found' for it.
+   *     voice is always listed and synthesizable — `fetchAudioData` never
+   *     throws 'Voice not found' for it.
    */
   async init(): Promise<void> {
     try {
@@ -181,7 +181,7 @@ export class PiperProvider extends BaseCloudProvider {
 
   /**
    * Offline fallback: rebuild voice entries from the downloaded models in the
-   * Cache API store (keys are the legacy HuggingFace URLs ending
+   * Cache API store (keys are the HuggingFace URLs ending
    * `…/{family}/{lang}/{name}/{quality}/{lang}-{name}-{quality}.onnx`).
    */
   private async enumerateDownloadedVoices(): Promise<TTSVoice[]> {
@@ -223,7 +223,7 @@ export class PiperProvider extends BaseCloudProvider {
     const voiceInfo = this.voiceMap.get(voiceId);
     if (!voiceInfo) return;
 
-    // Awaited delete (the old fire-and-forget cache delete raced re-downloads).
+    // Awaited delete (a fire-and-forget cache delete would race re-downloads).
     await this.runtime.deleteModel(voiceInfo.modelUrl, voiceInfo.configUrl);
     this.emit({ type: 'download-progress', percent: 0, status: 'Not Downloaded', voiceId });
   }
@@ -242,7 +242,7 @@ export class PiperProvider extends BaseCloudProvider {
     const { modelUrl, configUrl } = voiceInfo;
 
     try {
-      // Phase 2 Hardening: Transactional Download (keeper, preserved verbatim)
+      // Transactional download:
       // 1. Download files to memory first (Staging)
       this.emit({ type: 'download-progress', percent: 10, status: 'Downloading Model...', voiceId });
       const [modelBlob, configBlob] = await Promise.all([
@@ -252,7 +252,7 @@ export class PiperProvider extends BaseCloudProvider {
 
       this.emit({ type: 'download-progress', percent: 50, status: 'Verifying...', voiceId });
 
-      // 2. Commit to Cache — awaited (the old write was fire-and-forget).
+      // 2. Commit to Cache — awaited, so a failed commit rolls back below.
       await this.runtime.saveModel(modelUrl, modelBlob);
       await this.runtime.saveModel(configUrl, configBlob);
 
@@ -289,7 +289,7 @@ export class PiperProvider extends BaseCloudProvider {
 
     const { modelUrl, configUrl } = voiceInfo;
 
-    // Phase 3 Hardening: Input Sanitization
+    // Input sanitization:
     // Split long requests to prevent worker crashes
     // Chinese characters are semantically denser; use smaller chunks to prevent OOM
     const isCJK = /[一-鿿]/.test(text);

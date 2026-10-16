@@ -59,9 +59,8 @@ describe('TTSQueue', () => {
 });
 
 
-// ── absorbed from TTSQueue_AutoScroll.test.tsx (D13 dedupe, Phase 6 PR-14):
-// the one-bug auto-scroll regression file dies; its assertions live on as a
-// named regression block with its own geometry-mock setup, scoped below. ──
+// ── auto-scroll regression block, with its own geometry-mock setup
+// scoped below. ──
 const scrollIntoViewMock = vi.fn();
 let mockRects: Record<string, { top: number; bottom: number }> = {};
 const CONTAINER_RECT = { top: 0, bottom: 100 };

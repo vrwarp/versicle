@@ -1,7 +1,8 @@
 /**
  * Unit tests for the host side of the worker bridge: every EngineHostCommand kind the worker
- * can emit must map to the right store/repository call on the main thread. A new command kind
- * added to the union without a mapping here fails the exhaustiveness test.
+ * can emit must map to the right store/repository call on the main thread. The exhaustiveness
+ * test pins the set of kinds covered here, so extending the union means adding a CASE and
+ * listing its kind.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -138,8 +139,8 @@ describe('applyHostCommand — worker writes land on the right store/repository'
     });
 
     it('covers every EngineHostCommand kind (exhaustiveness)', () => {
-        // Mirrors the EngineHostCommand union; the Record type in this file's CASES plus this
-        // list pin the full set. If a kind is added to the union, add a CASE and list it here.
+        // Mirrors the EngineHostCommand union; this list pins the full set of kinds CASES
+        // covers. If a kind is added to the union, add a CASE and list it here.
         const covered = CASES.map((c) => c.command.kind).sort();
         expect(covered).toEqual([
             'addAnnotation', 'addCompletedRange', 'addGenAILog', 'markAnalysisError',

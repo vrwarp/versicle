@@ -20,11 +20,11 @@ import {
 } from 'lucide-react';
 
 export const DiagnosticsTab: React.FC = () => {
-    // The LIVE ring buffer + stats come over the engine handle (5b-PR4, the
-    // S9 fix): the engine runs in the worker, whose flight recorder is a
-    // DIFFERENT module instance than the main thread's — reading the local
-    // singleton showed an empty buffer. Persisted snapshots are shared
-    // IndexedDB rows, listed through the same command facade.
+    // The LIVE ring buffer + stats come over the engine handle: the engine
+    // runs in the worker, whose flight recorder is a DIFFERENT module
+    // instance than the main thread's — reading the local singleton would
+    // show an empty buffer. Persisted snapshots are shared IndexedDB rows,
+    // listed through the same command facade.
     const audio = useAudioCommands();
     const confirm = useConfirm();
     const [snapshots, setSnapshots] = useState<Omit<FlightSnapshot, 'eventsJSON'>[]>([]);

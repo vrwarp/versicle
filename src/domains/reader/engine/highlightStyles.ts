@@ -1,26 +1,27 @@
 /**
- * highlightStyles — the ONE registry for reader highlight rendering
- * (Phase 6 §4, prep/phase6-reader-engine.md).
+ * highlightStyles — the ONE registry for reader highlight rendering.
  *
- * Before this module, highlight styling came from THREE conflicting sources:
- *   1. iframe `themes.default` CSS (useEpubReader: fill-opacity 0.3/0.4) —
- *      mostly DEAD for SVG highlights: epub.js draws annotation SVGs in the
- *      PARENT document (marks-pane over the iframe), where iframe CSS cannot
- *      reach. Only the `background-color` rules could ever match in-iframe
- *      elements, and no highlight class is used inside the iframe.
- *   2. parent-document CSS (ReaderHighlightsStyles.tsx): .highlight-* +
+ * Highlight styling has THREE interacting sources:
+ *   1. iframe `themes.default` CSS (`iframeHighlightThemeCss`, applied by
+ *      epubTheming: fill-opacity 0.3/0.4) — mostly DEAD for SVG highlights:
+ *      epub.js draws annotation SVGs in the PARENT document (marks-pane over
+ *      the iframe), where iframe CSS cannot reach. Only the
+ *      `background-color` rules could ever match in-iframe elements, and no
+ *      highlight class is used inside the iframe.
+ *   2. parent-document CSS (`parentHighlightCss`, rendered by
+ *      ReaderHighlightsStyles.tsx): .highlight-* +
  *      .versicle-audio-bookmark-pending — these WIN over epub.js's SVG
  *      presentation attributes (CSS rules beat presentation attributes).
- *   3. per-call `styles` objects (history/debug) — applied by epub.js via
- *      `setAttribute`, merged over its defaults {fill: yellow,
- *      fill-opacity: 0.3, mix-blend-mode: multiply}. CamelCase keys
- *      (fillOpacity/mixBlendMode/backgroundColor) are NOT valid SVG
- *      presentation attributes and have never rendered — they are pinned
- *      here byte-identical anyway so consolidation cannot move a pixel.
+ *   3. `styles` objects (the history layer default, per-call for debug) —
+ *      applied by epub.js via `setAttribute`, merged over its defaults
+ *      {fill: yellow, fill-opacity: 0.3, mix-blend-mode: multiply}. CamelCase
+ *      keys (fillOpacity/mixBlendMode/backgroundColor) are NOT valid SVG
+ *      presentation attributes and never render — they are kept as-is so the
+ *      effective rendering below stays exactly what it is.
  *
- * EFFECTIVE rendering pinned by this registry (the characterization
- * baseline; verified against epubjs/src/managers/views/iframe.js:606-624 +
- * marks-pane/src/marks.js:129-137):
+ * EFFECTIVE rendering (pinned by highlightStyles.test.ts; verified against
+ * epubjs/src/managers/views/iframe.js `highlight()` + marks-pane/src/marks.js
+ * `Highlight.bind()`):
  *   - annotation colors: class fill (#fde047/#86efac/#93c5fd/#fca5a5),
  *     fill-opacity 0.8 light / 0.4 dark, multiply/screen (parent CSS wins).
  *   - audio-bookmark pending: striped pattern fill, same opacity/blend.
@@ -32,8 +33,8 @@
  */
 
 /**
- * Reserved layer ids for the HighlightLayerManager. 'search' is reserved for
- * the Phase 7 SearchSession (navigate-to-match temporary highlight).
+ * Reserved layer ids for the HighlightLayerManager. 'search' carries the
+ * navigate-to-match temporary highlight (app/reader/searchNavigation.ts).
  */
 export type HighlightLayerId = 'annotation' | 'tts' | 'history' | 'debug' | 'search';
 
@@ -42,15 +43,14 @@ export interface HighlightLayerConfig {
   defaultClassName: string;
   /**
    * Default `styles` object handed to `annotations.add` (epub.js applies it
-   * as SVG attributes). `undefined` means the 5-arg call form — byte-
-   * compatible with the pre-manager call sites.
+   * as SVG attributes). `undefined` means the 5-arg call form (no styles
+   * argument).
    */
   defaultStyles?: Record<string, string>;
   /**
    * Whether add/remove on this layer runs the orphaned-SVG DOM sweep.
    * epub.js occasionally orphans nested SVG annotations if inject() runs
-   * multiple times or visibility races occur — scar tissue inherited from
-   * ReaderTTSController (provenance comment there). Only 'tts' today.
+   * multiple times or visibility races occur. Only 'tts' today.
    */
   sweepOrphans: boolean;
   /** Class swept by the orphan sweep (only meaningful when sweepOrphans). */
@@ -69,8 +69,8 @@ export const HIGHLIGHT_LAYERS: Record<HighlightLayerId, HighlightLayerConfig> = 
   },
   history: {
     defaultClassName: 'reading-history-highlight',
-    // Verbatim from useHistoryHighlights.ts:84 (incl. the dead camelCase
-    // keys — see module docs; effective: gray @ 0.3 multiply).
+    // Includes the dead camelCase keys — see module docs; effective:
+    // gray @ 0.3 multiply.
     defaultStyles: { fill: 'gray', fillOpacity: '0.1', mixBlendMode: 'multiply' },
     sweepOrphans: false,
   },
@@ -84,7 +84,7 @@ export const HIGHLIGHT_LAYERS: Record<HighlightLayerId, HighlightLayerConfig> = 
   },
 };
 
-/** User-annotation color → epub.js class mapping (ReaderView diff effect, verbatim). */
+/** User-annotation color → epub.js class mapping (used by AnnotationLayer). */
 export function annotationClassName(color: string | undefined): string {
   switch (color) {
     case 'yellow':
@@ -100,7 +100,7 @@ export function annotationClassName(color: string | undefined): string {
   }
 }
 
-/** The pending audio-bookmark striped class (CompassPill triage flow). */
+/** The pending audio-bookmark striped class (audio-bookmark triage flow). */
 export const AUDIO_BOOKMARK_PENDING_CLASS = 'versicle-audio-bookmark-pending';
 
 /** Annotation SVG fill colors (single source for parent CSS + iframe theme). */
@@ -117,8 +117,8 @@ const TTS_FILL = '#fde047';
 /**
  * Parent-document CSS for the epub.js SVG highlight layers — the rules that
  * actually WIN for `fill`/`fill-opacity`/`mix-blend-mode`. Pinned values:
- * opacity 0.8 light / 0.4 dark, multiply/screen (ReaderHighlightsStyles.tsx
- * verbatim).
+ * opacity 0.8 light / 0.4 dark, multiply/screen. Rendered by
+ * ReaderHighlightsStyles.tsx.
  */
 export function parentHighlightCss(currentTheme: string): string {
   const isDark = currentTheme === 'dark';
@@ -163,10 +163,9 @@ export function parentHighlightCss(currentTheme: string): string {
 }
 
 /**
- * Iframe theme rules for the highlight classes (useEpubReader.ts:861-872
- * verbatim — the `themes.default` payload). Kept emitting exactly the same
- * object so the iframe stylesheet is unchanged; see module docs for why most
- * of this never reaches the SVG layer.
+ * Iframe theme rules for the highlight classes — the `themes.default`
+ * payload applied by `applyReaderTheme`. See module docs for why most of
+ * this never reaches the SVG layer.
  */
 export function iframeHighlightThemeCss(currentTheme: string): Record<string, Record<string, string>> {
   const isDark = currentTheme === 'dark';

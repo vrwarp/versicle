@@ -58,8 +58,8 @@ describe('DrivePreviewSheet', () => {
   });
 
   // The import gate is findExistingBookIdByFilename, so a sourceFilename hit is
-  // the one signal that predicts the outcome: the shelf will offer Replace. The
-  // old copy said "import anyway?" here and the import then failed outright.
+  // the one signal that predicts the outcome: the shelf will offer Replace, so
+  // the copy must not say "import anyway?" here.
   it('warns that a filename match will ask to replace', () => {
     setLibraryBooks({
       b1: {

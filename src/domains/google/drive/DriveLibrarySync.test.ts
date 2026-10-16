@@ -1,9 +1,8 @@
 /**
- * DriveLibrarySync suite (Phase 7 §G) — injected-port version of the deleted
- * src/lib/drive/DriveScannerService.test.ts (absorption ledger): scan/index,
- * diff, no-linked-folder no-ops, error propagation — plus the NEW typed-
- * error semantics (GoogleAuthRequiredError ⇒ warn + rethrow; shouldAutoSync
- * silent-deny instead of popup/disconnect).
+ * DriveLibrarySync suite — injected-port tests: scan/index, diff,
+ * no-linked-folder no-ops, error propagation, and the typed-error semantics
+ * (GoogleAuthRequiredError ⇒ warn + rethrow; shouldAutoSync silent-deny
+ * instead of popup/disconnect).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DriveLibrarySync, type DriveLibrarySyncPorts } from './DriveLibrarySync';

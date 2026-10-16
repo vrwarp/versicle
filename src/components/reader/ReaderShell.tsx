@@ -1,7 +1,6 @@
 /**
- * ReaderShell — the reader route as pure composition (Phase 6 §5,
- * prep/phase6-reader-engine.md PR-9). The 1,400-line ReaderView died here;
- * every concern lives in a named module:
+ * ReaderShell — the reader route as pure composition; every concern lives
+ * in a named module:
  *
  *  - engine construction + lifecycle + ReadingSessionRecorder + commands
  *      → app/reader/useReaderController
@@ -14,9 +13,6 @@
  *      useDeviceMarkers)
  *  - TTS highlight/keyboard        → ReaderTTSController (rides the
  *      ReaderCommands context)
- *
- * The shell stays under 200 lines by construction — that ceiling is the
- * phase exit criterion the prep doc puts a wc -l gate on.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { Outlet, useParams } from 'react-router-dom';
@@ -106,8 +102,8 @@ export const ReaderShell: React.FC = () => {
                     onOpenSyncPanel={() => setSyncPanelOpen(true)}
                 />
 
-                {/* Main Content — a real <main> landmark (P0 a11y baseline:
-                    the reader body lived outside any landmark region) */}
+                {/* Main Content — a real <main> landmark so the reader body
+                    sits inside a landmark region */}
                 <main aria-label="Book" className="flex-1 relative overflow-hidden flex justify-center">
                     <ReaderSidebars
                         bookId={bookId}

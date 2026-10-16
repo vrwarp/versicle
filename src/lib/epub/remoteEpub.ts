@@ -1,15 +1,15 @@
 /**
- * `RemoteEpubReader` — extract an EPUB's metadata and cover from a handful of
+ * `remoteEpub` — extract an EPUB's metadata and cover from a handful of
  * byte RANGES, without downloading the whole file. This is the pure engine
  * behind the Google Drive partial-fetch previews (see
  * plan/gdrive-partial-metadata.md); it knows only "how to read an EPUB through
  * a `readRange` port", nothing about Drive or the network gateway.
  *
- * The premise, corrected from the naive "the listing is at the front": a ZIP's
- * authoritative directory (the End Of Central Directory record + central
- * directory) lives at the END of the archive. So the first read is a TAIL
- * fetch; from the central directory we compute the exact byte range of each
- * entry we want (container.xml → the OPF → the cover) and fetch only those.
+ * A ZIP's authoritative directory (the End Of Central Directory record +
+ * central directory) lives at the END of the archive, not the front. So the
+ * first read is a TAIL fetch; from the central directory we compute the exact
+ * byte range of each entry we want (container.xml → the OPF → the cover) and
+ * fetch only those.
  *
  * OCF permits only stored (method 0) and deflate (method 8); deflate is
  * inflated with the platform-native `DecompressionStream('deflate-raw')` — no
@@ -22,7 +22,7 @@
  */
 
 // Type-only: the cover resolvers load on first preview (this module rides
-// the eager Drive/library graph — Phase 8 §A first-use splitting).
+// the eager Drive/library graph, so they stay out of it via dynamic import).
 import type { ArchivePort } from './structure/bookStructure';
 import type { ImageProbe } from './structure/coverResolver';
 

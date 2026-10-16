@@ -74,7 +74,7 @@ describe('MediaSessionManager', () => {
     (MediaSession.addListener as Mock).mockResolvedValue({ remove: vi.fn() });
 
     // --- Mocks for Artwork Processing ---
-    // Note: We don't need to mock fetch or URL.createObjectURL anymore since we load Image directly from URL string.
+    // Note: fetch and URL.createObjectURL need no mocking since Image loads directly from the URL string.
 
     global.Image = class {
       onload: () => void = () => { };
@@ -372,7 +372,7 @@ describe('MediaSessionManager', () => {
       expect(MediaSession.setPlaybackState).toHaveBeenCalledWith({
         playbackState: 'playing',
       });
-      // This should NOT be called anymore
+      // Position state is published separately via setPositionState
       expect(MediaSession.setPositionState).not.toHaveBeenCalled();
     });
 

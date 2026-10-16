@@ -1,9 +1,8 @@
 /**
  * The pure half of epubTheming: unit normalization, font-scale maths and
- * the forced-styles CSS. These are characterization functions — the whole
- * point is that a book renders exactly as it did before the extraction, so
- * every constant in them is load-bearing and a mutated one is a visible
- * typography change rather than a crash.
+ * the forced-styles CSS. These are characterization functions — every
+ * constant in them is load-bearing and a mutated one is a visible typography
+ * change rather than a crash.
  */
 import { describe, expect, it } from 'vitest';
 import {

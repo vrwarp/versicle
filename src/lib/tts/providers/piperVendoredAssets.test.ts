@@ -1,15 +1,15 @@
 /**
- * Vendored Piper asset smoke (5a-PR3) — the CI replacement for the deleted
+ * Vendored Piper asset smoke — the CI replacement for the deleted
  * install-time patcher (`scripts/patch_piper_worker.js`), whose failure mode was
  * warn-and-continue: a silently unpatched worker shipped without anyone noticing.
  *
- * The worker is now COMMITTED SOURCE at `third-party/piper/piper_worker.js`
+ * The worker is COMMITTED SOURCE at `third-party/piper/piper_worker.js`
  * (served verbatim at `/piper/piper_worker.js` — see the vite plugin). This test
  * asserts the functional patches are present, using anchor strings frozen from
  * the patch script before its deletion (patch list:
  * third-party/piper/PROVENANCE.md), and that every runtime asset the worker
  * needs ships in the vendor directory — including the LOCAL onnxruntime build
- * that replaced the cdnjs default (no third-party egress during synthesis).
+ * (no third-party egress during synthesis).
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, statSync } from 'node:fs';
@@ -55,7 +55,7 @@ describe('vendored piper assets (third-party/piper)', () => {
             expect(workerSource).toContain('self.postMessage({ kind: "complete", requestId });');
         });
 
-        // Patch 8 (2026 perf pass): `init` runs once per SYNTHESIZED CHUNK, so everything it
+        // Patch 8: `init` runs once per SYNTHESIZED CHUNK, so everything it
         // re-did was per-sentence work — four freshly minted (never revoked) object URLs and
         // two importScripts of ~660 KB of JavaScript. These anchors pin the fix the way the
         // patch-script anchors above pin patches 1–7.

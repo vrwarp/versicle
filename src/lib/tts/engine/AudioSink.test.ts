@@ -94,7 +94,7 @@ describe('regression: cloud speed/alignment policy through the real cache', () =
         const text = 'legacy alignmentData row sentence';
         const timepoints = [{ timeSeconds: 0.5, charIndex: 3, type: 'sentence' }];
 
-        // Seed a row the way pre-unification builds wrote it (alignmentData field),
+        // Seed a row the way older builds wrote it (alignmentData field),
         // under the key the provider will compute for this text+voice.
         const provider = new MockCloudProvider(new FakeAudioSink());
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -1,14 +1,7 @@
 /**
- * DriveClient suite (Phase 7 §G): typed errors, q-escaping, 401/403-scope
- * retry, silent-vs-interactive token acquisition.
- *
- * Absorbs the assertions of the deleted per-bug files (absorption ledger):
- *  - src/lib/drive/DriveService.pagination.test.ts (listFiles/listFolders
- *    nextPageToken paging)
- *  - src/lib/drive/DriveService.recursive.test.ts (recursive listing +
- *    folder-cycle guard)
- *  - src/components/drive/DriveLogic.test.ts §DriveService (Bearer header,
- *    401 refresh-and-retry-once)
+ * DriveClient suite: typed errors, q-escaping, 401/403-scope retry,
+ * silent-vs-interactive token acquisition, nextPageToken paging, recursive
+ * listing with a folder-cycle guard, rate-limit backoff, and ranged downloads.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { DriveClient, escapeDriveQueryValue } from './DriveClient';

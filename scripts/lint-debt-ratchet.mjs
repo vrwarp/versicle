@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 /**
- * Lint-debt ratchet (P9; plan/overhaul/README.md §4 rule 3):
+ * Lint-debt ratchet (plan/overhaul/README.md §4 rule 3):
  * production `any` usage (`as any` / `: any`) and eslint-disable directives
- * may ONLY decrease. The original Phase 0 baseline was 138 `as any` sites and
- * 245 disables; P9 drove every mechanically-fixable one to zero and froze the
- * irreducible rest — each with a justification — in lint-debt-allowlist.json.
+ * may ONLY decrease. The irreducible remainder is frozen — each entry with a
+ * justification — in lint-debt-allowlist.json.
  *
  *   check:   node scripts/lint-debt-ratchet.mjs --check   (CI gate)
  *   update:  node scripts/lint-debt-ratchet.mjs --update  (lock in a decrease)
@@ -19,8 +18,7 @@
  *
  * Scope: first-party production code = src✱✱/*.{ts,tsx} minus tests
  * (*.test.*, *.spec.*, src/test/, __tests__/, __fixtures__/) and ambient
- * *.d.ts. The vendored forks (packages/✱/src) are exempt by the same policy
- * as the eslint ignore block: they stay diff-minimal against upstream.
+ * *.d.ts.
  *
  * Counting: `as any` / `: any` are counted on comment- and string-stripped
  * source (a doc-comment mentioning `as any` is not debt); eslint-disable

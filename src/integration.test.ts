@@ -18,7 +18,7 @@ vi.mock('zustand/middleware', async (importOriginal) => {
   };
 });
 
-// Mock the extractor (Phase 7: the orchestrator's only heavy pure stage) —
+// Mock the extractor (the orchestrator's only heavy pure stage) —
 // everything BELOW it (orchestrator → persistence → real IDB via
 // fake-indexeddb → zustand/yjs stores) runs for real.
 vi.mock('./domains/library/import/extract', async (importOriginal) => {
@@ -59,7 +59,7 @@ describe('Feature Integration Tests', () => {
   vi.setConfig({ testTimeout: 120000 });
   beforeEach(async () => {
     // Clear DB (per-store one-shot clears — raw readwrite transactions are
-    // banned outside src/data at Phase 3 exit)
+    // banned outside src/data)
     const db = await getDB();
     await db.clear('static_manifests');
     await db.clear('static_resources');
@@ -75,7 +75,7 @@ describe('Feature Integration Tests', () => {
   });
 
   it('should add a book, list it, and delete it (Library Management)', async () => {
-    // 1. Add Book — through the ONE orchestrator entry (Phase 7 §B).
+    // 1. Add Book — through the ONE orchestrator entry.
     const file = new File(['mock epub bytes'], 'alice.epub', { type: 'application/epub+zip' });
     await libraryController.importFile(file);
 
@@ -91,7 +91,7 @@ describe('Feature Integration Tests', () => {
     expect(manifests).toHaveLength(1);
     const resources = await db.getAll('static_resources');
     expect(resources).toHaveLength(1);
-    // Phase 7 §F: the search corpus rides the ingest.
+    // The search corpus rides the ingest.
     const corpus = await db.get('cache_search_text', book.bookId);
     expect(corpus?.sections.length).toBeGreaterThan(0);
 

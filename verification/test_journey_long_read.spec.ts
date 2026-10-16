@@ -165,8 +165,8 @@ test('Journey Long Reading Test', async ({ page }) => {
     .catch(() => {});
 
   // 2. Verify Highlight is present
-  // Engine-port test handle (Phase 6): the raw __reader_added_annotations_count
-  // global died with the rendition global; the manager-backed counter replaces it.
+  // Engine-port test handle: the active reader engine's highlight count for the
+  // 'annotation' layer.
   const countAfter = await page.evaluate(() => window.__versicleTest?.reader?.highlightCount('annotation') ?? 0);
   console.log(`Annotations count after reload: ${countAfter}`);
 

@@ -1,8 +1,7 @@
 /**
- * SyncAlertPill — the "pick up where you left off" remote-progress alert,
- * extracted from the dissolved ui/CompassPill into its sync feature home
- * (Phase 8 §C). Pure presentation: the variant router (ReaderControlBar)
- * supplies the remote-progress copy, the jump onClick and the dismiss.
+ * SyncAlertPill — the "pick up where you left off" remote-progress alert.
+ * Pure presentation: the variant router (ReaderControlBar) supplies the
+ * remote-progress copy, the jump onClick and the dismiss.
  */
 import React from 'react';
 import { Smartphone, ArrowUpCircle, X } from 'lucide-react';

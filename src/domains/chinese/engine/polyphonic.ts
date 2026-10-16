@@ -35,10 +35,12 @@
  *    圣都, 受创, 恶恶, 夹*).
  *
  * Each entry's `words` list is pruned to ONLY the triggers pinyin-pro
- * actually gets wrong, so nothing here is redundant. (A broader Traditional
- * weakness remains — pinyin-pro mis-reads non-polyphonic Traditional too;
- * fixing that wholesale would mean computing pinyin on the Simplified text,
- * which is out of scope for this override.)
+ * actually gets wrong, so nothing here is redundant. (pinyin-pro mis-reads
+ * non-polyphonic Traditional too; the content processor addresses that
+ * wholesale by computing readings on the Simplified source — see
+ * getPinyinSourceText in TraditionalConverter — which is outside this
+ * override. The Traditional entries here apply to readings computed directly
+ * on Traditional text, i.e. getNodeReadings without a pinyinSourceText.)
  */
 
 interface PolyphonicAlternate {

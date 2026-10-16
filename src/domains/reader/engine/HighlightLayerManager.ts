@@ -1,19 +1,13 @@
 /**
- * HighlightLayerManager — the ONLY caller of epub.js `annotations.add/remove`
- * (Phase 6 §4, prep/phase6-reader-engine.md; exit gate: grep-zero
- * `annotations.add/remove` outside this module).
+ * HighlightLayerManager — the ONLY caller of epub.js `annotations.add/remove`.
  *
  * Per-layer `Map<cfi, …>` bookkeeping with idempotent add; the orphaned-SVG
  * DOM sweep is implemented ONCE here, for layers marked `sweepOrphans`
- * (only 'tts' today) — semantics copied verbatim from the three duplicated
- * sweeps that previously lived in ReaderTTSController.tsx (:69-81, :107-118,
- * :143-154). The pre-manager epub.js call shapes are preserved exactly
- * (5-arg form when no styles object, 6-arg form otherwise) so the entry-gate
- * characterization pins stay green through the cutover.
+ * (only 'tts' today). The epub.js call shapes are 5-arg when there is no
+ * styles object and 6-arg otherwise.
  *
- * Becomes `engine.highlights` when the ReaderEngine port lands (it is
- * constructed around the rendition either way); `count(layer)` feeds the
- * `__versicleTest.reader.highlightCount` E2E handle.
+ * Exposed as `engine.highlights` (constructed around the rendition);
+ * `count(layer)` feeds the `__versicleTest.reader.highlightCount` E2E handle.
  */
 import { createLogger } from '@lib/logger';
 import {
@@ -24,9 +18,9 @@ import {
 const logger = createLogger('HighlightLayerManager');
 
 /**
- * Structural slice of the epub.js Rendition the manager drives. The ambient
- * epubjs stub does not type `annotations`/`views` (their retirement is the
- * Phase 6 stub-refactor item), so the manager owns the narrow contract.
+ * Structural slice of the epub.js Rendition the manager drives — the narrow
+ * contract it owns (including the undeclared `_annotations*` internals), so
+ * the fake engine can supply a stand-in rendition.
  */
 export interface AnnotatingRendition {
   annotations: {
@@ -57,7 +51,7 @@ export interface AddHighlightOptions {
   styles?: Record<string, string>;
   /**
    * Click handler attached to the SVG group. `null` is passed through to
-   * epub.js verbatim (some legacy call sites pass an explicit null cb).
+   * epub.js verbatim (some call sites pass an explicit null cb).
    */
   onClick?: ((e: Event) => void) | null;
   /** epub.js data bag (rarely used; defaults to {}). */
@@ -160,8 +154,7 @@ export class HighlightLayerManager {
   /**
    * Manual DOM sweep killing orphaned SVG highlight groups. epub.js
    * occasionally orphans nested SVG annotations if inject() runs multiple
-   * times or visibility races occur (ReaderTTSController provenance) — the
-   * ONE implementation of the formerly-triplicated sweep.
+   * times or visibility races occur.
    */
   sweepOrphans(layer: HighlightLayerId): void {
     const config = HIGHLIGHT_LAYERS[layer];

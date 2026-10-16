@@ -1,6 +1,5 @@
 /**
- * Projection-store pins (Phase 7 §D). The WORKFLOW assertions of the
- * pre-cutover suite live on:
+ * Projection-store pins. The WORKFLOW assertions live in:
  *  - import/duplicate/replace/ghost/batch/restore →
  *    src/domains/library/importFlows.characterization.test.ts;
  *  - the five race invariants →

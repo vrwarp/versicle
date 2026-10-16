@@ -13,7 +13,7 @@ const logger = createLogger('SemanticTree');
 
 /**
  * Utility function to gather human-readable semantic data from stores.
- * This is used as a passive payload inside the V2 Backup Manifest.
+ * This is used as the passive `semanticData` payload inside the backup manifest.
  */
 export async function generateSemanticTree(): Promise<Partial<SyncManifest>> {
     logger.info('Generating semantic tree for passive backup payload...');

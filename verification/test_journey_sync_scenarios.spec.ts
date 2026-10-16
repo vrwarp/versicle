@@ -84,8 +84,8 @@ async function pollForPersistence(page: Page, expectedKeyPattern: string, retrie
  * Wait until the mock cloud holds a workspace-doc push newer than `since`
  * (page clock). MockFireProvider re-saves the whole Y.Doc, stamped with
  * `lastModified`, one injected debounce (20ms) after any Yjs update — so a
- * push newer than an action carries that action's writes. Tolerant like the
- * fixed sleeps it replaces: on timeout it just returns.
+ * push newer than an action carries that action's writes. Tolerant: on
+ * timeout it just returns.
  */
 async function waitForWorkspacePushAfter(page: Page, testUid: string, since: number, timeout = 5000): Promise<void> {
   await expect
@@ -181,7 +181,7 @@ test("seamless handoff", async ({ browser, baseURL }) => {
     await pageA.getByTestId("toc-item-6").scrollIntoViewIfNeeded().catch(() => {});
     await pageA.getByTestId("toc-item-6").click({ force: true });
     await expect(pageA.getByTestId("reader-toc-sidebar")).not.toBeVisible();
-    // Let the jump's display land (was a fixed 2s sleep).
+    // Let the jump's display land.
     await waitForCfiChange(pageA, cfiBeforeJump);
 
     // A few extra page turns for additional progress (best-effort)
@@ -189,7 +189,7 @@ test("seamless handoff", async ({ browser, baseURL }) => {
     for (let t = 0; t < turns; t++) {
       const cfiBeforeTurn = await currentCfi(pageA);
       await pageA.keyboard.press("ArrowRight");
-      // Let the turn land before the next one (was a fixed 400ms sleep).
+      // Let the turn land before the next one.
       await waitForCfiChange(pageA, cfiBeforeTurn, 5000);
     }
 
@@ -215,7 +215,7 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   }
 
   // Wait for the final progress write to reach the mock cloud: a workspace
-  // push newer than the back-navigation (was a fixed 2s sleep).
+  // push newer than the back-navigation.
   await waitForWorkspacePushAfter(pageA, testUid, backClickedAt);
 
   // Capture Sync State (Trigger push)
@@ -266,8 +266,8 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   await pageB.screenshot({ path: path.join(__dirname, "screenshots", "handoff_B_initial.png"), timeout: 5000 }).catch(() => {});
 
   console.log("[B] Selecting workspace to start sync...");
-  // Settings is now a Radix-Tabs SettingsShell at /settings/:tab (Phase-10 overhaul);
-  // the old role=button "Sync & Cloud" tab is now a real Radix tab.
+  // Settings is a Radix-Tabs SettingsShell at /settings/:tab; "Sync & Cloud" is a
+  // real Radix tab.
   await openSettings(pageB);
   await gotoSettingsTab(pageB, "sync");
 
@@ -293,8 +293,9 @@ test("seamless handoff", async ({ browser, baseURL }) => {
 
   // Click card to trigger Content Missing dialog. The settings/migration Radix
   // Dialog backdrop can linger for one animation frame after the workspace-switch
-  // reload and intercept this click (the §0 backdrop-interception signature), so
-  // dismiss any lingering settings overlay first.
+  // reload and intercept this click (the Radix backdrop-interception signature —
+  // docs/comprehensive/64-e2e-verification.md, Lesson 5), so dismiss any lingering
+  // settings overlay first.
   await closeSettings(pageB);
   await cardB.click({ force: true });
 
@@ -306,7 +307,7 @@ test("seamless handoff", async ({ browser, baseURL }) => {
   // Supply the file
   await pageB.setInputFiles("data-testid=restore-file-input", alicePath);
   // Let the restore land before the Escape / navigation below: the dialog (and
-  // this input) unmounts once the re-ingest completes (was a fixed 2s sleep).
+  // this input) unmounts once the re-ingest completes.
   await pageB.locator("[data-testid='restore-file-input']").waitFor({ state: "detached", timeout: 15000 }).catch(() => {});
 
   // Wait for restoration to complete. The Content Missing dialog closes once the re-supplied
@@ -407,7 +408,7 @@ test("note marker affordance", async ({ browser, baseURL }) => {
   await page.getByTestId("toc-item-6").click({ force: true });
   await expect(page.getByTestId("reader-toc-sidebar")).not.toBeVisible();
   // Let the chapter's display land, so the frame resolved below is the new
-  // section's (was a fixed 1.5s sleep).
+  // section's.
   await waitForSectionChange(page, hrefBeforeJump);
 
   // Resolve the rendered content frame and confirm prose is present
@@ -487,8 +488,8 @@ test("offline resilience", async ({ browser, baseURL }) => {
   injectMockFirestore(pageA, testUid);
   await clearDataAndReload(pageA, finalBaseURL);
 
-  // Add Lexicon Rule. Settings is now a Radix-Tabs SettingsShell (Phase-10);
-  // the Dictionary panel's lexicon entry button is "Manage Rules".
+  // Add Lexicon Rule. Settings is a Radix-Tabs SettingsShell; the Dictionary
+  // panel's lexicon entry button is "Manage Rules".
   await openSettings(pageA);
   await gotoSettingsTab(pageA, "dictionary");
   await pageA.getByRole("button", { name: "Manage Rules" }).click();
@@ -499,8 +500,7 @@ test("offline resilience", async ({ browser, baseURL }) => {
   await pageA.click("data-testid=lexicon-save-rule-btn");
 
   // Allow Yjs/Store to propagate changes and the mock cloud to push them: a
-  // workspace push newer than the save (was a fixed 1s sleep here plus 2s
-  // before the final snapshot read below).
+  // workspace push newer than the save.
   await waitForWorkspacePushAfter(pageA, testUid, ruleSavedAt);
 
   // Flush sync
@@ -542,8 +542,8 @@ test("offline resilience", async ({ browser, baseURL }) => {
   await pageB.reload();
 
   console.log("[B] Selecting workspace to start sync...");
-  // Settings is now a Radix-Tabs SettingsShell at /settings/:tab (Phase-10 overhaul);
-  // the old role=button "Sync & Cloud" tab is now a real Radix tab.
+  // Settings is a Radix-Tabs SettingsShell at /settings/:tab; "Sync & Cloud" is a
+  // real Radix tab.
   await openSettings(pageB);
   await gotoSettingsTab(pageB, "sync");
 
@@ -562,14 +562,15 @@ test("offline resilience", async ({ browser, baseURL }) => {
 
   // Give sync manager time to process: "Yes, Finalize" reloads the page (App.tsx
   // onResolved) and sync starts on the new boot. Only the reloaded document drops
-  // the confirmation modal; wait for it and its library (was a fixed 5s sleep —
-  // the retry loop below then waits for the synced rule itself).
+  // the confirmation modal; wait for it and its library (the retry loop below
+  // then waits for the synced rule itself).
   await expect(pageB.getByText("Finalize Workspace Switch?")).toBeHidden({ timeout: 15000 }).catch(() => {});
   await expect(pageB.getByTestId("library-view")).toBeVisible({ timeout: 15000 }).catch(() => {});
 
   // Check Settings. Ensure no leftover settings/migration overlay is still mounted
-  // (its Radix backdrop would intercept the header-settings-button click — §0), then
-  // open the Dictionary tab via the new SettingsShell tabs.
+  // (its Radix backdrop would intercept the header-settings-button click; see
+  // docs/comprehensive/64-e2e-verification.md, Lesson 5), then open the
+  // Dictionary tab via the SettingsShell tabs.
   await closeSettings(pageB);
   await openSettings(pageB);
   await gotoSettingsTab(pageB, "dictionary");
@@ -627,7 +628,7 @@ test("data liberation", async ({ browser, baseURL }) => {
   injectMockFirestore(page, testUid);
   await clearDataAndReload(page, finalBaseURL);
 
-  // Create some data via the new SettingsShell Dictionary tab.
+  // Create some data via the SettingsShell Dictionary tab.
   await openSettings(page);
   await gotoSettingsTab(page, "dictionary");
   await page.getByRole("button", { name: "Manage Rules" }).click();
@@ -646,7 +647,7 @@ test("data liberation", async ({ browser, baseURL }) => {
   await page.reload();
   await expect(page.getByTestId("library-view")).toBeVisible();
 
-  // Open Data Management via the new SettingsShell tabs. The Data Management tab is
+  // Open Data Management via the SettingsShell tabs. The Data Management tab is
   // the last item in the vertical tablist and can sit below the fold on mobile
   // (Playwright reports "Element is outside of the viewport"), so scroll it into
   // view before clicking rather than relying on a bare click.
@@ -668,8 +669,8 @@ test("data liberation", async ({ browser, baseURL }) => {
   const fileContent = fs.readFileSync(tempPath, "utf8");
   const data = JSON.parse(fileContent);
 
-  // BACKUP_VERSION bumped to 3 in the Phase-10 overhaul (BackupService.ts); the v3
-  // manifest still carries yjsSnapshot + semanticData, so those assertions stay.
+  // BACKUP_VERSION is 3 (BackupService.ts); the v3 manifest carries yjsSnapshot +
+  // semanticData.
   expect(data.version).toBe(3);
   expect(data).toHaveProperty("yjsSnapshot");
   expect(data).toHaveProperty("semanticData");

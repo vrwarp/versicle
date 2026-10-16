@@ -1,10 +1,10 @@
 import type { Timepoint } from '~types/tts';
 
 /**
- * Canonical home of {@link Timepoint} is src/types/tts.ts (Phase 1a type
- * split, layering-deps.md LD-1): types/db.ts (CacheAudioBlob.alignment)
- * needs it and the types layer may not import lib/tts. Re-exported here
- * (type-only, zero runtime change) so existing consumers keep compiling.
+ * Canonical home of {@link Timepoint} is src/types/tts.ts: types/cache.ts
+ * (CacheAudioBlob.alignment) needs it and the types layer may not import
+ * lib/tts. Re-exported here (type-only) so provider consumers can import it
+ * alongside the other provider types.
  */
 export type { Timepoint } from '~types/tts';
 
@@ -67,7 +67,7 @@ export function toTTSErrorPayload(e: unknown): TTSErrorPayload {
 }
 
 /**
- * Typed play-failure rethrown by `TTSProviderManager.play` (Phase 5a single
+ * Typed play-failure rethrown by `TTSProviderManager.play` (the single
  * failure path): the manager performs NO self-swap and emits NO synthetic
  * `{type:'fallback'}` event — the engine owns the recovery policy, keyed on
  * this error. Identification goes through the `name` field (not `instanceof`)
@@ -122,11 +122,10 @@ export type Unsubscribe = () => void;
 /**
  * Interface that all TTS providers must implement.
  *
- * Narrowed at Phase 5a (phase5-tts-strangler.md §5a.1): dead `resume()`,
- * `SpeechSegment.isNative` and `TTSOptions.volume` are gone; `dispose()` and
- * unsubscribable `on()` are required (the manager detaches + disposes outgoing
- * providers on swap). Capability surfaces (voice download, locale) live in
- * `registry.ts` as descriptor-driven type guards, not optional methods here.
+ * `dispose()` and unsubscribable `on()` are required (the manager detaches +
+ * disposes outgoing providers on swap). Capability surfaces (voice download,
+ * locale) live in `registry.ts` as descriptor-driven type guards, not optional
+ * methods here.
  */
 export interface ITTSProvider {
   /** Unique identifier for the provider. */

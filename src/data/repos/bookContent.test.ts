@@ -1,14 +1,10 @@
 /**
- * bookContent repo contract suite (Phase 3 D5.3 / Test plan R).
+ * bookContent repo contract suite.
  *
- * The ingest→read round-trip characterization (P3-1 entry gate) lives in
- * src/db/DBService.test.ts and keeps passing through the deprecated façade
- * until P3-12; this suite pins the surface that is NEW or CHANGED with the
- * carve: the duplicate-add rejection through write() (the old DBService
- * shape left an unhandled tx.done rejection — see the NOTE in the
- * characterization suite), replaceDerivedContent (absorbed from
- * lib/ingestion.ts's raw reprocess transaction), the bulk restore writers,
- * and the orphan scan/prune that moved out of MaintenanceService.
+ * Pins the duplicate-add rejection through write() (a failed add surfaces as
+ * a DatabaseError rather than an unhandled tx.done rejection),
+ * replaceDerivedContent, the bulk restore writers, the orphan scan/prune, and
+ * the ingest→read round-trip characterization.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { bookContent } from './bookContent';
@@ -185,10 +181,8 @@ describe('data/repos/bookContent', () => {
     });
   });
 
-  // Absorbed VERBATIM (modulo the repo method names) from
-  // src/db/DBService.test.ts when the deprecated façade was deleted (P3-12;
-  // test-absorption ledger, plan/overhaul/README.md §4 rule 8). This is the
-  // P3-1 entry-gate characterization the carve was required to keep green.
+  // Characterization of the ingest→read round-trip through the repo's public
+  // surface.
   describe('characterization: ingest→read round-trip (absorbed from db/DBService.test.ts, P3-1 entry gate)', () => {
     const COVER_BYTES = [1, 2, 3, 250, 255];
     const EPUB_BYTES = [80, 75, 3, 4, 0, 200];

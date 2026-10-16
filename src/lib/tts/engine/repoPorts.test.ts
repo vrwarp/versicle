@@ -34,10 +34,10 @@ describe('lib/tts/engine/repoPorts — createRepoSessionStore', () => {
   /**
    * The port memoizes "this book has been seeded" forever, on the premise that
    * one getSession puts the row in the repo's mirror and it stays there. The
-   * mirror became a 4-entry LRU, so the premise stopped holding: a book evicted
-   * mid-session was still remembered as seeded, and the next persist wrote a
-   * record built from scratch — dropping whatever else the stored row carried.
-   * The repo is cold-safe now, so the memo is only an ordering optimization.
+   * mirror is a 4-entry LRU, so that premise does not hold: a book evicted
+   * mid-session is still remembered as seeded, and the next persist would write
+   * a record built from scratch — dropping whatever else the stored row carried.
+   * The repo is cold-safe, so the memo is only an ordering optimization.
    */
   describe('regression: a persist after an LRU eviction keeps the stored row', () => {
     it('does not clobber the pause stamp of a book the mirror evicted', async () => {

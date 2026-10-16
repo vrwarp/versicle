@@ -1,7 +1,7 @@
 /**
- * SearchSession lifecycle suite (Phase 7 PR-S1 exit): real engine through
- * the injected factory, repo-backed indexing, dispose-during-index,
- * engine-crash reset. No worker, no reader imports.
+ * SearchSession lifecycle suite: real engine through the injected factory,
+ * repo-backed indexing, dispose-during-index, engine-crash reset. No worker,
+ * no reader imports.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { SearchEngine } from '@lib/search-engine';
@@ -149,7 +149,7 @@ describe('SearchSession', () => {
     const boom = new Error('worker died');
     crash(boom);
 
-    // The dead-worker state is gone: no stale isIndexed:true (search.md #6).
+    // The dead-worker state is gone: no stale isIndexed:true.
     expect(onError).toHaveBeenCalledWith(boom);
     expect(session.isIndexed('bk-1')).toBe(false);
     expect(created[0].dispose).toHaveBeenCalledTimes(1);
@@ -161,7 +161,7 @@ describe('SearchSession', () => {
   });
 });
 
-// ── Increment D — hybrid semantic query path ─────────────────────────────────
+// ── Hybrid semantic query path ───────────────────────────────────────────────
 
 const DIMS = 8;
 
@@ -172,13 +172,13 @@ const SEMANTIC_TEXT =
 const SEMANTIC_HREF = 'ch1.xhtml';
 
 /**
- * The B3 quantizer port (reuse the real SearchEngine helper, the same instance
+ * The int8 quantizer port (reuse the real SearchEngine helper, the same instance
  * shape the controller passes).
  */
 const quantize = (vec: Float32Array) => new SearchEngine().quantizeInt8PerVector(vec);
 
 /**
- * Seed an embedded row exactly the way the indexer does (Increment C): chunk the
+ * Seed an embedded row exactly the way the indexer does: chunk the
  * section, embed each chunk under the 'document' profile, quantize + pack. Row r
  * ↔ chunk r, so semanticRank's re-chunk alignment holds.
  */
@@ -422,10 +422,10 @@ describe('SearchSession — hybrid semantic query path (Increment D)', () => {
    * `semanticRank` assembles its rows in EMBEDDED-SECTION order (per-section
    * top-k, sections concatenated front to back) while `fuseRrf` reads each
    * row's RANK straight off its array index. Fusing the section-ordered list
-   * therefore made a semantic hit's reciprocal-rank contribution a function of
-   * WHICH CHAPTER it came from: on a 30-section book the best passage, in
-   * section 24, sat at array index ~456, so the fused 100-cap dropped it while
-   * every weak section-0 row survived.
+   * would therefore make a semantic hit's reciprocal-rank contribution a
+   * function of WHICH CHAPTER it came from: on a 30-section book the best
+   * passage, in section 24, sits at array index ~456, so the fused 100-cap
+   * would drop it while every weak section-0 row survived.
    */
   describe('regression: the fused cap cuts by similarity, not by chapter position', () => {
     const SECTIONS = 30;
@@ -520,7 +520,7 @@ describe('SearchSession — hybrid semantic query path (Increment D)', () => {
       expect(results[0].similarity).toBe(BEST_COSINE);
 
       // The page is ordered by match quality, so every section's best row beats
-      // section 0's weaker tail — one chapter can no longer own the whole page.
+      // section 0's weaker tail — one chapter cannot own the whole page.
       expect(new Set(results.map((r) => r.href)).size).toBe(SECTIONS);
       expect(results.filter((r) => r.href === href(0))).not.toHaveLength(ROWS_PER_SECTION);
     });
@@ -645,7 +645,7 @@ describe('SearchSession — hybrid semantic query path (Increment D)', () => {
     it('excludes text-less sections from the total so a fully-embedded book reads as done', async () => {
       // Regression: a text-less spine item (an image-only cover page) lives in
       // the corpus but yields zero chunks, so it is never in the embeddings
-      // row. Counting it in the total stranded the book at N-1/N forever.
+      // row. Counting it in the total would strand the book at N-1/N forever.
       const { factory } = makeFactory();
       const queryClient = new MockEmbeddingClient({ dims: DIMS });
 
@@ -681,9 +681,9 @@ describe('SearchSession — hybrid semantic query path (Increment D)', () => {
 
     it('counts progress on a HASH-LESS corpus by deriving the hash from text', async () => {
       // Regression: a version-3 corpus extracted before `sectionTextHash`
-      // existed has no per-section hash. The counter used to require the corpus
-      // hash to be defined, so such a book sat at 0 sections embedded forever
-      // even after thousands of vectors were written. The counter now derives
+      // existed has no per-section hash. A counter that required the corpus
+      // hash to be defined would leave such a book at 0 sections embedded forever
+      // even after thousands of vectors were written. The counter derives
       // the hash from the section text — the SAME key the indexer stores — so it
       // matches and progress is reported.
       const { factory } = makeFactory();
@@ -811,7 +811,7 @@ describe('SearchSession — hybrid semantic query path (Increment D)', () => {
         });
         expect(getNoJob).toHaveBeenCalledTimes(1);
 
-        // (b) a legacy journal row whose entries carry no hash
+        // (b) a journal row whose entries carry no hash (written before the hash stamp)
         const getLegacy = vi.fn(async () => embedded as unknown as EmbeddedRowView);
         const legacy = new SearchSession({
           engineFactory: factory,

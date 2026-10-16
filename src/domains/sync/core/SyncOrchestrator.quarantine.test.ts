@@ -1,28 +1,27 @@
 /**
- * P4-4 doc-level quarantine enforcement — the two-client obsolete suite
+ * Doc-level quarantine enforcement — the two-client obsolete suite
  * (phase4-sync-strangler.md §D5; program rule 6's standing two-client
  * upgrade test at the vitest tier).
  *
- * Client A is simulated through the mock backend's storage (a v7-stamped
- * workspace doc synthesized from the committed v5 fixture via the migration
- * coordinator — never hand-rolled, per the prep doc's fixture rule). Client
- * B is the real orchestrator + MockBackend + wireSyncEvents stack at
- * CURRENT_SCHEMA_VERSION (written against FirestoreSyncManager; retargeted
- * when P4-3 decomposed and deleted it — assertions unchanged). Asserted,
- * per layer:
+ * Client A is simulated through the mock backend's storage (a workspace doc
+ * stamped one schema version past CURRENT, synthesized from the committed v5
+ * fixture via the migration coordinator — never hand-rolled, per the prep
+ * doc's fixture rule). Client B is the real orchestrator + MockBackend +
+ * wireSyncEvents stack at CURRENT_SCHEMA_VERSION. Asserted, per layer:
  *
  *  1. PRE-ATTACH metadata probe: B locks before any download.
- *  1b. PRE-APPLY scratch check: downloaded v7 state never touches the live
- *      doc (clean-sync) / never reaches the destructive apply (switch).
- *  2. LIVE observer: an incoming v7 update destroys the provider — B locks
- *     AND zero outbound writes reach the backend afterwards (the upgraded
- *     assertion over P2's label-only behavior).
+ *  1b. PRE-APPLY scratch check: downloaded future-version state never
+ *      touches the live doc (clean-sync) / never reaches the destructive
+ *      apply (switch).
+ *  2. LIVE observer: an incoming future-version update destroys the
+ *     provider — B locks AND zero outbound writes reach the backend
+ *     afterwards.
  *  3. Metadata stamp: a migrated doc's version is written back to the
  *     workspace directory (the mock-side twin of the emulator
  *     updateWorkspaceMetadata contract case).
  *
- * In every case the device heartbeat is stopped — pre-P4 it kept writing
- * from behind the lock screen.
+ * In every case the device heartbeat is stopped (it must not keep writing
+ * from behind the lock screen).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -72,18 +71,18 @@ const seedWorkspace = (workspaceId: string, extra: Partial<WorkspaceMetadata> = 
 
 /**
  * Client A's doc: the committed v5 fixture, migrated through the real
- * coordinator to CURRENT, then stamped one version into the future (both
- * halves of the dual-write, like a real v7 migration would).
+ * coordinator to CURRENT, then stamped one version into the future (the
+ * `meta` stamp plus the per-map `library.__schemaVersion` stamp).
  */
 async function buildFutureVersionUpdate(): Promise<Uint8Array> {
   const doc = new Y.Doc();
   // Deterministic merge outcome: Y.Map resolves CONCURRENT same-key sets
   // toward the higher clientID, and both docs draw random ids — when the
   // live doc already carries meta.schemaVersion (the layer-3 stamp test
-  // writes it on the shared singleton), the v7 stamp's victory in the
-  // layer-2 residual assertion was a coin flip. Pin client A above the
-  // live client (same trick as CheckpointService.test.ts tempDocCounter)
-  // so the merged value is always the future version.
+  // writes it on the shared singleton), the future-version stamp's victory
+  // in the layer-2 residual assertion would be a coin flip. Pin client A
+  // above the live client (same trick as CheckpointService.test.ts
+  // tempDocCounter) so the merged value is always the future version.
   doc.clientID = getYDoc().clientID + 1;
   Y.applyUpdate(doc, new Uint8Array(readFileSync(join(fixtureDir, 'v5.update.bin'))));
   await runCrdtMigrationsOnDoc(doc, { createCheckpoint: () => Promise.resolve(1) });
@@ -216,7 +215,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
   it('layer 3 — metadata stamp: connect writes the migrated doc version back to the directory', async () => {
     seedWorkspace('ws_stamp', { schemaVersion: 2 });
     useSyncStore.getState().setActiveWorkspaceId('ws_stamp');
-    // The local doc was migrated to CURRENT (the coordinator's dual-write).
+    // The local doc was migrated to CURRENT (the coordinator stamps `meta`).
     getYDoc().getMap('meta').set('schemaVersion', CURRENT_SCHEMA_VERSION);
 
     const manager = await getSyncOrchestratorAsync();
@@ -243,8 +242,8 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     await manager.start();
     await vi.waitFor(() => expect(manager.getStatus()).toBe('connected'), { timeout: 5000 });
 
-    // The fleet moves on: a v7 update lands on the live doc (this is what
-    // the provider does internally with remote updates).
+    // The fleet moves on: a future-version update lands on the live doc
+    // (this is what the provider does internally with remote updates).
     Y.applyUpdate(getYDoc(), await buildFutureVersionUpdate());
 
     await expectLocked(FUTURE_VERSION);
@@ -253,7 +252,7 @@ describe('quarantine enforcement: two-client obsolete (P4-4 §D5)', () => {
     expect(getYDoc().getMap('meta').get('schemaVersion')).toBe(FUTURE_VERSION);
 
     // …but the provider is destroyed: a local write after the lock never
-    // reaches the backend (upgraded assertion vs P2's label-only severing).
+    // reaches the backend.
     const storageAfterLock = JSON.stringify(MockFireProvider.getMockStorageData());
     getYDoc().getMap('library').set('post-lock-probe', 'must-not-sync');
     await new Promise((resolve) => setTimeout(resolve, 60));

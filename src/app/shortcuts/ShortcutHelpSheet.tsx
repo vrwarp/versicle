@@ -28,9 +28,9 @@ interface ShortcutHelpSheetProps {
 }
 
 /**
- * The `?` help sheet (Phase 8 §E discoverability gap): GENERATED from the
- * live registrations' descriptionKeys — registering a shortcut documents
- * it; there is no second list to forget.
+ * The `?` help sheet: GENERATED from the live registrations'
+ * descriptionKeys — registering a shortcut documents it; there is no
+ * second list to forget.
  */
 export const ShortcutHelpSheet: React.FC<ShortcutHelpSheetProps> = ({ open, onOpenChange }) => {
   const registrations = useSyncExternalStore(

@@ -1,6 +1,6 @@
 /**
  * Find a book's cover when the package doesn't declare one properly — the
- * cover half of the malformed-EPUB hardening (plan §4.3).
+ * cover half of the malformed-EPUB hardening (plan/epub-toc-cover-hardening.md §4.3).
  *
  * epub.js only honours the two OPF markers (`properties="cover-image"`,
  * `<meta name="cover" content="{id}">`). Books in the wild instead put the
@@ -31,7 +31,7 @@ export interface CoverCandidate {
   href: string;
   mediaType: string;
   reason: CoverReason;
-  /** Declared by the package itself (cover-image / meta cover): size checks only warn. */
+  /** Declared by the package itself (cover-image / meta cover): exempt from the plausible-size check. */
   explicit: boolean;
   /** The XHTML document the image was found in, when it came from one. */
   via?: string;

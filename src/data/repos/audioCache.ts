@@ -1,16 +1,14 @@
 /**
- * `cache_audio_blobs` repository — synthesized TTS audio segments
- * (Phase 3, D5.1 in plan/overhaul/prep/phase3-storage-gateway.md; carved
- * from src/db/DBService.ts getCachedSegment/cacheSegment).
+ * `cache_audio_blobs` repository — synthesized TTS audio segments.
  *
  * Worker-safe: the TTS engine worker imports this module (via TTSCache).
  * It must never import stores, sync services, React, or zustand — only
  * `~types/*`, `@lib/logger`, and the data layer itself.
  *
- * Differences from the DBService it replaces (both design decisions, D5.1):
- * - The `lastAccessed` bump on read used to be a gate-bypassing
- *   fire-and-forget `db.put` on EVERY cache hit — the highest-frequency
- *   readwrite bypass during playback. It now goes through `write()` and is
+ * Design decisions:
+ * - The `lastAccessed` bump on read goes through the write gate (`write()`)
+ *   rather than a bare fire-and-forget `db.put`, which on EVERY cache hit
+ *   would be the highest-frequency readwrite bypass during playback. It is
  *   debounced: skipped while the stored `lastAccessed` is under 1 h old.
  * - New rows are stamped with an additive `size` field (audio byteLength)
  *   so the eviction scan can avoid touching the blob. Additive only — NOT
@@ -22,12 +20,12 @@
  * deletes oldest-first in small gated batches until under budget, skipping
  * rows touched in the last 24 h so audio cannot vanish mid-playback.
  *
- * The scan is now GUARDED by a persisted running byte total
+ * The scan is GUARDED by a persisted running byte total
  * (`app_metadata['audio-cache-total-bytes']`, additive KV key — no DB bump):
  * a sweep whose tracked total is under budget returns without opening a
  * cursor at all. This is what keeps the boot sweep and the every-50-puts
  * sweep off the main thread — a value cursor deserializes each row's
- * multi-hundred-KB `audio` ArrayBuffer, so the old unconditional scan cost
+ * multi-hundred-KB `audio` ArrayBuffer, so an unconditional scan would cost
  * the whole 512 MiB budget in deserialization per sweep.
  *
  * The tracked total is a HINT only. It never decides WHAT to evict: whenever
@@ -42,10 +40,11 @@
  * read-modify-write recipe in write-gate.ts — and the populate callback stays
  * synchronous). That matters because the sweep only runs at boot and after
  * every {@link EVICTION_PUT_INTERVAL} puts: a session that synthesizes fewer
- * segments than that and then closes used to take its whole accounting to the
- * grave, so the stored hint could sit frozen under budget while the cache grew
- * across sessions and the budget stopped being enforced. The eviction delete
- * batches keep carrying the corrected total in their own transactions.
+ * segments than that and then closes would otherwise take its whole accounting
+ * to the grave, so the stored hint could sit frozen under budget while the
+ * cache grew across sessions and the budget stopped being enforced. The
+ * eviction delete batches keep carrying the corrected total in their own
+ * transactions.
  *
  * {@link AudioCacheRepo.deltaBytes} is only the remainder that could not be
  * folded yet (the hint absent, or a put that raced a sweep's write). Every
@@ -58,9 +57,9 @@
  * across contexts (the worker and the main thread each keep their own
  * remainder), and any scan re-establishes the truth.
  *
- * IDB v25 (P3-13, D7) added the `by_lastAccessed` index and this module's
- * post-open idle `size` backfill ({@link AudioCacheRepo.backfillSizesOnce},
- * run once from the `background` boot phase).
+ * The post-open idle `size` backfill ({@link AudioCacheRepo.backfillSizesOnce},
+ * run once from the `backgroundTasks` boot phase) stamps rows written before
+ * the `size` field existed.
  */
 import { getConnection } from '../connection';
 import { write } from '../write-gate';
@@ -130,8 +129,7 @@ class AudioCacheRepo {
       const now = Date.now();
       if (now - segment.lastAccessed >= LAST_ACCESSED_BUMP_INTERVAL_MS) {
         // Debounced LRU stamp, serialized through the write gate.
-        // Fire-and-forget like its predecessor: a failed bump must never
-        // fail the read.
+        // Fire-and-forget: a failed bump must never fail the read.
         const bumped = { ...segment, lastAccessed: now };
         void write(['cache_audio_blobs'], (tx) => {
           tx.objectStore('cache_audio_blobs').put(bumped);
@@ -199,18 +197,18 @@ class AudioCacheRepo {
   }
 
   /**
-   * v25 post-open idle backfill (D7 step 3): stamp the additive `size`
-   * field on rows written before P3-6 introduced it, so the eviction scan
-   * never has to touch the audio blob. Runs once — a completion flag in
-   * `app_metadata` short-circuits later boots. Returns the number of rows
-   * stamped.
+   * v25 post-open idle backfill: stamp the additive `size` field on rows
+   * written before it existed, so the eviction scan never has to touch the
+   * audio blob. Runs once — a completion flag in `app_metadata` short-circuits
+   * later boots. Returns the number of rows stamped.
    *
    * Pass 1 streams a readonly cursor collecting only the KEYS of rows
-   * missing `size`; pass 2 re-reads each row outside the gate (D1's
-   * read-modify-write recipe), stamps `size = audio.byteLength`, and puts
-   * synchronously in small gated batches. Last-write-wins between read and
-   * stamp: a concurrent putSegment stamps `size` itself, so the worst case
-   * is reverting one row's sub-hour lastAccessed bump.
+   * missing `size`; pass 2 re-reads each row outside the gate (the
+   * read-modify-write recipe in write-gate.ts), stamps
+   * `size = audio.byteLength`, and puts synchronously in small gated
+   * batches. Last-write-wins between read and stamp: a concurrent putSegment
+   * stamps `size` itself, so the worst case is reverting one row's sub-hour
+   * lastAccessed bump.
    */
   async backfillSizesOnce(): Promise<number> {
     try {

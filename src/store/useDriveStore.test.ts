@@ -26,7 +26,7 @@ describe('useDriveStore', () => {
 
 
 /**
- * F9: the scanned `index` is persisted (5–6 fields per row, thousands of rows
+ * The scanned `index` is persisted (5–6 fields per row, thousands of rows
  * possible) and zustand persist re-runs partialize + JSON.stringify and calls
  * `localStorage.setItem` SYNCHRONOUSLY after EVERY set — including
  * `setScanning(true)`, whose flag is not even in the allowlist. The deduped

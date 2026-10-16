@@ -22,8 +22,8 @@ interface Props {
  * @returns A React component rendering the annotation list.
  */
 export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
-  // Scoped selectors (jank fix): the bare useAnnotationStore() call
-  // re-rendered this list on every annotation-store change, selected or not.
+  // Scoped selectors: a bare useAnnotationStore() call would re-render this
+  // list on every annotation-store change, selected or not.
   const annotations = useAnnotationStore(state => state.annotations);
   const remove = useAnnotationStore(state => state.remove);
   const update = useAnnotationStore(state => state.update);
@@ -52,9 +52,9 @@ export const AnnotationList: React.FC<Props> = ({ onNavigate, bookId }) => {
     setEditingId(null);
   };
 
-  // Memoized (jank fix): this filter+sort ran in the render body, so every
-  // keystroke in the inline note editor below re-sorted the whole library's
-  // annotations.
+  // Memoized: running this filter+sort in the render body would re-sort the
+  // whole library's annotations on every keystroke in the inline note editor
+  // below.
   const annotationList = React.useMemo(
     () =>
       Object.values(annotations)

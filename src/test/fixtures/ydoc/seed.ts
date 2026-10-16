@@ -26,7 +26,7 @@ export const DEVICE_B = 'fixture-device-b';
 export const BOOK_EN = 'fixture-book-alice';
 export const BOOK_CJK = 'fixture-book-hongloumeng';
 
-/* Era 6 (added for the v7 vocabulary canonicalization, Phase 6 PR-13):
+/* Era 6 (for the v7 vocabulary canonicalization):
  * the TERMINAL v6 shape — meta map present, preferences folded WITH the
  * legacy per-device husks retained (copy-without-clear), popover deleted —
  * plus a vocabulary carrying TRADITIONAL keys and one trad/simp duplicate
@@ -34,7 +34,7 @@ export const BOOK_CJK = 'fixture-book-hongloumeng';
  * duplicate's merged value (min = T0) equals the older eras' migrated 紅
  * timestamp, so the cross-era canonical-equality invariant holds.
  *
- * Era 7 (added for the v8 reading-list bookId FK linker, Phase 7 §D):
+ * Era 7 (for the v8 reading-list bookId FK linker):
  * the TERMINAL v7 shape — era 6 with the vocabulary CANONICALIZED (the v7
  * output: simplified keys, duplicate pair min-merged to T0) and the dual
  * version stamp at 7. Reading-list entries carry NO bookId in any era ≤ 7
@@ -43,14 +43,14 @@ export const BOOK_CJK = 'fixture-book-hongloumeng';
  * orphan — so every era links identically at the v8 step and the
  * cross-era canonical-equality invariant keeps holding.
  *
- * Era 8 (added for the v9 husk-clear migration, Phase 9): the TERMINAL v8
+ * Era 8 (for the v9 husk-clear migration): the TERMINAL v8
  * shape — era 7 with the reading-list entries LINKED (the v8 output: the
  * exact-filename and fuzzy matches carry their bookId FK, the orphan stays
  * unlinked) and the dual version stamp at 8. The legacy per-device
  * preference husks are still POPULATED (v6 copied without clearing) and
  * every preferences map — husk and folded alike — still carries the
- * `activeContext` key (de-synced in P8, but v8-era docs were written
- * before that): exactly the residue the v9 step clears/prunes. */
+ * `activeContext` key (no longer a synced key, but v8-era docs were written
+ * while it was): exactly the residue the v9 step clears/prunes. */
 
 /** Era-plausible fixed timestamps (ms). */
 const T0 = 1740000000000; // base

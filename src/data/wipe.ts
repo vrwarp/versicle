@@ -1,10 +1,10 @@
 /**
  * Full local data wipe — the single owner of "Clear All Data" / SafeMode
- * "Reset Database". (Phase 3 D9: moved from src/db/wipe.ts; the dynamic
- * imports of the two writers it must stop — sync + Yjs persistence — are
- * INVERTED into the {@link registerWipeHook} registry so the data layer
- * never reaches upward into stores/sync. Registration lives in the app
- * composition manifest, src/app/boot/registerBootTasks.ts, where importing
+ * "Reset Database". (The two writers it must stop — sync + Yjs persistence —
+ * are not imported here: they register through the {@link registerWipeHook}
+ * registry so the data layer never reaches upward into stores/sync.
+ * Registration lives in the app composition manifest,
+ * src/app/boot/registerBootTasks.ts, where importing
  * store + sync is legal. SafeMode safety argument: registration happens at
  * manifest import time, not boot success — and if the app crashed before
  * the manifest loaded, neither writer was ever started, so the missing hook
@@ -20,9 +20,9 @@
  *     migration/repair flags).
  *  4. App-created CacheStorage caches (downloaded Piper voice models).
  *
- * Historically each reset entry point cleared a hand-enumerated subset and
- * silently left the rest behind — most critically the entire `versicle-yjs`
- * database, so a "full wipe" resurrected all user data on reload. Entry
+ * A reset entry point that cleared a hand-enumerated subset would silently
+ * leave the rest behind — most critically the entire `versicle-yjs`
+ * database, so a "full wipe" would resurrect all user data on reload. Entry
  * points must call `wipeAllData()` and must never enumerate stores themselves.
  *
  * Ordering matters: every writer is stopped/flushed BEFORE storage is
@@ -38,9 +38,9 @@ const logger = createLogger('Wipe');
 
 /**
  * Every IndexedDB database owned by the app. `versicle-yjs-staging` is the
- * Phase 4 staged-workspace-switch buffer (YJS_STAGING_DB_NAME) — transient,
+ * staged-workspace-switch buffer (YJS_STAGING_DB_NAME) — transient,
  * but a wipe must not leave a stale staged workspace behind. `versicle-dict`
- * is the Phase 6 dictionary index (rebuildable static content, but a wipe
+ * is the dictionary index (rebuildable static content, but a wipe
  * must still leave nothing behind). `versicle-genai-logs` is the persisted
  * GenAI activity-log buffer (device-local diagnostics).
  */
@@ -67,11 +67,11 @@ const APP_LOCAL_STORAGE_KEYS: readonly string[] = [
  * - `versicle`     → versicle-device-id, versicle_cover_blob_repair_v1,
  *                    versicle_mock_firestore_snapshot
  * - `__VERSICLE_`  → __VERSICLE_MIGRATION_STATE__, __VERSICLE_WORKSPACES__
- * - `mockGenAI`    → mockGenAIResponse / mockGenAIError — LEGACY E2E keys.
- *                    The production seams that read them died in Phase 7
- *                    (mocks install via window.__versicleTest.genai.setMock);
- *                    the prefix stays so a wipe still scrubs stale keys from
- *                    old sessions.
+ * - `mockGenAI`    → mockGenAIResponse / mockGenAIError — obsolete E2E keys.
+ *                    No production code reads them any more (mocks install
+ *                    via window.__versicleTest.genai.setMock); the prefix
+ *                    stays so a wipe still scrubs stale keys from old
+ *                    sessions.
  *
  * Only these are removed — never the whole origin's localStorage.
  */
@@ -84,7 +84,7 @@ const APP_LOCAL_STORAGE_PREFIXES: readonly string[] = [
 /**
  * CacheStorage caches created by app code: Piper voice model downloads
  * (PiperRuntime's `piper-voices-v1`) and the SW runtime caches from
- * src/sw.ts (Phase 8 §G) — /dict/* (`versicle-dict-assets`), /fonts/*
+ * src/sw.ts — /dict/* (`versicle-dict-assets`), /fonts/*
  * (`versicle-fonts-v1`), /piper/* runtime pieces
  * (`versicle-piper-runtime-v1`). Prefix-matched so `-vN` rotations stay
  * covered. The service-worker precache is intentionally left alone: it
@@ -253,7 +253,7 @@ export async function wipeAllData(options: WipeOptions = {}): Promise<void> {
     logger.warn('Failed to close versicle-genai-logs cleanly before wipe (continuing):', error);
   }
 
-  // 2. Delete both databases outright — no store enumeration to go stale.
+  // 2. Delete every app database outright — no store enumeration to go stale.
   const blocked: string[] = [];
   if (typeof indexedDB !== 'undefined') {
     for (const name of APP_DATABASES) {

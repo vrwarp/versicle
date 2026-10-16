@@ -63,8 +63,8 @@ describe('useAllBooks Performance', () => {
         // 2. Render Hook
         const { result } = renderHook(() => useAllBooks());
 
-        // Baseline: 1 call (we optimized this to run only once per hook call instead of per book)
-        // Note: resolveProgress no longer calls getDeviceId
+        // Baseline: 1 call (read once per hook call, not per book;
+        // resolveProgress does not call getDeviceId)
         expect(getDeviceIdSpy).toHaveBeenCalledTimes(1);
 
         expect(result.current).toHaveLength(10);
@@ -72,8 +72,8 @@ describe('useAllBooks Performance', () => {
         // 3. Update progress for ONE book
         getDeviceIdSpy.mockClear();
 
-        // The projection rebuilds on a microtask now (one flush per task),
-        // so the update has to be awaited before the rebuild can be counted.
+        // The projection rebuilds on a microtask (one flush per task), so the
+        // update has to be awaited before the rebuild can be counted.
         await act(async () => {
             useReadingStateStore.setState(state => ({
                 progress: {

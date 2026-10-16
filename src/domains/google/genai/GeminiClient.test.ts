@@ -1,8 +1,6 @@
 /**
- * GeminiClient suite (Phase 7 §H, PR-A3). Absorbs the rotation/429
- * assertions of the deleted src/lib/genai/GenAIService.test.ts (absorption
- * ledger) and pins the new contract: per-call config, gateway routing,
- * required validation, redacted logging.
+ * GeminiClient suite: model rotation / 429 handling plus the contract —
+ * per-call config, gateway routing, required validation, redacted logging.
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -363,10 +361,8 @@ describe('GeminiClient', () => {
 
 /**
  * Every request entry must be followed by a response OR an error entry that
- * says why the request died. The Jul–Sep 2026 export had 74 detection
- * requests (26%) with no logged outcome at all: non-429 HTTP errors,
- * rotation-off 429s, pre-network gateway refusals and network errors all
- * threw without logging.
+ * says why the request died — including non-429 HTTP errors, rotation-off
+ * 429s, pre-network gateway refusals and network errors.
  */
 describe('GeminiClient terminal outcomes are always logged', () => {
   const errorEntries = (logs: GenAILogEntry[]) => logs.filter((l) => l.type === 'error');
@@ -570,13 +566,11 @@ describe('GeminiClient 429 cooldowns follow the server\'s own quota signals', ()
 });
 
 /**
- * The Oct 2026 export: 11 of 13 reference-detection requests died on a 503
- * ("This model is currently experiencing high demand") from gemini-3.8-flash
- * and one on the 60 s gateway timeout — every one thrown as terminal with
- * eight untried rotation models below it, then re-sent to the same model five
- * minutes later, for sixteen hours. A transiently unavailable model now
- * rotates on and cools down so the NEXT request skips it pre-network; with
- * rotation off a 503 gets one short same-model retry before it is terminal.
+ * A transiently unavailable model (a 503 "This model is currently experiencing
+ * high demand", or the 60 s gateway timeout) must not end the request while
+ * untried rotation models remain: it rotates on and cools down so the NEXT
+ * request skips it pre-network; with rotation off a 503 gets one short
+ * same-model retry before it is terminal.
  */
 describe('regression: an overloaded or timed-out model rotates instead of ending the request', () => {
   const model = (url: string) => url.match(/models\/([^:]+):/)?.[1];

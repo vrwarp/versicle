@@ -2,11 +2,10 @@ import { test, expect } from "./utils";
 import { ensureLibraryWithBook, captureScreenshot, resetApp, waitForPersistedWrites } from "./utils";
 
 test("verify reprocessing interstitial", async ({ page }) => {
-  // Re-enabled on WebKit. The earlier "pathologically slow / never returns" symptom was not
-  // slowness — reprocessBook stored table images as Blobs, which WebKit's IndexedDB cannot
-  // structured-clone (DataCloneError: "BlobURLs are not yet supported"), so the upgrade threw
-  // and the reader never loaded. Table images are now converted to ArrayBuffer before the put.
-  // give the whole test extra headroom beyond the project default
+  // Runs on WebKit too: table images are converted from Blob to ArrayBuffer before the put,
+  // because WebKit's IndexedDB cannot structured-clone Blobs (DataCloneError: "BlobURLs are
+  // not yet supported"); a Blob put would make the upgrade throw and the reader never load.
+  // Give the whole test extra headroom beyond the project default.
   test.setTimeout(240000);
   // 1. Reset app using utility
   await resetApp(page);

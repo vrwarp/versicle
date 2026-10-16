@@ -8,8 +8,8 @@
  * The `host.*` seams replicate state the way the production client does: store-slice pushes
  * via applyStateUpdate (genAI/analysis/progress/bookLanguage — see replicationSpec.ts) and
  * host ports for async reads (book metadata, persisted ContentAnalysis rows). Storage is
- * INJECTED through the WorkerTtsEngine constructor ports (BookContentPort + SessionStore,
- * 5b-PR4) — ZERO vi.mock (the phase5 doc N3 deadline; enforced by eslint).
+ * INJECTED through the WorkerTtsEngine constructor ports (BookContentPort + SessionStore)
+ * — ZERO vi.mock (phase5-tts-strangler.md N3; enforced by eslint).
  */
 import { vi } from 'vitest';
 import * as Comlink from 'comlink';
@@ -56,7 +56,7 @@ describeEngineParity('worker bridge (MessageChannel + Comlink)', async (): Promi
     resetParityHostDb(hostDb);
 
     const channel = new MessageChannel();
-    // Storage ports injected (5b-PR4): the worker-resident engine reads the
+    // Storage ports injected: the worker-resident engine reads the
     // shared in-memory parity state instead of the IndexedDB-backed repos.
     const engine = new WorkerTtsEngine({
         content: createParityBookContent(hostDb),
@@ -94,7 +94,7 @@ describeEngineParity('worker bridge (MessageChannel + Comlink)', async (): Promi
             played.push({ text, ...options });
             const failure = failNext;
             if (failure && currentProviderId !== 'local') {
-                // TTSProviderManager's post-5a-PR2 single failure path: REJECT once
+                // TTSProviderManager's single failure path: REJECT once
                 // (typed by name — Comlink preserves message/name/stack across the
                 // boundary), no self-swap, no synthetic 'fallback' event. The
                 // worker-resident engine owns recovery via backendSetProviderById.
@@ -156,7 +156,7 @@ describeEngineParity('worker bridge (MessageChannel + Comlink)', async (): Promi
 
     const snapshots: ParitySnapshot[] = [];
     const queueRefs: Array<ReadonlyArray<TTSQueueItem>> = [];
-    // Snapshot channel (5b-PR2): broadcasts omit `queue` when the queueId did not
+    // Snapshot channel: broadcasts omit `queue` when the queueId did not
     // change; this consumer re-attaches its cached array exactly like the
     // production WorkerEngineHandle — so queue identity is STABLE between queue
     // changes even across the structured-clone boundary (P23's broadcast diet).

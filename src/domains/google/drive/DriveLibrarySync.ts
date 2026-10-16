@@ -1,17 +1,13 @@
 /**
- * DriveLibrarySync (Phase 7 §G) — scan/index/diff/import orchestration over
- * an injected DriveClient + injected ports (no store imports;
- * domains-no-store is at error — src/app/google/wireGoogle.ts injects the
- * store-backed adapters).
+ * DriveLibrarySync — scan/index/diff/import orchestration over an injected
+ * DriveClient + injected ports (no store imports; domains-no-store is at
+ * error — src/app/google/wireGoogle.ts injects the store-backed adapters).
  *
- * Replaces the static DriveScannerService (a deprecated façade until its
- * P9 deletion — consumers now resolve this orchestrator via the holder).
- * The four
- * `error.message.includes('is not connected')` sniffs became `instanceof
- * GoogleAuthRequiredError` checks (GG-7), and the silent/interactive split
- * is explicit per call: the boot auto-scan policy stays silent (it can no
- * longer pop login UI or get the user force-disconnected — GG-2), while
- * user-gesture callers pass { interactive: true }.
+ * Auth failures are detected with `instanceof GoogleAuthRequiredError`
+ * (GG-7), and the silent/interactive split is explicit per call: the boot
+ * auto-scan policy stays silent (it can never pop login UI or get the user
+ * force-disconnected — GG-2), while user-gesture callers pass
+ * { interactive: true }.
  */
 import { GoogleAuthRequiredError } from '../auth/errors';
 import type { DriveClient, DriveRequestOptions } from './DriveClient';
@@ -122,8 +118,8 @@ export class DriveLibrarySync {
       size: parseInt(file.size || '0', 10),
       modifiedTime: file.modifiedTime || new Date().toISOString(),
       mimeType: file.mimeType,
-      // Carry Drive's content MD5 through to the persisted index (previously
-      // dropped) so the partial-fetch preview cache can key on {fileId, md5}.
+      // Carry Drive's content MD5 through to the persisted index so the
+      // partial-fetch preview cache can key on {fileId, md5}.
       md5Checksum: file.md5Checksum,
     };
   }
@@ -202,7 +198,7 @@ export class DriveLibrarySync {
         return false;
       }
       this.log.warn('Failed to check folder metadata for auto-sync heuristic:', error);
-      // Default to true on unknown errors to be safe (legacy behavior).
+      // Default to true on unknown errors to be safe.
       return true;
     }
   }

@@ -1,10 +1,9 @@
 /**
- * describeProviderContract — the cross-provider behavioral contract
- * (Phase 5a-PR2, plan/overhaul/prep/phase5-tts-strangler.md §5a / Execution order).
+ * describeProviderContract — the cross-provider behavioral contract.
  *
  * One suite, run against every provider through a per-provider harness (the same
  * write-once/run-everywhere pattern as `engineParityScenarios`). It pins the four
- * contract surfaces the strangler depends on:
+ * contract surfaces the engine depends on:
  *
  *  1. play()/preload() semantics — play resolves when audible playback has started
  *     and emits exactly one 'start'; preload never starts playback or emits.
@@ -16,13 +15,13 @@
  *     start failures does not exist there).
  *  3. dispose() — listeners detach, nothing is emitted afterwards, and an INJECTED
  *     (shared, manager-owned) sink is never destroyed by the provider.
- *  4. Speed policy (P0 law) — synthesis always at 1.0: a non-1.0 playback speed
+ *  4. Speed policy — synthesis always at 1.0: a non-1.0 playback speed
  *     never reaches a synthesis request; sink players apply it as the sink rate,
  *     device providers as the live speak rate. Sink players additionally prove the
  *     speed-free cache key: replaying the same text at a different speed performs
  *     ZERO new synthesis (cache key = hash(text|voiceId)).
  *
- * vi.mock is banned in providers/ (5a-PR2 lint flip): harnesses inject fakes
+ * vi.mock is banned in providers/ (lint-enforced): harnesses inject fakes
  * (FakeAudioSink, InMemoryTTSCache, stubbed fetch/speechSynthesis) instead.
  */
 import { describe, it, expect, vi } from 'vitest';

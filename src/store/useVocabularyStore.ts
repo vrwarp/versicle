@@ -4,14 +4,14 @@ import { defineSyncedStore, type SyncedStoreDef } from './yjs-provider';
 
 /**
  * Replication declaration (aggregated by src/store/registry.ts).
- * Flipped to merge-defaults + scopedDiff in flip wave 1 (phase2-fork-surgery.md
- * §2.6 #2): single small map, low write rate. No hydration-fallback canaries
- * existed — the actions would already crash if hydration deleted
- * `knownCharacters`, so the flip is strictly risk-reducing.
+ * merge-defaults + scopedDiff (phase2-fork-surgery.md §2.6 #2): single small
+ * map, low write rate. No hydration-fallback canary is needed — the actions
+ * would already crash if hydration deleted `knownCharacters`, so merge-defaults
+ * only reduces risk.
  *
- * KEY FORMAT (CRDT v7, Phase 6 §7.5): `knownCharacters` keys are
- * SIMPLIFIED single characters — every action canonicalizes its input
- * (write-path layer of the CH-6 fix; the read paths canonicalize the
+ * KEY FORMAT (CRDT v7, phase7-library-google.md §7.5): `knownCharacters`
+ * keys are SIMPLIFIED single characters — every action canonicalizes its
+ * input (write-path layer of the CH-6 fix; the read paths canonicalize the
  * displayed char, and the v7 migration rewrote pre-existing docs).
  */
 export const VOCABULARY_STORE_DEF: SyncedStoreDef<'knownCharacters'> = {

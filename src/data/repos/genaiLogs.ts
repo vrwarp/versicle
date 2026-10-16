@@ -1,14 +1,14 @@
 /**
  * genaiLogs — the `versicle-genai-logs` IndexedDB database owner.
  *
- * Persists the GenAI activity-log ring buffer across app restarts (the
- * in-memory-only buffer kept losing the logs on every reload). Entries
+ * Persists the GenAI activity-log ring buffer across app restarts (an
+ * in-memory-only buffer would lose the logs on every reload). Entries
  * arrive PRE-REDACTED from the GenAI clients (inlineData base64 bytes →
  * {byteCount, hash} — domains/google/genai/logging.ts), so nothing heavier
  * than the user's own prompt text is ever written; persisting that matches
  * the existing posture (`cache_search_text` already holds full book text).
  *
- * Deliberately a SEPARATE database, not a new object store in EpubLibraryDB
+ * Deliberately a SEPARATE database, not an object store in EpubLibraryDB
  * (the `versicle-dict` precedent): logs are ephemeral, device-local
  * diagnostics — so this needs no main-schema version bump, no slot in the
  * versioned migration registry, and no write-gate coordination (only the

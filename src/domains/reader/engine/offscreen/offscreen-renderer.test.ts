@@ -307,9 +307,10 @@ describe('extractContentOffscreen', () => {
   });
 
   /**
-   * Extraction used to be one unbroken synchronous pass per chapter (the only
-   * yield was BETWEEN chapters), and every table capture left snapdom's
-   * module-global image/font/resource caches populated for the session.
+   * Without yields, extraction is one unbroken synchronous pass per chapter
+   * (the chapter loop alone only yields BETWEEN chapters), and without cache
+   * resets every table capture leaves snapdom's module-global
+   * image/font/resource caches populated for the session.
    */
   describe('regression: the chapter pass yields and leaves no snapdom cache', () => {
     it('hands the extractor a yield seam bound to the chapter budget', async () => {
@@ -357,9 +358,10 @@ describe('extractContentOffscreen', () => {
    * it also empties `defaultStyle`/`baseStyle`, which are keyed by tag name
    * and are the most expensive things it caches (a miss = createElement into
    * a sandbox in the MAIN document + a full getComputedStyle walk). Sending
-   * it on EVERY capture re-probed roughly ten tags per table; a ~300-table
-   * reference book paid that 300 times over. The reset belongs at chapter
-   * granularity, where the unbounded maps are actually worth reclaiming.
+   * it on EVERY capture would re-probe roughly ten tags per table; a
+   * ~300-table reference book would pay that 300 times over. The reset
+   * belongs at chapter granularity, where the unbounded maps are actually
+   * worth reclaiming.
    */
   describe('regression: the snapdom cache reset is per chapter, not per table', () => {
     const chapterWithTables = (count: number) => {
@@ -413,11 +415,11 @@ describe('extractContentOffscreen', () => {
 
   /**
    * The sentences accumulator is wall-clock around the extraction call, and
-   * extraction now deliberately SLEEPS inside that window via the injected
-   * yield. Its sibling accumulators measure work that never sleeps, so the one
-   * phase this change optimized was the only measure inflated by its own
-   * yields — and chained zero-delay timeouts get clamped once nesting passes a
-   * few levels, so a multi-second extraction records hundreds of ms of sleep.
+   * extraction deliberately SLEEPS inside that window via the injected yield.
+   * Its sibling accumulators measure work that never sleeps, so uncorrected
+   * `sentences` would be the only measure inflated by its own yields — and
+   * chained zero-delay timeouts get clamped once nesting passes a few levels,
+   * so a multi-second extraction records hundreds of ms of sleep.
    */
   describe('regression: the sentences metric excludes its own yield sleep', () => {
     const recordMeasures = () => {
@@ -494,8 +496,8 @@ describe('extractContentOffscreen', () => {
   });
 
   /**
-   * Opening an ARCHIVED book ran epub.js's `Book.replacements()` whatever
-   * `replacements` was set to, and that inflates EVERY non-HTML manifest
+   * Opening an ARCHIVED book runs epub.js's `Book.replacements()` whatever
+   * `replacements` is set to, and that inflates EVERY non-HTML manifest
    * entry — Uint8Array → Blob → object URL — in one `Promise.all` before the
    * first chapter renders. On a 25 MB illustrated EPUB that is the whole
    * image payload resident at once, for a pass that only wants text and

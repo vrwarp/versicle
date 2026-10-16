@@ -1,15 +1,13 @@
 /**
- * Shared storage seam for the engine parity suite (Phase 5 entry gate, §0.1).
+ * Shared storage seam for the engine parity suite.
  *
- * History: originally written against `@db/DBService`, then (post-P3) against
- * the `src/data` repos via the engine-dir `vi.mock` allowlist. Since 5b-PR4
- * the engine reaches storage ONLY through the EngineContext ports
+ * The engine reaches storage ONLY through the EngineContext ports
  * (`BookContentPort` for derived-content reads, `SessionStore` for the
- * playback session), so this module now builds INJECTED in-memory port
+ * playback session), so this module builds INJECTED in-memory port
  * implementations — both parity transports construct the engine with them
  * directly (FakeEngineContext fields in-process; WorkerTtsEngine constructor
- * opts on the worker leg) and the `vi.mock` allowlist is EMPTY (the N3
- * deadline; enforced by eslint).
+ * opts on the worker leg) and the `vi.mock` allowlist is EMPTY (enforced by
+ * eslint).
  *
  * The `host.*` harness seams (`seedSections`/`seedTTSState`/`seedTTSContent`/
  * `gateSections`/…) write into one shared state object the ports read.

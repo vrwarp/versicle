@@ -1,6 +1,5 @@
 /**
- * Map a plain-text character offset back onto a DOM Range (Phase 7 §F,
- * PR-S4's engine-side half).
+ * Map a plain-text character offset back onto a DOM Range.
  *
  * The search corpus is the concatenation of a section's text nodes in
  * document order (`textContent`), so walking text nodes while accumulating
@@ -58,7 +57,7 @@ export function findRangeForOffset(root: Node, charOffset: number, length: numbe
  * Resolve a result's exact-occurrence CFI with an INJECTED CFI generator
  * (the reader's `contents.cfiFromRange`). Returns the result with `cfi`
  * populated, or unchanged when resolution fails — navigation then degrades
- * to `display(href)` (the doc's fallback).
+ * to section-level `display(href)`.
  */
 export function resolveResultCfi(
   result: DetailedSearchResult,

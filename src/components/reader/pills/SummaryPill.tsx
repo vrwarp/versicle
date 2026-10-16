@@ -1,8 +1,7 @@
 /**
  * SummaryPill — the "continue reading" card shown on the library when no
- * book is open, extracted from the dissolved ui/CompassPill (Phase 8 §C).
- * Pure presentation: the router (ReaderControlBar) supplies the last-read
- * book and the navigation onClick.
+ * book is open. Pure presentation: the router (ReaderControlBar) supplies
+ * the last-read book and the navigation onClick.
  */
 import React from 'react';
 import { BookOpen } from 'lucide-react';

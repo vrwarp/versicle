@@ -83,7 +83,6 @@ export class TableAdaptationProcessor {
 
     /**
      * Retrieves cached table adaptations from DB or triggers GenAI detection if missing.
-     * Replaces `AudioContentPipeline.processTableAdaptations`.
      */
     async processTableAdaptations(
         bookId: string,
@@ -152,8 +151,8 @@ export class TableAdaptationProcessor {
 
             if (workSet.length === 0 && !verifyEmptySection) return;
 
-            // 4. Check if GenAI is enabled + configured (the ONE gate — 5c-PR2;
-            // configures from the stored key, DEV/E2E-gated mock seam)
+            // 4. Check if GenAI is enabled + configured (the ONE gate; configures
+            // from the stored key if needed)
             if (await ensureGenAIReady(this.ctx.genAI)) {
                 // Pixels, at last — and only this section's (the repo filters
                 // before wrapping, so other sections' images are never
@@ -204,7 +203,7 @@ export class TableAdaptationProcessor {
                 if (structure && structure.toc) findSectionTitle(structure.toc);
                 const sectionTitle = sectionMap.get(sectionId) || 'Unknown Section';
 
-                // bookId rides to the egress consent gate (P9 threading).
+                // bookId rides to the egress consent gate.
                 const results = await this.ctx.genAI.generateTableAdaptations(nodes, 512, { bookId, bookTitle, sectionTitle });
 
                 // 5. Update DB. A non-table the model skipped arrives with an
@@ -262,8 +261,8 @@ export class TableAdaptationProcessor {
         const parsedRoots = tableRoots.map(root => {
             const range = parseCfiRange(root);
             // If it's a range, use the parent (common ancestor) for prefix matching.
-            // If it's a point/path, use it directly (kernel stripCfiWrapper replaces
-            // the hand-rolled wrapper stripping — phase5 §5c.4).
+            // If it's a point/path, use it directly (kernel stripCfiWrapper
+            // removes the epubcfi(...) wrapper).
             let cleanRoot = root;
 
             let parsedRangeStart: ParsedCfiPoint | null = null;
@@ -301,8 +300,7 @@ export class TableAdaptationProcessor {
             // Check if this sentence is a child of any known table adaptation root.
             const match = parsedRoots.find(({ clean, parsedRangeStart, parsedRangeEnd }) => {
                 // Prefix match at a step boundary via the kernel's canonical
-                // cfiContains (THE separator set — this site already carried all
-                // five separators; it now shares the one implementation).
+                // cfiContains (THE separator set).
                 if (!cfiContains(clean, cleanCfi)) return false;
 
                 // If the table root is a range (e.g. encompasses multiple siblings), verify strictly within bounds.

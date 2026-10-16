@@ -172,9 +172,9 @@ describe('extractEpubsFromZip', () => {
 });
 
 /**
- * The expansion used to decompress EVERY entry into an `epubFiles` array that
- * the batch importer held for the entire run — a 40-book archive meant 40
- * decompressed EPUBs resident at once.
+ * Entries are inflated on demand so the batch importer never holds every
+ * decompressed EPUB of the archive for the entire run — otherwise a 40-book
+ * archive would mean 40 decompressed EPUBs resident at once.
  */
 describe('regression: entries are handed off one at a time', () => {
   it('enumerates without decompressing anything', async () => {
@@ -248,14 +248,13 @@ describe('regression: entries are handed off one at a time', () => {
 });
 
 /**
- * Enumeration still has to read the whole archive, and the lazy lister
- * dropped the FileReader read-progress path that the eager one had — so the
- * batch importer's upload bar sat frozen for the entire read of a large
- * archive (a 1.2 GB ZIP of many EPUBs is seconds of nothing). The
- * justification for dropping it — that reading into an ArrayBuffer "put a
- * second full copy of the archive in memory" — is not how jszip behaves:
- * `prepareContent` runs the SAME FileReader for a File and then converts the
- * ArrayBuffer with `new Uint8Array(buffer)`, a view over that same buffer.
+ * Enumeration has to read the whole archive, so the lister keeps the
+ * FileReader read-progress path: without it the batch importer's upload bar
+ * sits frozen for the entire read of a large archive (a 1.2 GB ZIP of many
+ * EPUBs is seconds of nothing). Reading into an ArrayBuffer does not put a
+ * second full copy of the archive in memory: jszip's `prepareContent` runs the
+ * SAME FileReader for a File and then converts the ArrayBuffer with
+ * `new Uint8Array(buffer)`, a view over that same buffer.
  */
 describe('regression: the lazy lister reports read progress', () => {
   it('reports progress and always finishes at 100', async () => {

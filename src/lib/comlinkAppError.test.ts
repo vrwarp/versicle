@@ -2,8 +2,8 @@
 /**
  * The worker-boundary regression: an AppError thrown on one side of a
  * Comlink channel must arrive on the other side WITH its stable `code`.
- * Comlink's stock throw handler keeps only message/name/stack, which is why
- * the detector's GENAI_INVALID_RESPONSE branch never ran in production.
+ * Comlink's stock throw handler keeps only message/name/stack, which would
+ * keep the detector's GENAI_INVALID_RESPONSE branch from ever running.
  */
 import { describe, expect, it } from 'vitest';
 import * as Comlink from 'comlink';

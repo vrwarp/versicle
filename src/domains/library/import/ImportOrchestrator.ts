@@ -1,23 +1,22 @@
 /**
- * ImportOrchestrator — the ONE entry into the import pipeline (Phase 7 §B).
+ * ImportOrchestrator — the ONE entry into the import pipeline.
  *
- * All non-reader entry points (LibraryView input/drop, FileUploader,
- * settings, Drive, ContentMissing restore, ReprocessingInterstitial) enqueue
- * jobs here; the legacy `lib/ingestion.reprocessBook` delegate routes the
- * frozen reader-side call through the same queue. Stages per import job:
+ * Every entry point (LibraryView input/drop, FileUploader, settings, Drive,
+ * ContentMissing restore, ReprocessingInterstitial, and the reader-side
+ * reprocess calls) enqueues jobs here. Stages per import job:
  *
  *   validate → identify (one metadata-depth extractBook: contentHash +
  *   legacy fingerprint + ghost-probe metadata from a single epubjs open) →
- *   policy (filename duplicate, then ghost matching — now ALSO on the batch
- *   path, closing the P0 gap) → extract (full, reusing the probe preamble)
+ *   policy (filename duplicate, then ghost matching — on the batch path
+ *   too) → extract (full, reusing the probe preamble)
  *   → persist (one gated tx via LibraryPersistence) → register (inventory +
  *   reading-list entry WITH the bookId FK + static-metadata projection +
  *   offloaded clear, under the book's mutex).
  *
  * Concurrency: jobs run on a FIFO queue with two priority classes — normal
- * (user-initiated) and idle (the §E re-ingest wave) — and every per-book
- * mutation runs inside the shared KeyedMutex, so reprocess overlap (D6) and
- * restore-vs-delete races are impossible by construction.
+ * (user-initiated) and idle (the background re-ingest wave) — and every
+ * per-book mutation runs inside the shared KeyedMutex, so reprocess overlap
+ * and restore-vs-delete races are impossible by construction.
  */
 import type { BookMetadata, StaticBookManifest } from '~types/book';
 import type { UserInventoryItem } from '~types/user-data';
@@ -154,7 +153,7 @@ export class ImportOrchestrator {
     }
   }
 
-  /** Pending job count by priority (used by the re-ingest wave's pacing). */
+  /** Pending job count by priority class. */
   pendingCount(): { normal: number; idle: number } {
     return { normal: this.normalQueue.length, idle: this.idleQueue.length };
   }
@@ -177,8 +176,8 @@ export class ImportOrchestrator {
 
   /**
    * Batch import: ZIPs expand, every input file is accounted for in the
-   * summary, duplicates skip, and — closing the two P0 gaps deliberately —
-   * each imported file gets ghost matching AND a reading-list entry.
+   * summary, duplicates skip, and each imported file gets ghost matching AND
+   * a reading-list entry.
    */
   importFiles(files: File[], policy?: Partial<ImportPolicy>): Promise<BatchImportSummary> {
     const effective: ImportPolicy = { onDuplicate: 'skip', adoptGhosts: true, ...policy };
@@ -189,8 +188,8 @@ export class ImportOrchestrator {
       try {
         const summary: BatchImportSummary = { imported: 0, skipped: [], failed: [] };
         // Sources, not files: a ZIP's entries are enumerated (cheap) but each
-        // EPUB is inflated only when its turn comes, so a 40-book archive no
-        // longer holds 40 decompressed books in memory for the whole batch.
+        // EPUB is inflated only when its turn comes, so a 40-book archive
+        // does not hold 40 decompressed books in memory for the whole batch.
         const sources = await this.expandToSources(files, summary);
 
         const seen = new Set<string>();
@@ -251,7 +250,7 @@ export class ImportOrchestrator {
   /**
    * Restore a book's binary (ContentMissing flow). Acceptance: contentHash
    * match OR the legacy fingerprint's filename-independent content tail
-   * (renamed files restore — D7), with the lazy contentHash manifest
+   * (renamed files restore), with the lazy contentHash manifest
    * upgrade on legacy acceptance. Without a local manifest this is a
    * synced-book download: a full import under the EXISTING id.
    *
@@ -300,9 +299,9 @@ export class ImportOrchestrator {
 
   /**
    * Re-derive a book's content from its stored binary. Same-book overlap is
-   * impossible: the work runs under the book's mutex (kills D6's concurrent
-   * ReprocessingInterstitial runs). The §E re-ingest wave passes
-   * `verifyDerived` (graft R4: old rows retained when the self-check fails).
+   * impossible: the work runs under the book's mutex. The background
+   * re-ingest wave passes `verifyDerived` (old rows are retained when the
+   * self-check fails).
    */
   reprocess(
     bookId: string,
@@ -352,8 +351,8 @@ export class ImportOrchestrator {
           this.deps.projection.importProgress(0, 'Checking for existing library entries...');
           probe = await this.extract(file, { depth: 'metadata' });
         } catch (e) {
-          // Parity with the legacy smart-matching: a probe failure falls
-          // through to the standard import (which re-validates the file).
+          // A probe failure falls through to the standard import (which
+          // re-validates the file).
           logger.warn('Smart matching check failed, proceeding with standard import', e);
         }
 
@@ -473,10 +472,10 @@ export class ImportOrchestrator {
     await this.deps.mutex.run(extraction.bookId, () => {
       const { inventory, readingList, projection } = this.deps;
 
-      // The ONE inventory producer is the extractor output (§A).
+      // The ONE inventory producer is the extractor output.
       inventory.upsert(extraction.inventory);
 
-      // Reading-list registration WITH the bookId FK (§B register; §D).
+      // Reading-list registration WITH the bookId FK.
       const entry = readingList.get(filename);
       if (entry) {
         readingList.update(filename, {
@@ -493,7 +492,7 @@ export class ImportOrchestrator {
         ...toBookMetadata(extraction.manifest, extraction.bookId, this.now()),
         // The stored TOC (resolved + label-repaired at extraction) — what a
         // reload reads from static_structure. Without it a freshly imported
-        // book had no stored TOC until the next boot.
+        // book would have no stored TOC until the next boot.
         syntheticToc: extraction.structure.toc,
       });
       projection.removeOffloaded(extraction.bookId);
@@ -545,8 +544,8 @@ export class ImportOrchestrator {
       });
     }
 
-    // Pre-P7 manifest: accept via the filename-independent legacy tail
-    // (renamed files restore — D7), then lazily upgrade the manifest.
+    // Manifest without a contentHash: accept via the filename-independent
+    // legacy tail (renamed files restore), then lazily upgrade the manifest.
     if (manifest.fileHash && !(await matchesLegacyFingerprint(manifest.fileHash, file))) {
       throw new AppError('File verification failed: fingerprint mismatch.', {
         code: 'INGEST_FILE_MISMATCH',

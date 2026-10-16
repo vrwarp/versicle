@@ -1,24 +1,21 @@
 /**
- * S.1 — the end-to-end backup generate→restore round-trip characterization
- * (plan/overhaul/prep/phase3-storage-gateway.md §Test plan "S", PR P3-1).
+ * The end-to-end backup generate→restore round-trip characterization.
  *
- * This is the missing acceptance gate named by the prep doc (▲21): it runs
- * the REAL BackupService against the real shared Y.Doc and fake-indexeddb
- * (no connection or y-idb mocks, unlike BackupService.test.ts) and pins:
+ * Runs the REAL BackupService against the real shared Y.Doc and
+ * fake-indexeddb (no connection or y-idb mocks, unlike BackupService.test.ts)
+ * and pins:
  *
  *   1. generate→JSON-file→restore content equality for Yjs data
  *      (library books + annotations) and binary ArrayBuffer covers;
- *   2. the RAW `versicle-yjs` write shape BackupService re-implements today
- *      (BackupService.ts processManifest Phase 3): after a restore the
- *      `updates` store holds EXACTLY ONE row, byte-identical to the
- *      manifest snapshot, and that row alone hydrates a fresh Y.Doc to the
- *      backed-up state (reload-simulated rehydration — what y-idb does on
- *      the next boot).
+ *   2. the RAW `versicle-yjs` write shape a restore leaves behind (written by
+ *      YjsSnapshotService.applySnapshot via the y-idb fork's writeSnapshot):
+ *      after a restore the `updates` store holds EXACTLY ONE row,
+ *      byte-identical to the manifest snapshot, and that row alone hydrates a
+ *      fresh Y.Doc to the backed-up state (reload-simulated rehydration —
+ *      what y-idb does on the next boot).
  *
- * P3-11 replaces the raw `indexedDB.open('versicle-yjs')` block with
- * YjsSnapshotService.applySnapshot (backed by the vendored y-idb fork's
- * writeSnapshot). This suite MUST stay green UNCHANGED across that swap —
- * it is the acceptance gate for the rewrite.
+ * This is the acceptance gate for any change to how restore writes the Yjs
+ * snapshot; it must stay green unchanged across such a change.
  *
  * Only CheckpointService is mocked (its create-checkpoint ordering is
  * pinned separately in BackupService.test.ts and CheckpointService.test.ts;
@@ -45,7 +42,7 @@ const BOOK_ID = 'roundtrip-book-1';
 async function clearAppDatabase(): Promise<void> {
   const db = await getDB();
   // Per-store one-shot clears (no raw readwrite transaction — banned
-  // outside src/data at Phase 3 exit).
+  // outside src/data).
   for (const store of Array.from(db.objectStoreNames)) {
     await db.clear(store);
   }
@@ -223,8 +220,8 @@ describe('regression: backup generate→restore round-trip (S.1 entry gate)', ()
 
     const rawDb = await openRawYjsDb();
     try {
-      // The store layout BackupService re-implements today (and y-idb owns
-      // after P3-11): an auto-increment 'updates' store + a 'custom' store.
+      // The store layout y-idb owns: an auto-increment 'updates' store + a
+      // 'custom' store.
       expect(Array.from(rawDb.objectStoreNames).sort()).toEqual(['custom', 'updates']);
 
       const rows = (await getAllRows(rawDb, 'updates')) as Uint8Array[];

@@ -5,10 +5,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Replication declaration (aggregated by src/store/registry.ts).
- * Flipped to merge-defaults + scopedDiff in flip wave 2 (phase2-fork-surgery.md
- * §2.6 #4): small user data, low write rate, two keys. No top-level canaries
- * existed (the per-entry `r.order || 0` guards below are NOT hydration
- * fallbacks and stay).
+ * merge-defaults + scopedDiff: small user data, low write rate, two keys. The
+ * per-entry `r.order || 0` guards below are NOT hydration fallbacks.
  */
 export const LEXICON_STORE_DEF: SyncedStoreDef<'rules' | 'settings'> = {
     name: 'lexicon',

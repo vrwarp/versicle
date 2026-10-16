@@ -1,20 +1,21 @@
 /**
- * Composition wiring for domains/google (Phase 7 §G): constructs the
- * GoogleAuthClient / DriveClient / DriveLibrarySync singletons with
- * store-backed adapters and installs them into the domain holders.
+ * Composition wiring for domains/google: constructs the GoogleAuthClient /
+ * DriveClient / DriveLibrarySync / DriveMetadataService singletons (plus the
+ * GenAI + embedding clients, quota governor, consent resolver and artifact
+ * consult) with store-backed adapters and installs them into the domain
+ * holders.
  *
  * Called synchronously from registerAppBootTasks() (the composition
  * manifest) — before any boot task or component can touch the holders.
- * This is where the store edges live (README §2 rule 3: domains declare
- * ports, app/ injects adapters):
+ * This is where the store edges live (plan/overhaul/README.md §2 rule 3:
+ * domains declare ports, app/ injects adapters):
  *
- *  - login hint   ← useSyncStore.firebaseUserEmail (GG-12's inverted
- *                   lib→sync edge, now app-owned)
- *  - connected    ← useGoogleServicesStore (demoted to a "has connected
- *    hint            before" HINT — connect/disconnect mirror it; token
- *                   failures do NOT, reversing the force-disconnect, GG-2)
+ *  - login hint   ← useSyncStore.firebaseUserEmail
+ *  - connected    ← useGoogleServicesStore (a "has connected before" HINT —
+ *    hint            connect/disconnect mirror it; token failures do NOT)
  *  - scan index   ← useDriveStore
- *  - imports      ← useLibraryStore.addBook / useBookStore.books
+ *  - imports      ← libraryController.importFile / replaceFile;
+ *                   library filenames ← useBookStore.books
  */
 import {
   DriveClient,
@@ -92,10 +93,10 @@ export function wireGoogleDomain(): void {
         setScannedFiles: (files) => useDriveStore.getState().setScannedFiles(files),
       },
       library: {
-        // Phase 7: Drive imports flow through the SAME ImportOrchestrator
-        // queue as every other entry point (ghost matching + reading-list
-        // registration included). Duplicates still throw DuplicateBookError
-        // — the pre-P7 addBook contract Drive flows are built around.
+        // Drive imports flow through the SAME ImportOrchestrator queue as
+        // every other entry point (ghost matching + reading-list registration
+        // included). Duplicates throw DuplicateBookError — the contract the
+        // Drive flows are built around.
         addBook: (file, options) =>
           options?.overwrite
             ? libraryController.replaceFile(file)
@@ -210,17 +211,16 @@ export function wireGoogleDomain(): void {
   // log producers — GenAI/embedding clients and the TTS worker bridge —
   // funnel through addLog, so one store subscription covers them all).
   // Fail-soft and fire-and-forget: with IDB unavailable the buffer simply
-  // stays in-memory-only, as before.
+  // stays in-memory-only.
   void initGenAILogPersistence();
 
-  // GenAI (Phase 7 §H): config read PER CALL from the store — the mutable
-  // singleton fields (and the TTS pipeline's configure() clobber, GG-8) are
-  // gone. Log entries arrive pre-redacted (no inlineData bytes) and land in
-  // the store's log ring buffer (persisted across restarts via the IDB
-  // mirror above; the store's own partialize allowlist still excludes logs).
-  // Phase 8 §A: installed as the LAZY facade — GeminiClient (and the
-  // egress plumbing behind it) loads on the first generate call, keeping
-  // the GenAI implementation out of the entry chunk (check 4).
+  // GenAI: config read PER CALL from the store. Log entries arrive
+  // pre-redacted (no inlineData bytes) and land in the store's log ring
+  // buffer (persisted across restarts via the IDB mirror above; the store's
+  // own partialize allowlist still excludes logs). Installed as the LAZY
+  // facade — GeminiClient (and the egress plumbing behind it) loads on the
+  // first generate call, keeping the GenAI implementation out of the entry
+  // chunk (check 4 of scripts/check-worker-chunk.mjs).
   setGenAIClient(
     makeLazyGenAIClient({
       getConfig: () => {
@@ -263,8 +263,8 @@ export function wireGoogleDomain(): void {
     }),
   );
 
-  // Per-book AI consent gate (Phase 7 §H / PR-N3, privacy D2): the gateway
-  // consults this for non-interactive 'per-book' destinations (gemini).
+  // Per-book AI consent gate: the gateway consults this for non-interactive
+  // 'per-book' destinations (gemini).
   setConsentResolver(
     makeAiConsentResolver({
       getConsent: (bookId) => usePreferencesStore.getState().aiConsent[bookId],

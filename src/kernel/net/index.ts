@@ -1,5 +1,5 @@
 /**
- * kernel/net public surface (Phase 7 §I). Admission per C12: zero internal
+ * kernel/net public surface. Admission per C12: zero internal
  * imports beyond ~types/errors; consumed by ≥2 domains (google, library,
  * search/dictionary, audio).
  */

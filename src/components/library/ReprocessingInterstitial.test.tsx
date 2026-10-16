@@ -3,8 +3,8 @@ import { render, waitFor } from '@testing-library/react';
 import { ReprocessingInterstitial } from './ReprocessingInterstitial';
 import { libraryController } from '@app/library/useImportController';
 
-// Phase 7: reprocess routes through the orchestrator queue via the shared
-// controller (the job refreshes the projection itself — no manual hydrate).
+// Reprocess routes through the orchestrator queue via the shared controller
+// (the job refreshes the projection itself — no manual hydrate).
 vi.mock('@app/library/useImportController', () => {
     const controller = { reprocessBook: vi.fn() };
     return { libraryController: controller, useImportController: () => controller };

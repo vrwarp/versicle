@@ -1,8 +1,8 @@
 /**
- * GeminiEmbeddingClient suite (Increment C §1) — mirrors GeminiClient.test.ts:29
- * (fake egress queue + log capture). Pins the new contract: per-call config,
- * `:embedContent` routing with the model in the URL, profile→taskType for -001
- * vs prepended-instruction for EM2, the matched document/query invariant,
+ * GeminiEmbeddingClient suite — mirrors GeminiClient.test.ts (fake egress
+ * queue + log capture). Pins the contract: per-call config, `:embedContent`
+ * routing with the model in the URL, profile→taskType for -001 vs
+ * prepended-instruction for EM2, the matched document/query invariant,
  * consent { bookId, interactive } + lane 'fg' threaded into egress, redacted
  * logging, and the NOT-CONFIGURED holder default throwing
  * GENAI_EMBEDDING_NOT_CONFIGURED.
@@ -325,8 +325,8 @@ describe('embedding holder NOT-CONFIGURED default', () => {
 
 /**
  * A 429 must leave the governor a cooldown taken from the server's own signal
- * and a log entry that says which quota was spent. Before this the client
- * recorded nothing, so the indexer's next request went out at once.
+ * and a log entry that says which quota was spent, so the indexer's next
+ * request is held back instead of going out at once.
  */
 describe('GeminiEmbeddingClient quota cooldowns + activity summaries', () => {
   function quotaResponse(quotaId: string, retryDelay = '34s', headers: Record<string, string> = {}): Response {

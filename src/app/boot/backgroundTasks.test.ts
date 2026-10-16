@@ -1,15 +1,15 @@
 /**
- * embeddingCacheEvictionTask shaping (Artifact Lane Phase D): the
- * never-evict-unconfirmed-upload protected set. Drives the PURE
- * computeProtectedBookIds helper with injected fakes + a real MockBackend.
+ * embeddingCacheEvictionTask shaping: the never-evict-unconfirmed-upload
+ * protected set. Drives the PURE computeProtectedBookIds helper with injected
+ * fakes + a real MockBackend.
  *
- * Pins (see GUARDRAILS):
- *  - shareAiCaches OFF → empty set (evict exactly as today, zero HEAD probes);
+ * Pins:
+ *  - shareAiCaches OFF → empty set (evict unprotected, zero HEAD probes);
  *  - no backend connected → empty set (nothing to confirm against);
  *  - shareAiCaches ON + connected → a book whose HEAD doc is MISSING
  *    (unconfirmed upload) is PROTECTED; a book whose HEAD doc is PRESENT
  *    (confirmed) is NOT;
- *  - a pre-P7 book (no contentHash) is not a protection candidate;
+ *  - a book with no contentHash is not a protection candidate;
  *  - a probe throw FAIL-SAFE protects the book (offline blip ≠ confirmed).
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';

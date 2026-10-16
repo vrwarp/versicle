@@ -6,14 +6,13 @@
  *
  * Within a phase, tasks run sequentially in the order listed here.
  *
- * It also registers the data layer's WIPE HOOKS (Phase 3 D9): wipeAllData
- * must stop every writer before deleting storage, and the two writers —
- * the Firestore sync manager and the y-idb persistence — live ABOVE the
- * data layer, so src/data/wipe.ts exposes a registry instead of importing
- * them (that import was the last db→store layering violation). Registration
- * happens here, at manifest import/registration time, not boot success: if
- * the app crashed before this module ran, neither writer was ever started,
- * so the missing hook stops nothing that runs (SafeMode stays safe).
+ * It also registers the data layer's WIPE HOOKS: wipeAllData must stop every
+ * writer before deleting storage, and the two writers — the sync
+ * orchestrator and the y-idb persistence — live ABOVE the data layer, so
+ * src/data/wipe.ts exposes a registry instead of importing them.
+ * Registration happens here, at manifest import/registration time, not boot
+ * success: if the app crashed before this module ran, neither writer was ever
+ * started, so the missing hook stops nothing that runs (SafeMode stays safe).
  */
 import { registerBootTask } from '../bootstrap';
 import { registerWipeHook } from '@data/wipe';
@@ -41,23 +40,24 @@ export function registerAppBootTasks(): void {
   registered = true;
 
   // Composition wiring (not a boot task — synchronous, side-effect-free):
-  // installs the GoogleAuthClient/DriveClient/DriveLibrarySync singletons
-  // with store-backed adapters before any boot task or component runs.
+  // installs the domains/google singletons (auth/Drive/GenAI/embedding
+  // clients, quota governor, …) with store-backed adapters before any boot
+  // task or component runs.
   wireGoogleDomain();
 
-  // Locale wiring (Phase 8 §F): documentElement.lang follows the resolved
-  // UI locale (kernel/locale/uiLocale.ts) and re-syncs on change. Runs
-  // here, BEFORE the boot phases, so even SafeMode/loading screens carry
-  // the correct lang — index.html's static lang="en" is only the pre-boot
-  // default. (`lang={book.language}` on book-content nodes is the OTHER
-  // half of the two-locale rule and is per-component.)
+  // Locale wiring: documentElement.lang follows the resolved UI locale
+  // (kernel/locale/uiLocale.ts) and re-syncs on change. Runs here, BEFORE the
+  // boot phases, so even SafeMode/loading screens carry the correct lang —
+  // index.html's static lang="en" is only the pre-boot default.
+  // (`lang={book.language}` on book-content nodes is the OTHER half of the
+  // two-locale rule and is per-component.)
   applyDocumentLanguage();
 
   registerWipeHook({
     name: 'sync/stop',
     // Dynamic import: keeps the firebase dependency tree out of this
-    // module's static graph (same posture the wipe itself had pre-D9).
-    // stopSyncForWipe is a no-op when no orchestrator was ever constructed.
+    // module's static graph. stopSyncForWipe is a no-op when no
+    // orchestrator was ever constructed.
     stop: async () => {
       const { stopSyncForWipe } = await import('../sync/createSync');
       stopSyncForWipe();

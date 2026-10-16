@@ -49,7 +49,7 @@ const style = (over: Partial<CSSStyleDeclaration> = {}): CSSStyleDeclaration =>
     ...over,
   }) as CSSStyleDeclaration;
 
-/** A document plus a window whose getComputedStyle is keyed off a data attr. */
+/** A document plus a window whose getComputedStyle resolves each element via `styleFor`. */
 const makeChapter = (
   html: string,
   styleFor: (el: Element) => Partial<CSSStyleDeclaration> = () => ({})

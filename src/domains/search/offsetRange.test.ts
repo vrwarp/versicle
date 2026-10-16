@@ -1,7 +1,7 @@
 /**
- * Offset→Range mapping for exact-occurrence navigation (Phase 7 §F). The
- * corpus is textContent in document order, so offsets must resolve across
- * element boundaries and inside nested markup.
+ * Offset→Range mapping for exact-occurrence navigation. The corpus is
+ * textContent in document order, so offsets must resolve across element
+ * boundaries and inside nested markup.
  */
 import { describe, it, expect } from 'vitest';
 import { findRangeForOffset, resolveResultCfi } from './offsetRange';

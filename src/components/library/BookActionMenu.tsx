@@ -9,10 +9,9 @@ import {
 import { cn } from '@lib/utils';
 
 /**
- * The structural slice of a book row the cover/action surfaces read (P9
- * any-ratchet): both the `~types/book` BookMetadata row and the
- * libraryViewStore LibraryBook projection satisfy it, so callers pass
- * either without casts.
+ * The structural slice of a book row the cover/action surfaces read: both the
+ * `~types/book` BookMetadata row and the libraryViewStore LibraryBook
+ * projection satisfy it, so callers pass either without casts.
  */
 export interface CoverBook {
     id: string;
@@ -45,7 +44,7 @@ export interface BookActionMenuHandle {
 /**
  * BookActionMenu encapsulates the "More Options" dropdown logic for book items.
  *
- * It is now a lightweight stateless trigger that delegates actions to the parent coordinator.
+ * It is a lightweight stateless trigger that delegates actions to the parent coordinator.
  */
 export const BookActionMenu = forwardRef<BookActionMenuHandle, BookActionMenuProps>(({ book, children, onDelete, onOffload, onRestore }, ref) => {
     // Expose triggerRestore to allow parents (like BookCard) to initiate restore on card click
@@ -56,17 +55,14 @@ export const BookActionMenu = forwardRef<BookActionMenuHandle, BookActionMenuPro
     }));
 
     const handleDeleteClick = () => {
-        // e.stopPropagation();
         onDelete();
     };
 
     const handleOffloadClick = () => {
-        // e.stopPropagation();
         onOffload();
     };
 
     const handleRestoreClick = () => {
-        // e.stopPropagation();
         onRestore();
     };
 

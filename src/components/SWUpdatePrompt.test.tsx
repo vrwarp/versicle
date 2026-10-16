@@ -1,6 +1,5 @@
 /**
- * Phase 8 §G — the prompt-style SW update flow (prep risk #1, the phase's
- * riskiest transition). Two layers pinned here:
+ * The prompt-style SW update flow. Two layers pinned here:
  *
  *  1. SWUpdatePrompt behavior: `needRefresh` → ONE persistent keyed toast
  *     with a Reload action → `updateServiceWorker(true)`.

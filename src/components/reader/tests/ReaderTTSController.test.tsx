@@ -10,9 +10,8 @@ import type { ReaderEngine, ReaderEngineEvent } from '@domains/reader/engine/Rea
 import { ReaderCommandsProvider, type ReaderCommands } from '@domains/reader/ui/ReaderCommands';
 import { KeyboardShortcutHost } from '@app/shortcuts/KeyboardShortcutHost';
 
-// Engine-port stub over a fake rendition: the controller consumes only
-// display() + highlights, and the pins below keep asserting the underlying
-// epub.js (fake rendition) call shapes — unchanged through the port cutover.
+// Engine-port stub over a fake rendition: the pins below assert the
+// underlying epub.js (fake rendition) call shapes.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const makeEngineStub = (rendition: any): ReaderEngine =>
     ({
@@ -24,8 +23,8 @@ const makeEngineStub = (rendition: any): ReaderEngine =>
         subscribe: () => () => { },
     }) as unknown as ReaderEngine;
 
-// The controller rides the ReaderCommands context for the engine (Phase 6
-// §5a) — the provider stands in for the shell.
+// The controller rides the ReaderCommands context for the engine — the
+// provider stands in for the shell.
 const noopCommands: ReaderCommands = {
     jumpTo: () => { },
     jumpToEnd: () => { },
@@ -34,9 +33,9 @@ const noopCommands: ReaderCommands = {
     playFromSelection: () => { },
     refineSelection: () => null,
 };
-// Phase 8 §E: the controller's keys are KeyboardShortcutService
-// registrations; the host (normally mounted by RootLayout) provides the
-// single window keydown listener these suites drive with fireEvent.
+// The controller's keys are KeyboardShortcutService registrations; the host
+// (normally mounted by RootLayout) provides the single window keydown
+// listener these suites drive with fireEvent.
 const withEngine = (engine: ReaderEngine | null, ui: ReactElement) => (
     <ReaderCommandsProvider commands={noopCommands} engine={engine}>
         <KeyboardShortcutHost />
@@ -44,11 +43,11 @@ const withEngine = (engine: ReaderEngine | null, ui: ReactElement) => (
     </ReaderCommandsProvider>
 );
 
-// Harness migration (Phase 0): seeds the REAL useTTSPlaybackStore (state via
-// setState) instead of vi.mock'ing the store module, so the test compiles
-// against the real TTSState shape. Engine commands moved to the
-// TtsController facade at Phase 5b-PR1, so the command spies mock the
-// useAudioCommands hook module instead of living on the store.
+// Seeds the REAL useTTSPlaybackStore (state via setState) instead of
+// vi.mock'ing the store module, so the test compiles against the real
+// TTSState shape. Engine commands come from the TtsController facade, so the
+// command spies mock the useAudioCommands hook module instead of living on
+// the store.
 
 const { mockJumpTo, mockPlay, mockPause, mockStop } = vi.hoisted(() => ({
     mockJumpTo: vi.fn(),
@@ -174,12 +173,9 @@ describe('ReaderTTSController', () => {
     });
 
     describe('characterization: TTS highlight single-node invariant + orphan sweep (P6 entry gate)', () => {
-        // Pins the CURRENT epub.js call pattern of the TTS sentence highlight
-        // (prep/phase6-reader-engine.md §4 overlay #2) before the Phase 6
-        // HighlightLayerManager absorbs the three duplicated DOM sweeps
-        // (ReaderTTSController.tsx :69-81, :107-118, :143-154). The manager
-        // cutover must keep every assertion here green — it centralizes the
-        // sweep, it does not change the observable add/remove/sweep sequence.
+        // Pins the epub.js call pattern of the TTS sentence highlight.
+        // HighlightLayerManager centralizes the orphaned-SVG DOM sweep; the
+        // observable add/remove/sweep sequence asserted here must not change.
         const makePaneWithOrphan = () => {
             const pane = document.createElement('div');
             pane.innerHTML = '<svg><g class="tts-highlight"></g></svg>';
@@ -519,10 +515,6 @@ describe('ReaderTTSController', () => {
             document.body.removeChild(popperWrapper);
         });
     });
-    // Absorbed from the duplicate suite at tests/ReaderTTSController.test.tsx
-    // (D13 dedupe, Phase 6 PR-14): the redundant foreground-sync case is
-    // covered by the visibilitychange reconciliation pin above; these three
-    // gating cases were the file's unique assertions.
     describe('regression: arrow keys defer to focused text inputs (D13 absorption)', () => {
         it('ignores arrow keys when an input is focused', () => {
             setup('playing', 5, 1);

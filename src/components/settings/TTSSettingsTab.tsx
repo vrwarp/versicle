@@ -26,7 +26,7 @@ export interface TTSSettingsTabProps {
     // Provider
     providerId: TTSProviderId;
     onProviderChange: (providerId: TTSProviderId) => void;
-    // API Keys — committed on blur / "Test Key", never per keystroke (5a buffered edits)
+    // API Keys — buffered edits: committed on blur / "Test Key", never per keystroke
     apiKeys: Record<string, string>;
     onApiKeyChange: (provider: TTSApiKeyProviderId, key: string) => void;
     /** Explicit "Test Key" action: verify the (buffered) key by probing the provider. */
@@ -53,8 +53,8 @@ export interface TTSSettingsTabProps {
 /**
  * One buffered API-key editor. Keystrokes only touch local state — the key is
  * committed (and the provider rebuilt) on blur or via the explicit "Test Key"
- * button. This kills the per-keystroke provider rebuild (S10/D5): typing an API
- * key constructs nothing.
+ * button, so there is no per-keystroke provider rebuild: typing an API key
+ * constructs nothing.
  */
 const ApiKeyField: React.FC<{
     option: ProviderOption & { id: TTSApiKeyProviderId };
@@ -131,7 +131,7 @@ export const TTSSettingsTab: React.FC<TTSSettingsTabProps> = ({
     const activeOption = providerOptions.find(o => o.id === providerId);
 
     // Derive the voice for the currently viewed config language from the profiles.
-    // Fall back to the legacy 'voice' prop if we are looking at the active language
+    // Fall back to the 'voice' prop if we are looking at the active language
     // and no specific profile exists yet.
     const configProfile = profiles?.[configLanguage];
     const configVoiceId = configProfile?.voiceId || (configLanguage === activeLanguage ? _voice?.id : null);

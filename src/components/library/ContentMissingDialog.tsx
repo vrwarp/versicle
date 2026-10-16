@@ -87,11 +87,11 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
             // Download the cloud copy, then restore it onto THIS ghost via the
             // same bookId-targeted path as "Select File" (onRestore ->
             // controller.restoreBook(book.id, file)). Handing the File to the
-            // generic importer instead re-matched the binary by filename then
+            // generic importer instead would re-match the binary by filename then
             // title+author and -- when the Drive filename or the EPUB's embedded
-            // metadata differed from the synced ghost -- imported a duplicate and
-            // left the ghost unresolved.
-            // User gesture: interactive token acquisition (the deleted façade's default).
+            // metadata differed from the synced ghost -- import a duplicate and
+            // leave the ghost unresolved.
+            // User gesture: interactive token acquisition.
             const file = await getDriveLibrarySync().downloadAsFile(cloudMatch.id, cloudMatch.name, { interactive: true });
             await onRestore(file);
         } catch (error) {

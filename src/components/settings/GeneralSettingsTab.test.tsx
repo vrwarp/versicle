@@ -44,7 +44,7 @@ describe('GeneralSettingsTab', () => {
     });
 
     it('renders import UI when importing', () => {
-        // Since ImportProgressUI now handles the state, we can just verify the block is rendered
+        // ImportProgressUI owns the progress state, so we can just verify the block is rendered
         render(
             <GeneralSettingsTab
                 {...defaultProps}

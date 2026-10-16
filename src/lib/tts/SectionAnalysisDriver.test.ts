@@ -1,12 +1,12 @@
 /**
- * SectionAnalysisDriver suite (Phase 5c; phase5-tts-strangler.md §5c.2).
- * Carries the surviving assertions of the deleted AudioContentPipeline
- * trigger/filtering suites as named regression blocks (absorption ledger
- * row 17), driven through FakeEngineContext (no module mocks).
+ * SectionAnalysisDriver suite. Carries the surviving assertions of the
+ * deleted AudioContentPipeline trigger/filtering suites as named regression
+ * blocks (absorption ledger row 17), driven through FakeEngineContext (no
+ * module mocks).
  *
- * The D4 block is NEW with 5c-PR2: {sentences, citationMarkers} always
- * travel together, and marker hints reach the detection prompt from the
- * PRIMARY (loadSection) path — the doc-named test.
+ * The `{sentences, citationMarkers}` block pins that they always travel
+ * together, and that marker hints reach the detection prompt from the
+ * PRIMARY (loadSection) path.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { SectionAnalysisDriver } from './SectionAnalysisDriver';
@@ -225,10 +225,11 @@ describe('D4: {sentences, citationMarkers} always travel together (5c-PR2)', () 
 });
 
 /**
- * buildGroups used to call `content.getTableImages(bookId)` — a getAll over
- * every table row of the WHOLE book, each stored ArrayBuffer re-wrapped in a
- * fresh Blob — on every section load and again on every prewarm, to read
- * nothing but `cfi`/`sectionId`. It now reads locations only, once per book.
+ * buildGroups reads table locations only, once per book — not
+ * `content.getTableImages(bookId)`, a getAll over every table row of the
+ * WHOLE book with each stored ArrayBuffer re-wrapped in a fresh Blob, on
+ * every section load and again on every prewarm, to read nothing but
+ * `cfi`/`sectionId`.
  */
 describe('regression: table locations are read once per book', () => {
     it('hits the content port once across several sections and prewarms', async () => {

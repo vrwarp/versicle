@@ -7,21 +7,22 @@ import yjsMiddleware from 'zustand-middleware-yjs';
 import { DEVICE_A, BOOK_EN, BOOK_CJK } from '@test/fixtures/ydoc/seed';
 
 /**
- * Fixture hydration matrix — CURRENT (legacy) semantics pinned against the
- * captured era docs (phase2-fork-surgery.md §4 consumers; precursor of suite
- * F.1, which re-runs this matrix through the surgically-modified middleware
- * as each store flips to merge-defaults).
+ * Fixture hydration matrix — the middleware's DEFAULT (replace-hydration, no
+ * `syncedKeys`) semantics pinned against the captured era docs
+ * (phase2-fork-surgery.md §4). store-flips.test.ts re-runs this matrix through
+ * each app store's registry def (merge-defaults + syncedKeys), which is what
+ * avoids the behaviors pinned here.
  *
  * Stores here are minimal mirrors of the app stores' synced state (current
  * defaults), bound to fresh docs loaded from the committed fixtures — the
  * real app stores are bound to the provider's singleton yDoc and can't be
- * rebound per fixture. Options mirror getYjsOptions(): disableYText: true.
+ * rebound per fixture. Options mirror defineSyncedStore's encoding: disableYText: true.
  *
- * The pins deliberately include the bugs Phase 2 fixes:
+ * The pins deliberately include the default-mode hazards:
  *   - D2 fontProfiles wipe: hydrating a v4 doc DELETES the fontProfiles
  *     default (why the v4→v5 migration exists);
  *   - phantom popover: the stale doc key is inserted INTO store state
- *     (what syncedKeys B.2 will stop).
+ *     (what the syncedKeys whitelist, contract case B.2, prevents).
  */
 
 // vitest's jsdom environment rewrites import.meta.url to a non-file URL;
@@ -96,8 +97,8 @@ describe('fixture hydration — legacy replace semantics (current behavior)', ()
       'fixture-annotation-1',
       'fixture-annotation-2',
     ]);
-    // Current middleware has no replication whitelist: the pre-hotfix junk
-    // key rides into state. syncedKeys (contract case B.2) flips this pin.
+    // Without a syncedKeys whitelist the pre-hotfix junk key rides into
+    // state. syncedKeys (contract case B.2) flips this pin.
     const state = store.getState() as unknown as Record<string, unknown>;
     expect(state['popover']).toMatchObject({ visible: false, x: 312, y: 480 });
   });

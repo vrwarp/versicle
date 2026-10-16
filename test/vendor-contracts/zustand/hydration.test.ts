@@ -6,16 +6,14 @@ import { drain, replicate } from './helpers';
 
 /**
  * Fork contract suite — inbound hydration (phase2-fork-surgery.md §3 cases
- * A.5, A.6, plus the hermetic late-join pin that replaced the upstream
- * y-websocket test; see PROVENANCE.md).
+ * A.5, A.6, plus a hermetic late-join pin, a network-free port of the
+ * upstream y-websocket test).
  *
- * A.5 pins the CURRENT replace-with-delete hydration — finding D2, the bug
- * Phase 2's `hydration: 'merge-defaults'` exists to fix: any field added to
- * a synced store's initial state is WIPED on first hydration from an older
- * doc (the v4→v5 fontProfiles migration exists solely because of this).
- * These tests are rewritten per store in the same PR that flips that store
- * to merge-defaults (the canary mechanism, §2.6); they are never silently
- * dropped.
+ * A.5 pins the default `hydration: 'replace'` behavior (replace-with-delete,
+ * finding D2): any field added to a store's initial state is WIPED on first
+ * hydration from an older doc. `hydration: 'merge-defaults'`
+ * (merge-defaults.test.ts), which the app's synced stores opt into, exists
+ * to avoid that.
  */
 
 interface LibState {
@@ -57,9 +55,8 @@ describe('contract A.5 — replace-with-delete hydration (CURRENT bug, pinned)',
     expect(store.getState().books).toEqual({ b1: { title: 'Moby Dick' } });
     // …but the newly-declared default was DELETED, not retained. This is
     // finding D2 (diff.ts getRecordChanges emits DELETE for every state key
-    // absent from map JSON; patchStore applies with replace=true). Phase 2
-    // changes this per store via hydration: 'merge-defaults' — when a store
-    // flips, this expectation flips with it in the same PR.
+    // absent from map JSON; patchStore applies with replace=true).
+    // hydration: 'merge-defaults' changes this (merge-defaults.test.ts).
     expect('newField' in store.getState()).toBe(false);
     expect(store.getState().newField).toBeUndefined();
     // Functions are exempt from the delete emission: actions survive.

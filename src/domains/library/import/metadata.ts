@@ -1,11 +1,9 @@
 /**
  * Metadata validation & sanitization — the sanitize-at-ingest boundary.
  *
- * Moved VERBATIM from `src/lib/ingestion.ts` (Phase 7 PR-L1; previously
- * moved verbatim from `src/db/validators.ts` in Phase 3 D4). `lib/ingestion`
- * re-exports these for its remaining consumers; the import direction is
- * strictly lib → domains so the unified extractor never reaches back into
- * `lib/ingestion` (no cycle).
+ * `lib/ingestion` re-exports these for its remaining consumers; the import
+ * direction is strictly lib → domains so the unified extractor never reaches
+ * back into `lib/ingestion` (no cycle).
  */
 import type { BookMetadata } from '~types/book';
 import { sanitizeMetadata } from '@lib/sanitizer';
@@ -61,9 +59,6 @@ export function sanitizeString(input: string, maxLength: number = 255): string {
 
   // Use the robust DOMPurify-based sanitizer
   const text = sanitizeMetadata(input);
-
-  // Fallback if sanitizer returns empty but input wasn't (unlikely for plain text, but possible if it was all tags)
-  // If input was "<b>bold</b>", text is "bold".
 
   return text.trim().slice(0, maxLength);
 }

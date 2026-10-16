@@ -1,17 +1,13 @@
 /**
- * P6 ENTRY GATE — PinyinOverlay characterization (jsdom tier).
+ * PinyinOverlay characterization (jsdom tier).
  *
- * Pins the overlay's CURRENT contract before the Phase 6 ReaderOverlay /
- * MeasuredOverlay consolidation (prep/phase6-reader-engine.md §4 overlay #6):
+ * Pins the overlay's contract:
  *
  *  - geometry portal into the epub.js container node;
- *  - decorative contract: aria-hidden + pointer-events: none (PinyinOverlay
- *    already conforms — the ReaderOverlay cutover must keep this);
- *  - known-character suppression filters by the DISPLAYED character key
- *    (the verified CH-6 displayed-script behavior: a char known under its
- *    simplified key is still annotated when displayed as traditional —
- *    PR-13's canonicalization deliberately changes that, with this pin
- *    rewritten in the same commit).
+ *  - decorative contract: aria-hidden + pointer-events: none;
+ *  - known-character suppression canonicalizes the DISPLAYED character
+ *    before the vocabulary lookup, so a char known under its simplified key
+ *    is suppressed when displayed as traditional.
  */
 import { render } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -79,10 +75,9 @@ describe('characterization: PinyinOverlay (P6 entry gate)', () => {
 
   it('CH-6 fixed (rewritten pin): a char known under its simplified key IS suppressed when displayed traditional', () => {
     // 书 (simplified) is known; the displayed glyph is 書 (traditional).
-    // PR-13 (vocabulary canonicalization, CRDT v7): the filter
-    // canonicalizes the DISPLAYED char before the lookup, so suppression
-    // works in both display scripts. Rewritten in the PR-13 commit — an
-    // enumerated characterization delta, per the pin's own instruction.
+    // The filter canonicalizes the DISPLAYED char (vocabulary
+    // canonicalization) before the lookup, so suppression works in both
+    // display scripts.
     useVocabularyStore.setState({ knownCharacters: { 书: 1 } });
 
     render(

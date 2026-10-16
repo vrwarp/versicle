@@ -1,8 +1,8 @@
 /**
- * quotaCounter repo contract (Phase A): round-trip of the persisted daily
- * (RPD) counter under the existing `app_metadata` KV store, and absence
- * semantics (an unwritten key reads as undefined). Real-IDB round-trip via the
- * data harness — no hand-rolled vi.mock for the repo (program rule 4).
+ * quotaCounter repo contract: round-trip of the persisted daily (RPD) counter
+ * under the `app_metadata` KV store, and absence semantics (an unwritten key
+ * reads as undefined). Real-IDB round-trip against fake-indexeddb — no
+ * hand-rolled vi.mock for the repo (AGENTS.md program rule 4).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { quotaCounterRepo } from './quotaCounter';

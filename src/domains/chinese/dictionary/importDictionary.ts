@@ -1,14 +1,14 @@
 /**
  * runDictionaryImport — the `/dict/cedict.json` → `versicle-dict` import,
- * extracted from {@link DictionaryService} so it can run OFF the main thread.
+ * kept apart from {@link DictionaryService} so it can run OFF the main thread.
  *
- * Why it moved: `await response.json()` on the compiled CC-CEDICT artifact
+ * Why it runs off-thread: `await response.json()` on the compiled CC-CEDICT artifact
  * (15,154,650 bytes, 197,828 keys) measured 183 ms and ~104 MB of transient
  * heap on a desktop x86 node build. On a mid-range Android WebView that is on
  * the order of 1.2–2.4 s of a COMPLETELY FROZEN UI plus a ~100 MB spike on a
  * device that may not have the headroom — and it lands at the worst possible
  * moment, right after the user tapped a Chinese word and is waiting for the
- * vocab card. The parse (and the fetch, and the chunked write) now happen in
+ * vocab card. The parse (and the fetch, and the chunked write) happen in
  * `src/workers/dictionaryImport.worker.ts`; this module is the logic BOTH
  * sides share — the worker drives it in production, the DictionaryService
  * suite drives it in-process under vitest (where there is no module loader to
@@ -102,7 +102,7 @@ export async function runDictionaryImport({
   }
   // THE 183 ms / ~104 MB step. It is here, in the worker, and nowhere else.
   const data = (await response.json()) as Record<string, DictEntryTuple>;
-  // Keys only. `Object.entries` built a ~200 000-element array of
+  // Keys only. `Object.entries` would build a ~200 000-element array of
   // two-element arrays (one allocation per headword, ~100 MB of transient
   // heap) before a single row was written; the keys array alone is one
   // allocation, and each chunk's pairs are materialized inside the loop —
@@ -123,13 +123,13 @@ export async function runDictionaryImport({
     }
     await dictionary.bulkPutEntries(chunk);
     await onProgress({ imported: Math.min(offset + IMPORT_CHUNK_SIZE, total), total });
-    // Yield between transactions. Kept from the main-thread version: the
-    // in-process runner still runs on whatever thread called it, and in the
-    // worker it costs ~40 macrotasks across the whole import.
+    // Yield between transactions: the in-process runner runs on whatever
+    // thread called it, and in the worker it costs ~40 macrotasks across the
+    // whole import.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
 
-  // Provenance sidecar (PR-12 pipeline) — best effort, never fatal.
+  // Provenance sidecar (written by `npm run compile-dict`) — best effort, never fatal.
   try {
     const meta = await fetchLocal(DICT_META_URL);
     if (meta.ok) {

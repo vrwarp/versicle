@@ -35,9 +35,7 @@ import { coverUrl } from '@data/covers';
 const logger = createLogger('PlaybackController');
 
 /**
- * PlaybackController — the TTS engine's orchestration core (Phase 5b
- * decomposition; phase5-tts-strangler.md §5b.1 — the strangled remainder of
- * the 1,300-line AudioPlayerService god class, which is GONE).
+ * PlaybackController — the TTS engine's orchestration core.
  *
  * The controller is the playback FSM and the SOLE status writer; everything
  * else is a composed unit behind a seam:
@@ -56,16 +54,16 @@ const logger = createLogger('PlaybackController');
  *    task (the C4 dev-assert crashes in dev/test otherwise).
  *
  * Construction: `WorkerTtsEngine.connect` builds this directly inside the
- * worker (the production path); `getInProcessAudioPlayer()` builds it on the
- * main thread for unit tests; parity tests build it with fakes.
+ * worker (the production path); unit and parity tests build it with fakes via
+ * `createWithContext`.
  */
 export class PlaybackController implements TtsEngine {
     readonly engineName: string = 'PlaybackController';
     // TaskSequencer ensures async operations are executed serially to prevent race conditions.
     private taskSequencer = new TaskSequencer();
-    // SectionAnalysisDriver runs background GenAI detection/adaptation (5c-PR2);
+    // SectionAnalysisDriver runs background GenAI detection/adaptation;
     // queue building is the pure SectionQueueBuilder, orchestrated in
-    // loadSectionInternal (the strangled AudioContentPipeline is gone).
+    // loadSectionInternal.
     private analysisDriver: SectionAnalysisDriver;
     private readonly abbreviations = new AbbreviationMerger();
     // QueueModel manages the queue (immutably), current index, and position calculations.
@@ -80,19 +78,19 @@ export class PlaybackController implements TtsEngine {
 
     private status: TTSStatus = 'stopped';
     private listeners: SnapshotListener[] = [];
-    /** Monotonic snapshot sequence (5b-PR2 single channel). */
+    /** Monotonic snapshot sequence (the single outbound channel). */
     private seq = 0;
     /** The queueId carried by the previously PUBLISHED snapshot (broadcast diet). */
     private lastPublishedQueueId: string | null = null;
     /** The queueId last handed to the session store (persistence dedupe). */
     private lastPersistedQueueId: string | null = null;
-    /** The assembled lexicon handle (5c-PR3): null → refetch on next sentence. */
+    /** The assembled lexicon handle: null → refetch on next sentence. */
     private activeLexicon: CompiledLexicon | null = null;
     private speed: number = 1.0;
     private voiceId: string | null = null;
     /**
      * The provider id this engine last routed the backend to ('local' initially,
-     * like the manager). Owns the fallback DECISION (5a-PR2): recovery applies only
+     * like the manager). Owns the fallback DECISION: recovery applies only
      * while a non-'local' provider is active, and flips this back to 'local' so the
      * failed sentence is replayed exactly once.
      */
@@ -135,8 +133,8 @@ export class PlaybackController implements TtsEngine {
         });
 
         // Provider events that drive the FSM (start/end/error) run as sequenced
-        // tasks (5b-PR3): the dev-assert makes any un-sequenced status/queue
-        // mutation a crash in dev/test, and these three were the violators.
+        // tasks: the dev-assert makes any un-sequenced status/queue mutation a
+        // crash in dev/test.
         // onTimeUpdate/onDownloadProgress are pure telemetry passthroughs — they
         // mutate neither status nor queue, and sequencing per-second time updates
         // would queue them behind synthesis tasks for no benefit.
@@ -199,8 +197,8 @@ export class PlaybackController implements TtsEngine {
         this.seekCoalescer = new SeekCoalescer({
             getQueueId: () => this.stateManager.queueId,
             settleMs: SEEK_SETTLE_MS,
-            // Apply the settled scrub as a sequenced 'seekTo' task — like the old
-            // per-tick seekTo, but ONCE per drag. Bail if superseded by a context
+            // Apply the settled scrub as a sequenced 'seekTo' task — ONCE per
+            // drag, not per tick. Bail if superseded by a context
             // switch (epoch) or invalidated by a queue change (queueId) before the
             // task runs, rather than mutating a queue the scrub never targeted.
             onSettle: (pending) => {
@@ -212,7 +210,7 @@ export class PlaybackController implements TtsEngine {
             },
         });
 
-        // Mid-playback lexicon edits (S15): any lexicon change drops the handle;
+        // Mid-playback lexicon edits: any lexicon change drops the handle;
         // the next sentence refetches the assembled rules.
         this.ctx.lexicon.subscribe(() => {
             this.activeLexicon = null;
@@ -239,14 +237,12 @@ export class PlaybackController implements TtsEngine {
                 );
             }
             // Section-change invalidation of a pending dragnet gesture is
-            // INTERNAL since 5b-PR4 (the ReaderView/useTTS clearPauseGesture
-            // call sites are gone).
+            // INTERNAL to the engine.
             this.dragnet.noteSectionIndex(snapshot.currentSectionIndex);
             // Persistence (single owner: the SessionStore port), deduped on the
             // queue's content identity. Resets publish an EMPTY queue with a
             // fresh queueId and must NOT clobber the persisted session (the
-            // restore that follows a book switch still reads it) — the legacy
-            // QueueModel likewise never persisted from reset().
+            // restore that follows a book switch still reads it).
             if (this.currentBookId && snapshot.queue.length > 0 && snapshot.queueId !== this.lastPersistedQueueId) {
                 this.lastPersistedQueueId = snapshot.queueId;
                 this.ctx.session.persistQueue(this.currentBookId, snapshot.queue);
@@ -278,7 +274,7 @@ export class PlaybackController implements TtsEngine {
                 this.activeLexicon = null;
 
                 // If playing, restart to apply the new voice/language immediately.
-                // Sequenced (5b-PR3): a store subscription must not drive the FSM
+                // Sequenced: a store subscription must not drive the FSM
                 // outside the sequencer.
                 if (this.status === 'playing' || this.status === 'loading') {
                     void this.enqueue('languageSync.restart', () => this.playInternal(true));
@@ -318,7 +314,7 @@ export class PlaybackController implements TtsEngine {
             });
         };
 
-        // The C4 dev-assert (5b-PR3, §5b.3): status writes and queue mutations
+        // The C4 dev-assert: status writes and queue mutations
         // happen ONLY inside a running sequenced task — a crashing invariant
         // in dev/test instead of a convention.
         if (import.meta.env.DEV) {
@@ -339,8 +335,8 @@ export class PlaybackController implements TtsEngine {
     /**
      * Construct a PlaybackController with an explicitly injected context and playback
      * backend. This is the ONLY construction path: the worker host uses it
-     * (WorkerTtsEngine.connect — the production wiring), the main thread's in-process
-     * builder uses it for unit tests, and the parity suites use it with fakes.
+     * (WorkerTtsEngine.connect — the production wiring), and the unit and parity
+     * suites use it with fakes.
      * Keeping all dependencies injected (no defaults) is what keeps this module free of
      * worker-unsafe imports. See {@link EngineContext} and {@link PlaybackBackend}.
      */
@@ -358,8 +354,8 @@ export class PlaybackController implements TtsEngine {
 
     /**
      * Switch the active book. The CONTEXT SWITCH happens synchronously at call
-     * time — the epoch bump (which makes every previously enqueued task stale,
-     * §5b.3), `currentBookId`, and the metadata/playlist load kickoffs — while
+     * time — the epoch bump (which makes every previously enqueued task stale),
+     * `currentBookId`, and the metadata/playlist load kickoffs — while
      * the status/queue mutations (stop + reset) run as a sequenced task, per
      * the C4 dev-assert. The returned promise resolves when the reset task has
      * run; fire-and-forget callers may ignore it.
@@ -394,7 +390,7 @@ export class PlaybackController implements TtsEngine {
         this.lastPersistedQueueId = null;
 
         // Stop playback and reset queue state to prevent leakage of old book
-        // state. Enqueued (5b-PR3) — but protected against in-flight tasks of
+        // state. Enqueued — but protected against in-flight tasks of
         // the OLD book by the epoch bump above: any earlier-enqueued task that
         // checkpoints (play, loadSection…) bails instead of touching the not-
         // yet-reset queue.
@@ -560,9 +556,9 @@ export class PlaybackController implements TtsEngine {
     }
 
     /**
-     * The single fallback path (5a-PR2, phase5-tts-strangler.md §5a.1): swap the
-     * backend to the platform's local provider and replay the current sentence ONCE.
-     * Always runs INSIDE the sequenced task that observed the failure (5b-PR3):
+     * The single fallback path: swap the backend to the platform's local
+     * provider and replay the current sentence ONCE.
+     * Always runs INSIDE the sequenced task that observed the failure:
      * `playInternal`'s rejection handler awaits it in the same `play` task, and the
      * mid-playback error event awaits it inside its own `provider.error` task — the
      * fallback is one sequenced task end-to-end. The id guard makes a doubly-
@@ -610,14 +606,13 @@ export class PlaybackController implements TtsEngine {
     }
 
     public loadSection(sectionIndex: number, autoPlay: boolean = true) {
-        // Context-switch command (§5b.3): bump before enqueueing ourselves so
+        // Context-switch command: bump before enqueueing ourselves so
         // previously queued navigation/playback tasks go stale.
         this.taskSequencer.bumpEpoch('loadSection');
         this.seekCoalescer.cancel();
         return this.enqueue('loadSection', async (ctx) => {
             if (this.playlistPromise) await this.playlistPromise;
-            // Converted hand-rolled guard (S7): originalBookId comparison -> epoch
-            // checkpoint. setBookId bumps the epoch synchronously, so a load
+            // Epoch checkpoint: setBookId bumps the epoch synchronously, so a load
             // enqueued for the old book cancels here (P17/P18 own this behavior).
             ctx.checkpoint();
             return this.loadSectionInternal(sectionIndex, autoPlay);
@@ -627,8 +622,8 @@ export class PlaybackController implements TtsEngine {
     public loadSectionBySectionId(sectionId: string, autoPlay: boolean = true, sectionTitle?: string) {
         return this.enqueue('loadSectionBySectionId', async (ctx) => {
             if (this.playlistPromise) await this.playlistPromise;
-            // Converted hand-rolled guard (S7): stale after setBookId/stop/
-            // loadSection bumped the epoch (P18 pins the setBookId case).
+            // Epoch checkpoint: stale after setBookId/stop/loadSection bumped
+            // the epoch (P18 pins the setBookId case).
             ctx.checkpoint();
 
             const index = this.playlist.findIndex(s => s.sectionId === sectionId);
@@ -654,7 +649,7 @@ export class PlaybackController implements TtsEngine {
         });
     }
 
-    // Section skips are sequenced tasks (5b-PR3): they mutate the queue via
+    // Section skips are sequenced tasks: they mutate the queue via
     // loadSectionInternal.
     public async skipToNextSection(): Promise<boolean> {
         const loaded = await this.enqueue('skipToNextSection', async () => this.advanceToNextChapter());
@@ -739,7 +734,7 @@ export class PlaybackController implements TtsEngine {
 
     async play(): Promise<void> {
         flightRecorder.record('APS', 'play', { status: this.status });
-        // Dragnet capture is part of the play task (5b-PR3): the pause->play
+        // Dragnet capture is part of the play task: the pause->play
         // gesture check runs INSIDE the sequencer with the timestamp evaluated
         // at task time. A play that went stale (stop/setBookId/loadSection
         // bumped the epoch after it was enqueued) cancels before capturing or
@@ -795,7 +790,7 @@ export class PlaybackController implements TtsEngine {
 
         if (!item) {
             this.setStatus('stopped');
-            // notifyListeners handled by setStatus
+            // the snapshot is published by setStatus
             return;
         }
 
@@ -852,8 +847,8 @@ export class PlaybackController implements TtsEngine {
             if (isProviderPlaybackError(e) && this.currentProviderId !== 'local') {
                 // The single failure path: providers reject exactly once; the manager
                 // rethrows typed and does NOT self-swap. Recovery completes INSIDE the
-                // task that observed the failure (one sequenced task end-to-end,
-                // 5b-PR3) — the failed sentence replays exactly once.
+                // task that observed the failure (one sequenced task end-to-end) —
+                // the failed sentence replays exactly once.
                 logger.warn("Cloud provider failed to start playback; falling back to local provider", e);
                 await this.recoverWithLocalProvider();
                 return;
@@ -886,7 +881,7 @@ export class PlaybackController implements TtsEngine {
     }
 
     stop() {
-        // Context-switch command (§5b.3): bump before enqueueing ourselves so
+        // Context-switch command: bump before enqueueing ourselves so
         // previously queued playback tasks (play/loadSection) cancel at their
         // checkpoints instead of racing the stop.
         this.taskSequencer.bumpEpoch('stop');
@@ -975,8 +970,8 @@ export class PlaybackController implements TtsEngine {
 
     /**
      * Move the queue index to the seek `time`; if that maps to the SAME item,
-     * step forward one (the legacy "a seek that doesn't move snaps to the next
-     * sentence" semantics). Returns false only at the end of the queue — the
+     * step forward one (a seek that doesn't move snaps to the next
+     * sentence). Returns false only at the end of the queue — the
      * caller decides whether to advance a chapter ({@link applySettledSeek}) or
      * just resume the last item (the play() takeover).
      */
@@ -992,8 +987,7 @@ export class PlaybackController implements TtsEngine {
     /**
      * Apply a settled scrub (the FSM mechanism behind {@link SeekCoalescer}):
      * move the index, then — only if playback was live — re-synthesize from the
-     * new position. This is the body the old seekTo ran on EVERY tick, now run
-     * ONCE per settled drag, inside the sequenced 'seekTo' task.
+     * new position. Runs ONCE per settled drag, inside the sequenced 'seekTo' task.
      */
     private async applySettledSeek(time: number): Promise<void> {
         const wasPlaying = (this.status === 'playing' || this.status === 'loading');
@@ -1042,7 +1036,7 @@ export class PlaybackController implements TtsEngine {
 
     /**
      * The provider's `end` event, executed as the sequenced `provider.end`
-     * task (5b-PR3): record history, then advance to the next visible item,
+     * task: record history, then advance to the next visible item,
      * the next chapter, or completion.
      */
     private async handlePlaybackEnded(): Promise<void> {
@@ -1118,12 +1112,12 @@ export class PlaybackController implements TtsEngine {
     }
 
     /**
-     * THE single emission point of the engine (5b-PR2; §5b.2): every outbound
+     * THE single emission point of the engine: every outbound
      * notification — queue changes, status transitions, errors, download
      * progress — funnels through here and leaves as one immutable
      * {@link PlaybackSnapshot} with a monotonic `seq`. The queue itself is
      * attached only when its content identity (`queueId`) changed since the
-     * last publish (P23's broadcast diet); consumers keep their cached array
+     * last publish (the broadcast diet); consumers keep their cached array
      * otherwise.
      */
     private publishSnapshot(opts: {
@@ -1169,8 +1163,8 @@ export class PlaybackController implements TtsEngine {
     subscribe(listener: SnapshotListener): () => void {
         let isSubscribed = true;
         this.listeners.push(listener);
-        // Replay the current state on the next tick (full snapshot incl. queue),
-        // mirroring the pre-snapshot subscribe semantics (state read at fire time).
+        // Replay the current state on the next tick (full snapshot incl. queue;
+        // state is read at fire time).
         setTimeout(() => {
             if (isSubscribed) {
                 listener(this.snapshot());
@@ -1190,7 +1184,7 @@ export class PlaybackController implements TtsEngine {
         this.publishSnapshot({ download: { voiceId, percent, status } });
     }
 
-    // --- Diagnostics (S9: served over the engine handle so the UI reads the
+    // --- Diagnostics (served over the engine handle so the UI reads the
     // ENGINE-side flight recorder — in production, the worker's instance) ---
 
     async exportDiagnostics(): Promise<FlightRecorderExport> {
@@ -1221,10 +1215,9 @@ export class PlaybackController implements TtsEngine {
         const section = this.playlist[sectionIndex];
         const bookId = this.currentBookId;
 
-        // --- Host orchestration of the PURE SectionQueueBuilder (5c-PR2;
-        // phase5-tts-strangler.md §5c.2): fetch content, resolve the title,
-        // build — then the HOST writes the reader UI. The builder never
-        // touches ports.
+        // --- Host orchestration of the PURE SectionQueueBuilder: fetch content,
+        // resolve the title, build — then the HOST writes the reader UI. The
+        // builder never touches ports.
         let newQueue: TTSQueueItem[] | null = null;
         let content: SectionContent | null = null;
         try {
@@ -1263,7 +1256,7 @@ export class PlaybackController implements TtsEngine {
             newQueue = built.queue;
 
             // Sync the Reader UI (CompassPill stays accurate during auto-advance).
-            // The HOST write — the pipeline never touches UI ports again (§5c.2).
+            // The HOST write — the builder never touches UI ports.
             this.ctx.readerUI.setCurrentSection(built.title, section.sectionId);
         } catch (e) {
             logger.error("Failed to load section content", e);
@@ -1296,9 +1289,7 @@ export class PlaybackController implements TtsEngine {
             }
 
             this.analysis.applyCachedAnalysis(this.currentBookId, section.sectionId);
-            // ONE analysis trigger, carrying {sentences, citationMarkers} TOGETHER
-            // (D4 — the legacy split between a markers-less loadSection trigger and
-            // a fetch-everything refresh trigger is gone).
+            // ONE analysis trigger, carrying {sentences, citationMarkers} TOGETHER.
             void this.analysisDriver.triggerAnalysis(
                 bookId,
                 section.sectionId,

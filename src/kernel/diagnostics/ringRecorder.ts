@@ -1,10 +1,10 @@
 /**
  * RingRecorder — the generic, dependency-free ring-buffer event core of the
- * flight-recorder family (Phase 5b; phase5-tts-strangler.md §5b.6 / N7).
+ * flight-recorder family.
  *
  * Kernel admission (master plan §2 rule 1): this module imports NOTHING
  * internal — the event shape is a structural generic so domain wrappers
- * (TTSFlightRecorder today; reader/sync recorders in P6/P7) can bind their
+ * (TTSFlightRecorder, the Chinese traditional-guard recorder) can bind their
  * own source unions and persistence. Everything domain-specific — anomaly
  * heuristics, snapshot assembly, IndexedDB persistence — stays in the
  * wrapper.

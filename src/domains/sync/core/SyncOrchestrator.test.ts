@@ -1,15 +1,12 @@
 /**
- * SyncOrchestrator unit suite — ABSORBS FirestoreSyncManager.test.ts
- * (deleted with the manager in P4-3; test-absorption ledger, program rule
- * 8): the getters/subscription semantics, the real-path event wiring over a
- * mocked y-cinder FireProvider, the permission-denied surfacing regression,
- * and the workspace-switch checkpoint-pinning regression all land here with
- * their assertions unchanged.
+ * SyncOrchestrator unit suite: the getters/subscription semantics, the
+ * real-path event wiring over a mocked y-cinder FireProvider, the
+ * permission-denied surfacing regression, and the workspace-switch
+ * checkpoint-pinning regression.
  *
- * Unlike the legacy suite (which exercised the manager singleton over the
- * real stores), this constructs the orchestrator directly over injected
- * ports — the per-module shape §D2's decomposition exists for. The
- * composition-root singleton (getSyncOrchestrator) keeps its own pin below.
+ * It constructs the orchestrator directly over injected ports — the
+ * per-module shape §D2's decomposition exists for. The composition-root
+ * singleton (getSyncOrchestratorAsync) keeps its own pin below.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
@@ -22,8 +19,8 @@ import { wireSyncEvents } from '@app/sync/wireSyncEvents';
 import { formatMessage, resolveMessage, type MessageInput } from '@kernel/locale/messages';
 
 /**
- * Phase 8 §D: wireSyncEvents passes catalog keys; these suites keep
- * pinning the RESOLVED user-visible copy verbatim.
+ * wireSyncEvents passes catalog keys; these suites pin the RESOLVED
+ * user-visible copy verbatim.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function expectToastShown(showToastMock: { mock: { calls: any[][] } }, message: string, type: string, duration?: number) {
@@ -257,9 +254,8 @@ describe('SyncOrchestrator', () => {
     });
 
     describe('start (was initialization)', () => {
-        // The legacy getRedirectResult check died in P9 (the P4 §Follow-ups
-        // item 2 deletion — see AuthSession's module docs); the auth-session
-        // liveness proxy in these cases is the onAuthStateChanged listener.
+        // The auth-session liveness proxy in these cases is the
+        // onAuthStateChanged listener.
         it('should attach the auth state listener on start', async () => {
             const { onAuthStateChanged } = await import('firebase/auth');
 
@@ -513,11 +509,11 @@ describe('SyncOrchestrator', () => {
 
             expect(checkpointsPort.createCheckpoint).toHaveBeenCalledWith('pre-migration', { protected: true });
             // The state machine references the pinned backup across the
-            // reload. Since P4-5 the switch commits STAGED (the boot
-            // interceptor's idempotent apply performs the destructive step
-            // and the AWAITING_CONFIRMATION transition — pinned by
+            // reload. The switch commits STAGED (the boot interceptor's
+            // idempotent apply performs the destructive step and the
+            // AWAITING_CONFIRMATION transition — pinned by
             // stagedSwap.test.ts and App_Boot.test.tsx); the protected
-            // backup id rides the state machine exactly as before.
+            // backup id rides the state machine.
             expect(MigrationStateService.getState()).toEqual({
                 status: 'STAGED',
                 targetWorkspaceId: 'ws_target',
@@ -527,7 +523,7 @@ describe('SyncOrchestrator', () => {
         });
 
         // The destructive-apply failure row ("rolls back to the pinned
-        // backup instead of clearing state") moved with the destructive
+        // backup instead of clearing state") lives with the destructive
         // apply itself: the boot interceptor routes a failed staged apply
         // to RESTORING_BACKUP (App_Boot.test.tsx) and the apply's
         // validate-before-destroy rows live in stagedSwap.test.ts.

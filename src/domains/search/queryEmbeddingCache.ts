@@ -1,15 +1,16 @@
 /**
- * QueryEmbeddingCache (Increment D §1) — memoizes the query embedding so a
+ * QueryEmbeddingCache — memoizes the query embedding so a
  * repeated search reuses the cached float32 vector with NO second `embed` call,
  * protecting the shared daily RPD budget (design §5.2/§8.1).
  *
  * Keyed by `model | dims | profile | bookId | query` (the query normalized:
  * trimmed + lowercased) so book-scoped, stamp-aware lookups never collide.
  * The PROMISE is memoized — concurrent identical queries share one in-flight
- * `embed` call, and a resolved entry returns the vector synchronously.
+ * `embed` call, and a resolved entry is reused without recomputing.
  *
- * Pure, store/kernel-state-free: it owns only a bounded in-memory Map. Bounded
- * with a small FIFO cap so a long reading session can't grow it unboundedly.
+ * Store/kernel-state-free: it owns a bounded in-memory Map (small FIFO cap so a
+ * long reading session can't grow it unboundedly) and, when callers pass
+ * `keyParts`, reads/writes the device-wide persistent `queryEmbeddingsRepo`.
  */
 import type { EmbeddingProfile } from './embeddingPort';
 import { queryEmbeddingsRepo } from '@data/repos/queryEmbeddings';

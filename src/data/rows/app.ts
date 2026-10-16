@@ -1,14 +1,12 @@
 /**
  * Row schemas for the APP domain stores (`checkpoints`, `sync_log`,
- * `flight_snapshots`, `app_metadata`) — Phase 3, D4 in
- * plan/overhaul/prep/phase3-storage-gateway.md.
+ * `flight_snapshots`, `app_metadata`).
  *
  * See rows/static.ts for the shared posture. Notes:
- * - `sync_log` is a dead store at HEAD (zero readers/writers; prep ▲16) —
- *   its schema is FROZEN as-is for the P4 sync strangler to adopt or P9 to
- *   delete. Do not extend it here.
- * - `app_metadata` was a dead store until the v25 format change (P3-13,
- *   D7) repurposed it as the schema-evolution envelope: `schemaHistory`
+ * - `sync_log` is a dead store (zero readers/writers) — its schema is FROZEN
+ *   as-is, awaiting removal in a future IDB version bump (see the operator
+ *   hand-off list in plan/overhaul/README.md). Do not extend it here.
+ * - `app_metadata` is the schema-evolution envelope: `schemaHistory`
  *   (appended on every versionchange upgrade), the `legacy-recovery-v25`
  *   straggler snapshot, and one-time maintenance flags. The typed envelope
  *   lives below.
@@ -41,7 +39,7 @@ export type SyncCheckpointRow = {
   protected?: boolean;
 };
 
-/** `sync_log` row — FROZEN (dead store at HEAD, see module docs). */
+/** `sync_log` row — FROZEN (dead store, see module docs). */
 export const syncLogEntryRowSchema = z.looseObject({
   id: z.number(),
   timestamp: z.number(),
@@ -97,11 +95,10 @@ export type FlightSnapshotRow = {
   sizeBytes: number;
 };
 
-// ── app_metadata: the v25 schema-evolution envelope (D7) ──────────────────
+// ── app_metadata: the schema-evolution envelope ───────────────────────────
 
 /**
- * Keys of the `app_metadata` key-value store (out-of-line keys). The store
- * existed unused since v18 (prep ▲16/P15); IDB v25 repurposed it. Keys are
+ * Keys of the `app_metadata` key-value store (out-of-line keys). Keys are
  * append-only — never reuse a retired key for a different shape.
  */
 export const APP_METADATA_KEYS = {
@@ -110,7 +107,8 @@ export const APP_METADATA_KEYS = {
   /**
    * `LegacyRecoveryRecord` — the v25 straggler guard's snapshot-before-delete
    * of surviving v17/v18 user-data stores (recoverable via support/
-   * diagnostics; retention decision owed by P9).
+   * diagnostics; retention is an open operator decision, see the hand-off
+   * list in plan/overhaul/README.md).
    */
   legacyRecoveryV25: 'legacy-recovery-v25',
   /** `true` once the post-open idle audio `size` backfill completed (v25). */
@@ -146,8 +144,8 @@ export const APP_METADATA_KEYS = {
    */
   embeddingCacheTotalBytes: 'embedding-cache-total-bytes',
   /**
-   * `number` — the `TTS_EXTRACTION_VERSION` at which the §E re-ingest wave
-   * last finished with ZERO candidate books (a converged library). Later
+   * `number` — the `TTS_EXTRACTION_VERSION` at which the background re-ingest
+   * wave last finished with ZERO candidate books (a converged library). Later
    * boots skip the whole-store candidacy scan
    * (`bookContent.listTtsExtractionVersions`) while this equals the current
    * constant; bumping the extraction version makes the stored value stale and
@@ -188,7 +186,7 @@ export type LegacyRecoveryStoreCapture = {
 };
 
 /**
- * The `legacy-recovery-v25` record (straggler guard, D7 step 1).
+ * The `legacy-recovery-v25` record (the v25 straggler guard).
  * @public C1 row contract: no parse call site yet — kept exported as the
  * drift-guard anchor (`_RecoverySchemaMatches` below pins it to the type).
  */
@@ -231,8 +229,8 @@ export type QuotaDailyUsageRow = {
 };
 
 /**
- * Everything `app_metadata` may hold — the typed envelope replacing the dead
- * store's `any`. Readers narrow by key (see APP_METADATA_KEYS).
+ * Everything `app_metadata` may hold — the typed envelope. Readers narrow by
+ * key (see APP_METADATA_KEYS).
  */
 export type AppMetadataValue =
   | SchemaHistoryEntry[]

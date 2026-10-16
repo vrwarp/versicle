@@ -46,9 +46,9 @@ import { repoBookContentPort, createRepoSessionStore } from './repoPorts';
 
 /**
  * The ONLY progress fields the engine reads: `PlaybackController.restoreQueue` takes
- * `currentQueueIndex` / `currentSectionIndex` and nothing else (grep audit, 2026 perf pass).
+ * `currentQueueIndex` / `currentSectionIndex` and nothing else.
  *
- * Replicating the whole `UserProgress` row made the host's own per-sentence writes
+ * Replicating the whole `UserProgress` row would make the host's own per-sentence writes
  * (`updateTTSProgress`, `addCompletedRange`) round-trip `completedRanges` (unbounded) and
  * `readingSessions` (up to 500) back into the worker twice per sentence. The host narrows to
  * this view (`toProgressEngineView` in src/app/tts/replicationSpec.ts) and pushes only when
@@ -64,7 +64,7 @@ export type EngineStateUpdate =
     | { kind: 'bookLanguage'; bookId: string; lang: string }
     // Two shapes, one kind: a map and a single-entry delta, which merges. The host pushes a
     // delta for the common case (one section's analysis changed), so a content-analysis write
-    // no longer deep-clones and structured-clones the whole cross-book map.
+    // does not deep-clone and structured-clone the whole cross-book map.
     //
     // The map form's SCOPE is `bookId`: omitted it is the cross-book boot snapshot and
     // replaces the cache wholesale; set, the payload holds only `${bookId}/…` keys and
@@ -74,7 +74,7 @@ export type EngineStateUpdate =
     | { kind: 'analysis'; snapshot: ContentAnalysisSnapshot; bookId?: string }
     | { kind: 'analysis'; key: string; analysis: SectionAnalysis }
     | { kind: 'progress'; bookId: string; progress: ProgressEngineView }
-    // Lexicon invalidation ping (5c-PR3): the assembled rules are PULLED via the
+    // Lexicon invalidation ping: the assembled rules are PULLED via the
     // lexicon port; this update only tells the engine its handle went stale.
     | { kind: 'lexicon'; version: number };
 
@@ -115,7 +115,7 @@ export interface WorkerEngineContextOptions {
     /** Locale-aware default; pure, computed locally. Override only for tests. */
     defaultMinSentenceLength?: (lang: string) => number;
     /**
-     * Storage ports (5b decomposition). The worker reads/writes IndexedDB
+     * Storage ports. The worker reads/writes IndexedDB
      * DIRECTLY through the src/data repos (worker-safe; the detached-write
      * discipline lives on the SessionStore port) — these default to the
      * repo-backed implementations. Tests inject in-memory fakes, which is

@@ -1,5 +1,5 @@
 /**
- * Renderer-swap smoke (contract C7 acceptance, Phase 6 §2b): the reader
+ * Renderer-swap smoke (contract C7, the ReaderEngine port): the reader
  * shell boots on the FakeReaderEngine in jsdom — no epub.js anywhere in the
  * render path. This is the proof that swapping the rendering engine (e.g.
  * to foliate-js) is a one-module change: every component consumes the
@@ -74,8 +74,7 @@ describe('renderer-swap smoke: ReaderView boots on FakeReaderEngine', () => {
       expect(screen.getByTestId('reader-iframe-container')).toBeInTheDocument();
     });
 
-    // P6 a11y landmark fix (P0 baseline: reader body outside any landmark
-    // region): the content area is a real <main>, the header a banner.
+    // a11y landmarks: the content area is a real <main>, the header a banner.
     expect(screen.getByRole('main', { name: 'Book' })).toBeInTheDocument();
     expect(screen.getByRole('banner')).toBeInTheDocument();
   });

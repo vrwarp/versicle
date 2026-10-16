@@ -1,23 +1,20 @@
 /**
- * P6 ENTRY GATE — pinyin overlay characterization journey (permanent).
+ * Pinyin overlay characterization journey (permanent).
  *
- * Pins the Chinese reading overlay against the CURRENT implementation
- * (prep/phase6-reader-engine.md §Test plan): per-character alignment of the
- * geometry portal, the vocabulary (known-character) suppression, and the
- * Traditional-Chinese round-trip. The astral-plane case is `test.fail()`
- * until the CH-1 code-point fix lands (prep doc PR-1 — that change flips it
- * to passing and updates the jsdom pins in
- * src/hooks/useEpubReader_Pinyin.characterization.test.tsx).
+ * Pins the Chinese reading overlay (prep/phase6-reader-engine.md §Test plan):
+ * per-character alignment of the geometry portal, the vocabulary
+ * (known-character) suppression, the Traditional-Chinese round-trip, and the
+ * astral-plane case (CH-1: the code-point-safe geometry pass in
+ * src/domains/chinese/engine/PinyinGeometryEngine.ts).
  *
- * Fixtures: verification/test_chinese.epub (unchanged, byte-identical to the
- * pre-P6 fixture so the existing chinese journeys are untouched) and the new
- * verification/test_chinese_astral.epub (U+20000 𠀀 + emoji + mixed lines),
- * both emitted by create_test_chinese_epub.cjs.
+ * Fixtures: verification/test_chinese.epub (kept byte-identical so the other
+ * chinese journeys are unaffected) and verification/test_chinese_astral.epub
+ * (U+20000 𠀀 + emoji + mixed lines), both emitted by
+ * create_test_chinese_epub.cjs.
  *
- * EXECUTION (Docker lane): authored + typechecked in a lane without the
- * hermetic runner; runs with the suite via ./run_verification.sh. Geometry
- * assertions (±2 px alignment) are desktop-project scoped per the prep doc:
- * guarded below via test.skip on other projects.
+ * Runs with the suite via ./run_verification.sh. Geometry assertions (±2 px
+ * alignment) are desktop-project scoped: guarded below via test.skip on other
+ * projects.
  *
  * Sanitization is ON (test.use below): pinyin geometry is measured against
  * the post-sanitize DOM, the same pipeline production users get.
@@ -115,7 +112,7 @@ async function measureCharRects(page: Page): Promise<CharRect[]> {
       const text = node.textContent || '';
       if (!/[一-鿿]/.test(text)) continue;
       // Code-POINT iteration with code-UNIT offsets: the measurement side
-      // must be astral-correct even while production is not (CH-1).
+      // must be astral-correct (CH-1).
       let unit = 0;
       for (const ch of Array.from(text)) {
         if (/[一-鿿]/.test(ch)) {
@@ -183,7 +180,8 @@ test('Characterization: vocabulary toggle hides pinyin without geometry recomput
   expect(before.length).toBeGreaterThan(0);
 
   // Mark the first annotated char as known via the triage card path's store
-  // (the read-path filter is PinyinOverlay.tsx:61 — keyed by DISPLAYED char).
+  // (the read-path filter is in PinyinOverlay.tsx — keyed by the canonical
+  // form of the DISPLAYED char).
   const frame = utils.getReaderFrame(page);
   expect(frame).not.toBeNull();
   const firstHan = await frame!.evaluate(() => {
@@ -198,10 +196,10 @@ test('Characterization: vocabulary toggle hides pinyin without geometry recomput
   });
 
   // No UI affordance writes vocabulary outside the triage card; the pin here
-  // is the count relationship after suppression, driven through the store on
-  // a reloaded page (the synced store hydrates the same way production does).
-  // NOTE for the Docker lane: if this proves flaky, drive the CompassPill
-  // vocab-triage variant instead — the assertion below is the contract.
+  // is the count relationship after suppression, driven through the store
+  // handle when a test build exposes one.
+  // NOTE: if this proves flaky, drive the CompassPill vocab-triage variant
+  // instead — the assertion below is the contract.
   const suppressed = await page.evaluate((ch) => {
     interface VocabStoreLike {
       getState(): { markAsKnown?: (c: string) => void; addKnownCharacter?: (c: string) => void };
@@ -256,10 +254,9 @@ test('Characterization: Traditional toggle round-trips the iframe text (_origina
   await expect(frame!.locator('body')).toContainText('这是一本测试用的中文书', { timeout: 10000 });
 });
 
-// CH-1: astral-plane alignment. Flipped to PASSING by PR-1 (the code-point
-// loop + \p{Script=Han} widening in chineseContentProcessor.ts): after the
-// 𠀀/emoji chapter content, every BMP Han char keeps its own pinyin at its
-// own geometry — no starvation, no shift.
+// CH-1: astral-plane alignment. The code-point loop + \p{Script=Han} test in
+// PinyinGeometryEngine.ts keep, after the 𠀀/emoji chapter content, every BMP
+// Han char with its own pinyin at its own geometry — no starvation, no shift.
 test(
   'Characterization: astral-plane fixture — pinyin aligns per code point (CH-1, fixed at PR-1)',
   async ({ page }, testInfo) => {

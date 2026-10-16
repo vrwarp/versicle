@@ -131,7 +131,7 @@ describe('entity-resolution', () => {
             expect(normalizeMetadata("Title [edition]  Extra")).toBe("title extra");
         });
 
-        // --- Step 7: Unknown author nullification ---
+        // --- Step 8: Unknown author nullification ---
 
         it('should return empty string for "Unknown Author"', () => {
             expect(normalizeMetadata("Unknown Author")).toBe("");

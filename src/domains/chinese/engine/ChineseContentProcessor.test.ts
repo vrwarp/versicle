@@ -1,13 +1,8 @@
 /**
- * ChineseContentProcessor suite (Phase 6 §7.2, prep doc PR-10): the CH-2
- * invalidation matrix — per-section position maps, multi-section merge,
- * event-driven recompute (contentRendered / contentDestroyed / relocated /
- * resized / prefs refresh) and the per-run cancellation token.
- *
- * The relocate/resize/multi-section/prefs cases are DELIBERATE behavior
- * improvements over the pinned legacy pass (which only ran on content load
- * + a React dependency list) — added here as new assertions per the prep
- * doc's PR-10 row, never silently edited into old pins.
+ * ChineseContentProcessor suite: the invalidation matrix — per-section
+ * position maps, multi-section merge, event-driven recompute
+ * (contentRendered / contentDestroyed / relocated / resized / prefs refresh)
+ * and the per-run cancellation token.
  */
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import type {
@@ -275,7 +270,7 @@ describe('ChineseContentProcessor (CH-2 matrix)', () => {
     const jian = positions.find((p) => p.char === '間');
     expect(jian).toBeDefined();
     expect(jian!.pinyin).toBe('jiān');
-    // Guard against silent regression: the old Traditional-direct path
+    // Guard against silent regression: the Traditional-direct path
     // (running pinyin-pro on the displayed 時間) annotates 間 as jiàn.
     expect(getPinyin('時間')[1]).toBe('jiàn');
     processor.dispose();

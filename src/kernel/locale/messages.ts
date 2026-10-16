@@ -1,7 +1,7 @@
 /**
- * The typed message catalog (Phase 8 §D; docs/adr/0001-i18n-strategy.md).
+ * The typed message catalog (docs/adr/0001-i18n-strategy.md).
  *
- * THE library decision recorded by the ADR's §6 falls here: **no i18n
+ * The library decision deferred by the ADR's §6 is made here: **no i18n
  * library yet.** This is a minimal in-repo catalog — a plain `en` record
  * behind a `MessageKey` union and a `formatMessage(key, params)` resolver.
  * Plain TS module: importable from stores, services and the TTS worker
@@ -90,7 +90,7 @@ export const messages = {
   'common.continue': 'Continue',
   'common.reload': 'Reload',
 
-  // --- settings shell (registry labels, §B) ----------------------------
+  // --- settings shell (registry labels) ---------------------------------
   'settings.tab.general': 'General',
   'settings.tab.tts': 'TTS Engine',
   'settings.tab.genai': 'Generative AI',
@@ -101,7 +101,7 @@ export const messages = {
   'settings.tab.diagnostics': 'Diagnostics',
   'settings.tab.data': 'Data Management',
 
-  // --- toasts: sync domain (the wireSyncEvents choke point, P4 §D3) ----
+  // --- toasts: sync domain (the wireSyncEvents choke point) ------------
   'sync.cleanSync.started': 'Syncing library from cloud...',
   'sync.cleanSync.applied': 'Sync complete!',
   'sync.cleanSync.failed': 'Failed to sync. Please try again.',
@@ -110,8 +110,8 @@ export const messages = {
   'sync.switch.failedAborted': 'Workspace switch failed. Please try again.',
   'sync.tombstoned.connect': 'Sync disconnected: Remote workspace was deleted. Operating offline.',
   'sync.tombstoned.switch': 'Cannot switch: This workspace has been deleted.',
-  // Moved verbatim from domains/sync/backend/permissionDenied.ts (the
-  // transport keeps DETECTION, the catalog owns the COPY — P4 §D3 completed).
+  // The transport (domains/sync/backend/permissionDenied.ts) keeps DETECTION,
+  // the catalog owns the COPY.
   'sync.rulesOutOfDate':
     "Cloud sync was rejected by your Firebase project's security rules. Your deployed rules are likely out of date — redeploy firestore.rules and storage.rules from the Versicle repository (firebase deploy --only firestore:rules,storage).",
   'sync.failure.maxAttempts': 'Sync failed after multiple attempts. Please check your connection.',
@@ -125,14 +125,14 @@ export const messages = {
   'sync.epochChanged.self':
     'Sync storage optimized. Reload the app to complete the switch.',
 
-  // --- confirms/alerts: app shell + data management (§D codemod) -------
+  // --- confirms/alerts: app shell + data management --------------------
   'app.resetAll.title': 'Delete all data?',
   'app.resetAll.body':
     'Are you sure you want to delete all data? This cannot be undone.',
   'app.resetAll.confirm': 'Delete everything',
   'app.resetAll.failed': 'Failed to reset database. You may need to clear browser data manually.',
 
-  // --- PWA shell (Phase 8 §G) -------------------------------------------
+  // --- PWA shell ---------------------------------------------------------
   'app.updateReady': 'A new version of Versicle is ready.',
   'app.swDegraded':
     'Offline features are unavailable in this session — book covers may not display. Reload to retry.',
@@ -157,7 +157,7 @@ export const messages = {
   'data.downloadRecovery.failed': 'Failed to download data.',
 
   // --- confirms/alerts: settings panels --------------------------------
-  // Per-book AI consent prompt (P9; app/google/aiConsentPrompt.ts —
+  // Per-book AI consent prompt (app/google/aiConsentPrompt.ts —
   // asked once per book on first TTS play when GenAI is enabled).
   'genai.consent.title': 'Allow AI analysis for this book?',
   'genai.consent.body':
@@ -206,12 +206,12 @@ export const messages = {
   'abbrev.import.replace.body':
     'This will replace your current list with {count} entries from the file. Are you sure?',
 
-  // --- live announcements (TTS adapter, §D) -----------------------------
+  // --- live announcements (TTS adapter) ---------------------------------
   'announce.tts.playing': 'Playing — {section}',
   'announce.tts.paused': 'Paused',
   'announce.tts.stopped': 'Stopped',
 
-  // --- keyboard shortcuts (§E help sheet) -------------------------------
+  // --- keyboard shortcuts (help sheet) ----------------------------------
   'shortcuts.help.title': 'Keyboard shortcuts',
   'shortcuts.help.open': 'Show keyboard shortcuts',
   'shortcuts.reader.prevPage': 'Previous page',

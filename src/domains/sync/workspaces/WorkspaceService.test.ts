@@ -8,7 +8,7 @@
  * system — the connect options it derives, the events it emits, the
  * operator-facing log lines that record a purge's counts and whether the
  * active tie was severed, and the exact call ordering of the honest delete
- * (P4-6: tombstone → purge → conditional sever).
+ * (tombstone → purge → conditional sever).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';

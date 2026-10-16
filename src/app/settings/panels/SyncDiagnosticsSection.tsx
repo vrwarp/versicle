@@ -2,10 +2,12 @@
  * "Sync diagnostics" card on the Diagnostics settings panel: one button that
  * collects the sync diagnostics report (src/app/sync/diagnostics) and
  * exports it gzip-compressed — the share sheet on Android/iOS, a download
- * on the web. Export one file per device and compare them side by side.
+ * on the web. Export one file per device and compare them side by side. A
+ * second action, Repair, re-uploads what the cloud copy is missing
+ * (src/app/sync/diagnostics/repair).
  *
- * The collector is dynamically imported on click so the settings chunk does
- * not carry it.
+ * The collector and repair modules are dynamically imported on click so the
+ * settings chunk does not carry them.
  */
 import React, { useState } from 'react';
 import { CloudCog, Download, Wrench } from 'lucide-react';

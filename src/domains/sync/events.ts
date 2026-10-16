@@ -2,23 +2,21 @@
  * Typed `SyncEvent` bus (phase4-sync-strangler.md §D3): the transport layer
  * announces WHAT happened; presentation decides what the user sees.
  *
- * Producers: the sync manager/orchestrator and firebase-config — which must
- * never import `useToastStore` again (lint-enforced for src/lib/sync/** and
+ * Producers: the sync orchestrator and firebase-config — which must never
+ * import `useToastStore` (lint-enforced for src/lib/sync/** and
  * src/domains/sync/**).
  *
  * Consumer: exactly ONE — `src/app/sync/wireSyncEvents.ts`, registered by
  * the `syncInit` boot task. It owns every user-facing sync string and the
  * `useSyncStore` mirror writes (lastSyncTime is driven by `flushed`).
  *
- * Deltas from the prep-doc union (additive evolution, allowed by the
- * contract registry's operating rules):
- *  - `save-rejected`/`workspace-tombstoned` carry the context the legacy
- *    toast copy was keyed on (permissionDenied / connect-vs-switch);
- *  - `switch` gains 'failed-aborted' (the NON-destructive pre-apply failure
- *    path, distinct from 'failed-rolling-back');
- *  - `local-persistence-unavailable` (firebase-config's one toast).
- *    (`signed-in-via-redirect` existed here until P9 deleted the dead
- *    getRedirectResult flow with it — see AuthSession's module docs.)
+ * Beyond the bare fact, some events carry the context the toast copy is
+ * keyed on:
+ *  - `save-rejected`/`workspace-tombstoned` carry permissionDenied /
+ *    connect-vs-switch;
+ *  - `switch` distinguishes 'failed-aborted' (the NON-destructive pre-apply
+ *    failure path) from 'failed-rolling-back';
+ *  - `local-persistence-unavailable` is firebase-config's one toast.
  */
 import type { FirestoreSyncStatus, FirebaseAuthStatus } from '~types/sync';
 import { createLogger } from '@lib/logger';
@@ -28,7 +26,7 @@ const logger = createLogger('SyncEvents');
 export type SyncEvent =
   | { type: 'status'; status: FirestoreSyncStatus }
   | { type: 'auth'; status: FirebaseAuthStatus; email: string | null }
-  /** A committed save (both transports — the y-cinder `saved` fork delta landed in P9). */
+  /** A committed save (both transports: the mock and y-cinder's `saved` event). */
   | { type: 'flushed'; at: number }
   | { type: 'clean-sync'; phase: 'started' | 'applied' | 'failed' }
   | {

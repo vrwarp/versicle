@@ -1,8 +1,8 @@
 /**
- * The "ask on first TTS play" per-book AI consent prompt (P9; the
- * affordance whose existence let app/google/aiConsent.ts exit observe-mode
- * for bookId-carrying calls). Drives the REAL stores; only the dialog
- * primitive and the client-configured probe are mocked.
+ * The "ask on first TTS play" per-book AI consent prompt (the affordance
+ * that backs app/google/aiConsent.ts's default-deny for bookId-carrying
+ * calls). Drives the REAL stores; only the dialog primitive and the
+ * client-configured probe are mocked.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ensureAiConsentForBook } from './aiConsentPrompt';

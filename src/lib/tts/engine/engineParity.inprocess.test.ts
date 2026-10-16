@@ -4,10 +4,10 @@
  * the injected parityHostDb storage ports. The same scenarios run over the worker
  * bridge in engineParity.worker.test.ts.
  *
- * ZERO vi.mock (phase5-tts-strangler.md N3 deadline, reached at 5b-PR4): the
- * engine reaches storage only through the EngineContext ports, so the suite
- * injects in-memory fakes instead of mocking modules — enforced by eslint
- * (no-restricted-syntax in eslint.config.js).
+ * ZERO vi.mock (phase5-tts-strangler.md N3): the engine reaches storage only
+ * through the EngineContext ports, so the suite injects in-memory fakes instead
+ * of mocking modules — enforced by eslint (no-restricted-syntax in
+ * eslint.config.js).
  */
 import { vi } from 'vitest';
 import { describe, it, expect } from 'vitest';
@@ -73,7 +73,7 @@ describeEngineParity('in-process', async (): Promise<ParityHarness> => {
 
     const snapshots: ParitySnapshot[] = [];
     const queueRefs: Array<ReadonlyArray<TTSQueueItem>> = [];
-    // Snapshot channel (5b-PR2): `queue` is attached only when the queueId changed;
+    // Snapshot channel: `queue` is attached only when the queueId changed;
     // the consumer keeps its cached array otherwise — exactly what the production
     // handle does. queueRefs records the EFFECTIVE queue per broadcast, so the
     // identity scenarios (P14/P23) assert on what consumers actually observe.

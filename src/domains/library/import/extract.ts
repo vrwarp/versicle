@@ -1,27 +1,16 @@
 /**
- * `extractBook` — the ONE extraction pipeline (Phase 7 PR-L1,
- * phase7-library-google.md §A).
- *
- * Replaces the three copies that lived in `src/lib/ingestion.ts`:
- *
- *  | deleted copy          | what it duplicated                                   |
- *  |-----------------------|------------------------------------------------------|
- *  | `extractBookData`     | the canonical full pipeline                          |
- *  | `extractBookMetadata` | ~80 lines of the open/cover/compress/palette/        |
- *  |                       | fingerprint preamble, verbatim                       |
- *  | `reprocessBook`       | the chapter→toc/sections/tts/tables mapping loop     |
- *  |                       | (now `mapChapters`, shared with import/reprocess.ts) |
+ * `extractBook` — the ONE extraction pipeline. Import and the ghost probe
+ * run through it; reprocess shares its `extractPreamble` + `mapChapters`.
  *
  * Pure module: no store imports — `ExtractionOptions` is passed in by the
- * caller (the orchestrator captures it per job), severing the
- * `useTTSStore.getState()` reach-ins (ingestion-library.md coupling #2).
+ * caller (the orchestrator captures it per job), never read from a store.
  * `depth: 'metadata'` short-circuits after one epubjs open (the ghost probe
- * no longer pays cover compression/palette extraction twice per import —
+ * does not pay cover compression/palette extraction twice per import —
  * pass the probe result back via `preamble`). `signal` aborts between
  * chapters in the offscreen render loop (the cancellable-task-runner
  * pattern); abort surfaces as `CancellationError`.
  */
-// Phase 8 §A (first-use splitting): epubjs and the offscreen renderer load
+// First-use splitting: epubjs and the offscreen renderer load
 // lazily at the extraction call sites — this module rides the eager
 // LibraryView graph (via the ImportOrchestrator), and a static import here
 // would put epubjs back into the entry chunk (check 4 of
@@ -43,24 +32,25 @@ import { cheapHash, computeContentHash, computeLegacyFingerprint } from './ident
 import { getSanitizedBookMetadata } from './metadata';
 import { validateZipSignature } from './validate';
 import { archiveOfEpubJsBook } from './epubArchive';
-// Type-only: the structure resolvers load lazily at first import (Phase 8
-// §A, like epubjs below) — this module rides the eager LibraryView graph.
+// Type-only: the structure resolvers load lazily at first import (like
+// epubjs below) — this module rides the eager LibraryView graph.
 import type { BookStructure } from '@lib/epub/structure/bookStructure';
 
 const logger = createLogger('Ingestion');
 
 type ExtractDepth = 'metadata' | 'full';
 
-/** One spine item's plain text — the persisted search corpus (§F searchText). */
+/** One spine item's plain text — the persisted search corpus (`searchText`). */
 interface SearchTextSection {
   href: string;
   title: string;
   text: string;
   /**
-   * Invalidation/skip key for the embedding indexer (Increment C §3): a
-   * cheapHash of the section text stamped at import. The indexer resumes on the
-   * `{href, sectionTextHash}` pair (design §2.1). Optional for backward
-   * compatibility with corpora extracted before this field existed.
+   * Invalidation/skip key for the embedding indexer: a cheapHash of the
+   * section text stamped at import. The indexer resumes on the
+   * `{href, sectionTextHash}` pair (plan/semantic-search-design.md §2.1).
+   * Optional for backward compatibility with corpora extracted before this
+   * field existed.
    */
   sectionTextHash?: string;
 }
@@ -86,7 +76,7 @@ export interface BookMetadataExtraction {
   perceptualPalette?: PerceptualPalette;
   /** SHA-256 over content bytes (see identity.ts). */
   contentHash: string;
-  /** Legacy filename-embedding fingerprint, still written for pre-P7 acceptance. */
+  /** Legacy filename-embedding fingerprint, still written for backward compatibility (see identity.ts). */
   legacyFingerprint: string;
   /** The publisher TOC (may be empty; full depth falls back to a synthetic TOC). */
   toc: NavigationItem[];
@@ -104,7 +94,7 @@ export interface FullBookExtraction extends Omit<BookMetadataExtraction, 'depth'
     spineItems: { id: string; characterCount: number; index: number }[];
   };
   sections: SectionMetadata[];
-  /** The ONE inventory producer — registration consumes this (restores perceptualPalette + language, D4). */
+  /** The ONE inventory producer — registration consumes this (carries perceptualPalette + language). */
   inventory: UserInventoryItem;
   progress: UserProgress;
   overrides: UserOverrides;
@@ -231,8 +221,7 @@ export async function extractPreamble(file: Blob, options: PreambleOptions): Pro
     }
 
     // Generate palette if we have any cover image. A palette failure never
-    // aborts extraction (legacy reprocess semantics; the import path only
-    // loses the optional palette).
+    // aborts extraction; the book only loses the optional palette.
     if (thumbnailBlob || coverBlob) {
       try {
         const result = await extractCoverPalette((thumbnailBlob || coverBlob)!);
@@ -277,7 +266,7 @@ export async function extractPreamble(file: Blob, options: PreambleOptions): Pro
   }
 }
 
-// ── The chapter mapping loop (was duplicated in extractBookData/reprocessBook) ──
+// ── The chapter mapping loop (shared by extractBook and reprocess) ──
 
 export interface ChapterMapping {
   syntheticToc: NavigationItem[];
@@ -350,9 +339,9 @@ export function mapChapters(bookId: string, chapters: ProcessedChapter[]): Chapt
       });
     }
 
-    // Stamp the embedding indexer's {href, sectionTextHash} skip key at import
-    // (Increment C §3): cheapHash lives in this same domain (identity.ts:20 —
-    // no cross-domain import), and the chunker stays free of any hash import.
+    // Stamp the embedding indexer's {href, sectionTextHash} skip key at import:
+    // cheapHash lives in this same domain (identity.ts — no cross-domain
+    // import), and the chunker stays free of any hash import.
     searchSections.push({
       href: chapter.href,
       title,
@@ -392,7 +381,7 @@ export async function extractBook(file: File, opts: ExtractBookOptions): Promise
     measureSince('import:preamble', preambleStart);
 
     // Identity. The legacy fingerprint hashes the UNSANITIZED metadata —
-    // pre-P7 manifests were written that way and restore acceptance must
+    // existing manifests were written that way and restore acceptance must
     // keep matching them.
     const identityStart = performance.now();
     const legacyFingerprint = await computeLegacyFingerprint(file, {

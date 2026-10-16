@@ -15,19 +15,19 @@ test('Engine Room Journey Test', async ({ page }) => {
   await expect(settingsBtn).toBeVisible();
   await settingsBtn.click({ force: true });
 
-  // Verify the settings overlay (Radix Dialog) is open. The Phase-10 SettingsShell
+  // Verify the settings overlay (Radix Dialog) is open. The SettingsShell
   // renders as a Modal over the library; its tablist is the canonical anchor.
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('tablist', { name: 'Settings sections' })).toBeVisible({ timeout: 10000 });
 
-  // The sidebar <h2>Settings</h2> is now aria-hidden; the real (sr-only) title is
+  // The sidebar <h2>Settings</h2> is aria-hidden; the real (sr-only) title is
   // "Global Settings". Assert the accessible tablist landmark instead of a heading.
   const viewport = page.viewportSize();
   if (viewport && viewport.width >= 640) {
     await expect(page.getByRole('tablist', { name: 'Settings sections' })).toBeVisible();
   }
 
-  // Verify Tabs exist (Radix Tabs → role="tab", not role="button").
+  // Verify Tabs exist (Radix Tabs → role="tab").
   await expect(page.getByRole('tab', { name: 'General' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'TTS Engine' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Dictionary' })).toBeVisible();

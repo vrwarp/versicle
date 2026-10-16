@@ -17,9 +17,8 @@ const OPT_OUT_REGISTRY = [
 describe('Sync Schema Exhaustion', () => {
   it('should ensure all sync-eligible fields in BookMetadata are present in SyncManifest', () => {
     const project = new Project();
-    // Phase 1a type split: the declarations live in the domain modules
-    // (types/book.ts, types/sync.ts, ...). The types/db.ts re-export shim
-    // met its named P9 deletion deadline and is gone.
+    // The declarations live in the domain type modules (types/book.ts,
+    // types/sync.ts, ...).
     const bookFile = project.addSourceFileAtPath(
       path.resolve(__dirname, '../../types/book.ts')
     );
@@ -30,7 +29,7 @@ describe('Sync Schema Exhaustion', () => {
     // SyncManifest's Partial<BookMetadata> resolves to real properties.
     project.resolveSourceFileDependencies();
 
-    // BookMetadata is now a Type Alias (composite), so we use getTypeAliasOrThrow
+    // BookMetadata is a type alias (composite), so we use getTypeAliasOrThrow
     const bookMetadataType = bookFile.getTypeAliasOrThrow('BookMetadata').getType();
     const syncManifest = syncFile.getInterfaceOrThrow('SyncManifest');
 
@@ -69,8 +68,7 @@ describe('Sync Schema Exhaustion', () => {
 
   it('should ensure every Store in EpubLibraryDB has a corresponding sync strategy', () => {
     const project = new Project();
-    // P3-4: the EpubLibraryDB interface moved from src/db/db.ts (now a
-    // re-export shim) to the data layer's schema module.
+    // The EpubLibraryDB interface lives in the data layer's schema module.
     const sourceFile = project.addSourceFileAtPath(
       path.resolve(__dirname, '../../data/schema.ts')
     );
@@ -91,7 +89,7 @@ describe('Sync Schema Exhaustion', () => {
         'cache_session_state',
         'cache_tts_preparation',
         'cache_table_images',
-        'cache_search_text', // v26 (Phase 7 §F): local, rebuildable search corpus
+        'cache_search_text', // v26: local, rebuildable search corpus
         'cache_embeddings',  // v27: local, rebuildable embedding vectors (device-local, never synced)
         'cache_embed_jobs',  // v27: local, resumable embedding-job progress (device-local, never synced)
         'cache_query_embeddings', // v29: local, cached query embedding vectors (device-local, never synced)

@@ -42,9 +42,8 @@ describe('TableAdaptationProcessor', () => {
         vi.clearAllMocks();
     });
 
-    // preprocessTableRoots was deleted (it emitted a literal 'epubcfi(${range.parent})' via an
-    // escaped template literal). Its behavior — and the regression tests — now live with the
-    // canonical preprocessBlockRoots in the kernel suite (src/kernel/cfi/cfi.test.ts).
+    // Table-root preprocessing (preprocessBlockRoots) is covered by the kernel
+    // suite (src/kernel/cfi/cfi.test.ts).
 
     describe('processTableAdaptations', () => {
         it('should process existing adaptations immediately', async () => {
@@ -148,8 +147,7 @@ describe('regression: a reprocess of the OPEN book must not skip its adaptations
     // A reprocess deletes that book's table-image rows and writes new ones keyed
     // `${bookId}-${cfi}`, so any CFI drift re-keys every row: the memo's ids resolve to no
     // live blob, the node list comes out empty and the method returned silently — no table
-    // adaptation for that section for the rest of the session. Before the memo, the work set
-    // and the blobs came from the same live read, so a reprocess degraded gracefully.
+    // adaptation for that section for the rest of the session.
     //
     // Driven through FakeEngineContext (no module mocks): its content port serves both
     // listTableLocations and getTableImages from `tableLocations`, so rewriting that array
@@ -204,9 +202,9 @@ describe('regression: a reprocess of the OPEN book must not skip its adaptations
  * a table to a DIFFERENT sectionId. The stale memo reports the new section as
  * tableless, the method returned before the image read, and the heal — which
  * hangs off that read — never fired, so the section went without adaptations
- * for the rest of the session. An empty section list is now confirmed against
- * the live rows, but only ONCE per book: the cost is one extra read for the
- * whole book, never one per tableless section.
+ * for the rest of the session. An empty section list is therefore confirmed
+ * against the live rows, but only ONCE per book: the cost is one extra read for
+ * the whole book, never one per tableless section.
  */
 describe('regression: a table the reprocess moved to another section still heals', () => {
     const CFI = 'epubcfi(/6/14!/4/2)';

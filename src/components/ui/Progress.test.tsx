@@ -62,12 +62,7 @@ describe('Progress', () => {
   it('handles undefined value as 0', () => {
     render(<Progress value={undefined} />);
     const progress = screen.getByRole('progressbar');
-    // Progress component implementation: { ...props } after aria-valuenow={value}
-    // and value default is 0.
-    // If value={undefined} is passed, it might be overridden by default 0 in destructuring
-    // OR it might be passed as undefined to the div.
-    // Let's check the code: ({ className, value = 0, max = 100, ...props }, ref) => ...
-    // So if value={undefined} is passed, value will be 0.
+    // The `value = 0` destructuring default also applies to an explicit undefined.
     expect(progress).toHaveAttribute('aria-valuenow', '0');
     const indicator = progress.firstElementChild;
     expect(indicator).toHaveStyle({ transform: 'translateX(-100%)' });

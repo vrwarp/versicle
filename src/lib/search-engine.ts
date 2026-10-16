@@ -21,11 +21,11 @@ export function getExcerpt(text: string, index: number, length: number, context 
 /**
  * In-memory full-text scan over a book's plain text (one entry per spine
  * section). Matching is a case-insensitive escaped-literal scan against the
- * ORIGINAL string (Phase 7 PR-S2): an escaped literal cannot backtrack — the
- * historical ReDoS concern applied to query-derived *patterns*, which this
- * engine never builds — and original-string offsets mean excerpts and
- * `charOffset` stay aligned even when lowercasing changes string length
- * (the Turkish-İ misalignment of the old lowercase-then-slice approach).
+ * ORIGINAL string: an escaped literal cannot backtrack — ReDoS is a hazard of
+ * query-derived *patterns*, which this engine never builds — and
+ * original-string offsets mean excerpts and `charOffset` stay aligned even
+ * when lowercasing would change string length (the Turkish-İ hazard of a
+ * lowercase-then-slice approach).
  *
  * Runs in the search worker (Comlink-exposed) or directly in tests.
  */
@@ -85,9 +85,9 @@ export class SearchEngine {
     }
 
     /**
-     * Per-occurrence search (Phase 7 §F): every hit carries `charOffset`,
-     * `matchLength` and a per-section `occurrence` ordinal so navigation can
-     * land on the EXACT match; `truncated` replaces the silent result cap.
+     * Per-occurrence search: every hit carries `charOffset`, `matchLength` and
+     * a per-section `occurrence` ordinal so navigation can land on the EXACT
+     * match; `truncated` reports when the result cap was hit.
      */
     searchDetailed(
         bookId: string,

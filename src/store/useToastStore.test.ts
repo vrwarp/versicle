@@ -71,7 +71,7 @@ describe('useToastStore (queue, Phase 8 §D)', () => {
       for (let i = 0; i < 10; i++) {
         useToastStore.getState().showToast(`import error ${i}`, 'error');
       }
-      // Cap = 5 (risk 7: per-file import errors must not flood the screen).
+      // Cap = 5 (per-file import errors must not flood the screen).
       expect(useToastStore.getState().toasts.length).toBeLessThanOrEqual(5);
       // Newest survive.
       expect(useToastStore.getState().toasts.at(-1)?.message).toBe('import error 9');

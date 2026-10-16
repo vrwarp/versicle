@@ -23,9 +23,9 @@
  *   crash after STAGED, before/during apply → STAGED → apply re-runs from
  *     staging; switch completes;
  *   crash after apply, before user confirms → AWAITING_CONFIRMATION →
- *     existing confirm modal (P0 semantics untouched);
+ *     existing confirm modal;
  *   user rolls back / apply throws → RESTORING_BACKUP → existing
- *     pinned-checkpoint restore (P0 semantics untouched).
+ *     pinned-checkpoint restore.
  *
  * Layering: store access arrives via {@link ApplyStagedSwapHooks} (the boot
  * interceptor injects the `useSyncStore` write) — this module stays
@@ -122,7 +122,7 @@ export interface ApplyStagedSwapHooks {
 
 /**
  * The boot-time apply (§D4 step 7): wipe main persistence and rewrite it
- * from the staging database, then hand over to the P0 state machine
+ * from the staging database, then hand over to the migration state machine
  * (AWAITING_CONFIRMATION → the existing confirm modal) and reload.
  *
  * IDEMPOTENT: every step is re-runnable and staging is never touched, so a
@@ -181,7 +181,7 @@ export async function applyStagedSwap(
     // …and rewrite it from staging, commit-awaited.
     await applySnapshot(blob);
 
-    // Reconcile the persisted tie, then engage the P0 state machine. The
+    // Reconcile the persisted tie, then engage the state machine. The
     // ordering keeps every crash row resolvable: a kill before this line
     // re-runs the whole apply; a kill after either line lands in
     // AWAITING_CONFIRMATION with the id already reconciled.

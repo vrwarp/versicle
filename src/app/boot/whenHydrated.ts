@@ -7,10 +7,9 @@
  * and are marked hydrated explicitly (the fork alone cannot distinguish
  * "doc loaded and legitimately empty" from "not loaded yet" — that
  * knowledge belongs to the persistence layer); the rest resolve via the
- * middleware's `api.yjs.whenHydrated()`, which is the structural
- * replacement for the legacy App.tsx book-poll (IDB-synced ≠ store-patched:
- * the inbound patch is a microtask behind the 'synced' event, which the
- * poll papered over with sleep(100) retries).
+ * middleware's `api.yjs.whenHydrated()` (IDB-synced ≠ store-patched: the
+ * inbound patch is a microtask behind the 'synced' event, so 'synced' alone
+ * does not mean the stores are patched).
  *
  * Timeout behavior intentionally mirrors `waitForYjsSync`: warn and
  * proceed, never hang boot (risk R3 — a corrupt IDB or swallowed
@@ -93,10 +92,9 @@ export const whenHydratedTask: BootTask = {
 export const hydrateStaticMetadataTask: BootTask = {
   name: 'library/hydrate-static-metadata',
   run: async () => {
-    // Phase 7 §D (D16 paid in full): ONE owner for static-metadata
-    // hydration. The service subscribes to inventory deltas — newly synced
-    // books hydrate without LibraryView's old prevBookCountRef heuristic —
-    // and this boot task performs the initial pass.
+    // ONE owner for static-metadata hydration: the service subscribes to
+    // inventory deltas (newly synced books hydrate as they arrive) and this
+    // boot task performs the initial pass.
     const { service } = getLibrary();
     service.start();
     await service.hydrate();

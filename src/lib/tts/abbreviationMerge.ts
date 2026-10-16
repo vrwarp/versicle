@@ -1,6 +1,5 @@
 /**
- * Memoized custom + Bible abbreviation merge (Phase 5c; extracted from
- * AudioContentPipeline.getMergedAbbreviations). The memo keeps the returned
+ * Memoized custom + Bible abbreviation merge. The memo keeps the returned
  * array reference stable across calls with the same inputs so TextSegmenter
  * can skip rebuilding its internal trie caches.
  */
@@ -10,7 +9,7 @@ export class AbbreviationMerger {
     private lastInputs: { custom: string[]; bible: boolean } | null = null;
     private lastResult: string[] | null = null;
 
-    /** Async since 5c-PR3: the Bible list is lazy-loaded JSON (one fetch, cached). */
+    /** Async because the Bible list is lazy-loaded JSON (one fetch, cached). */
     async merge(customAbbreviations: string[], includeBible: boolean): Promise<string[]> {
         if (
             this.lastInputs &&

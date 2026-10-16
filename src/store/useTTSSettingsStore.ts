@@ -7,11 +7,9 @@ import { normalizeLanguageCode } from '@lib/language-utils';
 
 /**
  * Per-language TTS profile — the SOLE representation of voice/rate/length
- * preferences since the 5b store split (the flat `rate`/`pitch`/`voice`/
- * `minSentenceLength` mirrors died with `tts-storage`; active values are
- * derived via the selectors below). `pitch`/`volume` were dropped from the
- * profile shape: nothing ever applied them (phase5-tts-strangler.md §5b.4 —
- * recorded in the migration acceptance suite).
+ * preferences (there are no flat `rate`/`voice`/`minSentenceLength` fields;
+ * active values are derived via the selectors below). The profile carries no
+ * `pitch`/`volume`: nothing applies them.
  */
 export interface TTSProfile {
     voiceId: string | null;
@@ -22,9 +20,9 @@ export interface TTSProfile {
 export const getDefaultMinSentenceLength = (lang: string): number => lang.startsWith('zh') ? 6 : 36;
 
 /**
- * The platform's device provider id (the post-split successor of `'local'`).
- * Defensive against partial Capacitor mocks in tests (the store default
- * evaluates at module load).
+ * The platform's device provider id: `'capacitor'` on native, `'webspeech'`
+ * otherwise. Defensive against partial Capacitor mocks in tests (the store
+ * default evaluates at module load).
  */
 export const platformDeviceProviderId = (): TTSProviderId =>
     typeof Capacitor?.isNativePlatform === 'function' && Capacitor.isNativePlatform()
@@ -32,12 +30,11 @@ export const platformDeviceProviderId = (): TTSProviderId =>
         : 'webspeech';
 
 /**
- * PERSISTED TTS settings (`tts-settings` v1) — one half of the 5b split of the
- * legacy `tts-storage` god store (plan/overhaul/prep/phase5-tts-strangler.md
- * §5b.4). Pure user configuration: no engine mirror, no runtime voice list, no
- * download state — those live in the ephemeral `useTTSPlaybackStore`. Every
- * action is a pure state write; engine synchronization is the TtsController's
- * job.
+ * PERSISTED TTS settings (`tts-settings` v1; design:
+ * plan/overhaul/prep/phase5-tts-strangler.md §5b.4). Pure user configuration:
+ * no engine mirror, no runtime voice list, no download state — those live in
+ * the ephemeral `useTTSPlaybackStore`. Every action is a pure state write;
+ * engine synchronization is the TtsController's job.
  */
 interface TTSSettingsState {
     /** Active language for TTS profile selection. */
@@ -46,9 +43,9 @@ interface TTSSettingsState {
     profiles: Record<string, TTSProfile>;
 
     /**
-     * Provider configuration. Post-split id space: the device pair persists as
-     * 'webspeech'/'capacitor' (the legacy `'local'` alias is mapped per platform
-     * by the tts-storage migration and remains accepted on the engine path).
+     * Provider configuration. The device pair persists as 'webspeech'/'capacitor'
+     * (the legacy `'local'` alias is mapped per platform by the tts-storage
+     * migration and remains accepted on the engine path).
      */
     providerId: TTSProviderId;
     apiKeys: Record<TTSApiKeyProviderId, string>;
@@ -94,7 +91,7 @@ const DEFAULT_PROFILE = (lang: string): TTSProfile => ({
     minSentenceLength: getDefaultMinSentenceLength(lang),
 });
 
-// --- Selectors (the derived "active" values that used to be flat state) ---
+// --- Selectors (the derived "active" values) ---
 
 export const selectActiveProfile = (s: Pick<TTSSettingsState, 'profiles' | 'activeLanguage'>): TTSProfile =>
     s.profiles[s.activeLanguage] ?? DEFAULT_PROFILE(s.activeLanguage);
@@ -109,8 +106,7 @@ export const selectActiveMinSentenceLength = (s: Pick<TTSSettingsState, 'profile
     selectActiveProfile(s).minSentenceLength ?? getDefaultMinSentenceLength(s.activeLanguage);
 
 // ---------------------------------------------------------------------------
-// tts-storage (v1/v2/v3) → tts-settings (v1) migration — THE Phase 5 user-data
-// format change (one-in-flight rule; sequenced after P3's IDB v25 window).
+// Legacy tts-storage (v1/v2/v3) → tts-settings (v1) migration.
 // ---------------------------------------------------------------------------
 
 /** Shape of a parsed legacy `tts-storage` persist envelope (any version). */
@@ -118,16 +114,15 @@ export const selectActiveMinSentenceLength = (s: Pick<TTSSettingsState, 'profile
 type LegacyEnvelope = { state: any; version?: number };
 
 /**
- * Run the LEGACY tts-storage migration chain (v1→v2→v3 — copied verbatim from
- * the deleted useTTSStore) and map the result to the `tts-settings` v1 state.
+ * Run the LEGACY tts-storage migration chain (v1→v2→v3) and map the result to
+ * the `tts-settings` v1 state.
  *
  *  - flat `rate`/`pitch`/`voice`/`minSentenceLength` fold into profiles (v<2)
  *    and are then DROPPED (selectors derive the actives);
  *  - profile `pitch`/`volume` are dropped (nothing applies them);
- *  - `enableCostWarning` is dropped (zero readers since CostEstimator died);
+ *  - `enableCostWarning` is dropped (nothing reads it);
  *  - `providerId: 'local'` maps to the platform device id;
- *  - the `tts-storage` key is NEVER deleted here (one-release rollback path;
- *    P9 retires it).
+ *  - the `tts-storage` key is NEVER deleted here (it stays as a rollback path).
  *
  * Exported for the captured-blob acceptance suite.
  */
@@ -146,7 +141,7 @@ export function migrateLegacyTtsStorage(
     if (!legacy || typeof legacy !== 'object') return null;
     const version = envelope.version ?? 0;
 
-    // Legacy chain step v<2: fold flat fields into profiles (verbatim).
+    // Legacy chain step v<2: fold flat fields into profiles.
     if (version < 2) {
         legacy.activeLanguage = 'en';
         legacy.profiles = {
@@ -159,7 +154,7 @@ export function migrateLegacyTtsStorage(
             }
         };
     }
-    // Legacy chain step v<3: backfill minSentenceLength per profile (verbatim).
+    // Legacy chain step v<3: backfill minSentenceLength per profile.
     if (version < 3) {
         if (legacy.profiles) {
             for (const lang in legacy.profiles) {
@@ -200,7 +195,7 @@ export function migrateLegacyTtsStorage(
 /**
  * Storage adapter: on the FIRST read (no `tts-settings` key yet) it migrates the
  * legacy `tts-storage` blob in place of returning null, and persists the result
- * under the new key. The legacy key is left untouched for one release.
+ * under the new key. The legacy key is left untouched.
  */
 const migratingStorage = createJSONStorage<Partial<TTSSettingsState>>(() => ({
     getItem: (name: string): string | null => {
@@ -330,7 +325,7 @@ export const useTTSSettingsStore = create<TTSSettingsState>()(
             onRehydrateStorage: () => (state) => {
                 if (state) {
                     // Pure state fix-up only (engine side effects live in
-                    // TtsController.initialize — R9 complete).
+                    // TtsController.initialize).
                     if (!state.profiles) {
                         state.profiles = { en: DEFAULT_PROFILE('en') };
                         state.activeLanguage = 'en';

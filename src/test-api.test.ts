@@ -2,9 +2,9 @@
  * Unit tests for the typed E2E test API (window.__versicleTest).
  *
  * The deterministic-flush guarantee is the load-bearing part: the Playwright
- * suite replaces its hardcoded 1500ms persistence sleep with
- * `flushPersistence()`, so these tests pin that the flush really drains both
- * debounce queues without waiting out their timers.
+ * suite's `waitForPersistedWrites` calls `flushPersistence()` instead of
+ * sleeping, so these tests pin that the flush really drains both debounce
+ * queues without waiting out their timers.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { installTestApi, flushPersistence } from './test-api';
@@ -12,8 +12,8 @@ import { playbackCache } from './data/repos/playbackCache';
 import { getYDoc, getYjsPersistence, startYjsPersistence } from './store/yjs-provider';
 import { wipeAllData } from './data/wipe';
 
-// Persistence no longer boots at import time (Phase 1b boot sequencing) —
-// start it explicitly, as the bootstrap `startYjsPersistence` phase does.
+// Persistence does not boot at import time — start it explicitly, as the
+// bootstrap `startYjsPersistence` phase does.
 startYjsPersistence();
 const yDoc = getYDoc();
 
@@ -27,8 +27,6 @@ describe('installTestApi', () => {
     expect(window.__versicleTest).toBeDefined();
     expect(typeof window.__versicleTest?.flushPersistence).toBe('function');
     expect(typeof window.__versicleTest?.resetApp).toBe('function');
-    // Consolidated replacements for the legacy __DISCONNECT_YJS__ /
-    // __CLOSE_DB__ window globals (Phase 1b).
     expect(typeof window.__versicleTest?.disconnectYjs).toBe('function');
     expect(typeof window.__versicleTest?.closeDb).toBe('function');
   });

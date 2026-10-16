@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * AudioPill suite — absorbs (rule 8) the active/compact assertions of the
- * deleted ui/CompassPill.test.tsx and ui/CompassPill_Accessibility.test.tsx
- * (the pill dissolved into feature components in Phase 8 §C).
+ * deleted ui/CompassPill.test.tsx and ui/CompassPill_Accessibility.test.tsx.
  */
 import { render, screen, fireEvent } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -15,7 +14,7 @@ vi.mock('@store/useTTSPlaybackStore', () => ({
     useTTSPlaybackStore: vi.fn()
 }));
 
-// Mock the command facade (engine commands moved off the store at 5b-PR1)
+// Mock the command facade (engine commands live on the TtsController facade, not the store)
 const { mockJumpTo, mockPlay, mockPause } = vi.hoisted(() => ({
     mockJumpTo: vi.fn(),
     mockPlay: vi.fn(),
@@ -107,8 +106,8 @@ describe('AudioPill', () => {
                 expect(prev).toBeDisabled();
                 expect(next).toBeDisabled();
 
-                // Page turning is no longer one of the pill's jobs — it moved to
-                // the reading surface (PageTurnRails + the Arrow-key shortcuts).
+                // Page turning is not one of the pill's jobs — it lives on the
+                // reading surface (PageTurnRails + the Arrow-key shortcuts).
                 fireEvent.click(prev);
                 fireEvent.click(next);
                 expect(commands.prevChapter).not.toHaveBeenCalled();
@@ -141,7 +140,7 @@ describe('AudioPill', () => {
 
         it('nav arrows are no-ops when no reader is open (empty registry)', () => {
             // Audio active so the arrows are enabled, but no reader registered:
-            // the click must be a safe no-op (the legacy listener absence).
+            // the click must be a safe no-op.
             vi.mocked(useTTSPlaybackStore).mockImplementation(((selector: any) =>
                 selector(playbackState({ isPlaying: true, status: 'playing' }))) as any);
 
@@ -169,7 +168,7 @@ describe('AudioPill', () => {
     it('nav arrows carry one stable meaning ("chapter"), enabled only with audio', () => {
         // Idle: present but disabled — the arrows are audio transport and there
         // is no audio session to skip through. The name never flips to "page"
-        // under the user (page turns live on the reading surface now).
+        // under the user (page turns live on the reading surface).
         const { rerender } = render(<AudioPill />);
 
         expect(screen.getByRole('button', { name: 'Previous chapter' })).toBeDisabled();

@@ -1,11 +1,8 @@
 /**
- * audioCache repo contract suite (Phase 3 D5.1 / Test plan R).
+ * audioCache repo contract suite.
  *
- * Pins the behavior carved out of DBService (getCachedSegment/cacheSegment —
- * the round-trip + alignmentData read-shim assertions mirror the DBService
- * characterization suite, which keeps passing through the deprecated façade
- * until P3-12), plus the NEW design surface: the debounced lastAccessed
- * bump and the streaming-cursor LRU eviction.
+ * Pins the segment round-trip and the alignmentData read-shim, the debounced
+ * lastAccessed bump, and the streaming-cursor LRU eviction.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { audioCache, AUDIO_CACHE_BUDGET_BYTES, EVICTION_PUT_INTERVAL } from './audioCache';

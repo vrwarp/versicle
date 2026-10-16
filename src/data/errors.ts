@@ -1,18 +1,15 @@
 /**
- * Error mapping at the storage boundary (Phase 3; relocated VERBATIM from
- * src/db/DBService.ts so the data layer owns it — `handleDbError` boundary
- * mapping is on the program's explicit keeper list).
+ * Error mapping at the storage boundary: `handleDbError` maps raw failures
+ * onto the typed database errors for the data layer.
  */
 import { DatabaseError, StorageFullError } from '~types/errors';
 import { createLogger } from '@lib/logger';
 
-// Keeps the log namespace the relocated function has always used.
 const logger = createLogger('DBService');
 
 /**
- * Map a raw failure to the typed database errors. Shared with the services that layer on
- * top of the data repos (historically DBService + BookImportService) so error semantics
- * stay identical across the split.
+ * Map a raw failure to the typed database errors. Shared by every data repo so
+ * error semantics stay identical across them.
  */
 export function handleDbError(error: unknown): never {
   logger.error('Database operation failed', error);

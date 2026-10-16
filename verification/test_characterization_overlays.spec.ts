@@ -1,22 +1,20 @@
 /**
- * P6 ENTRY GATE — six-overlay characterization journey (permanent).
+ * Six-overlay characterization journey (permanent).
  *
  * Pins the user-visible behavior of the reader overlay systems
  * (prep/phase6-reader-engine.md §Test plan, scenarios 1–5; pinyin has its
- * own spec) against the CURRENT implementation, BEFORE the ReaderEngine /
- * HighlightLayerManager strangler touches them. The Phase 6 cutover PRs must
- * keep this green; the `window.rendition` pollers here migrate to
- * `__versicleTest.reader` atomically with that change.
+ * own spec): annotation highlights, the TTS highlight, the reading-history
+ * highlight, note markers and the content-analysis debug layer. Page-side
+ * state is read through the typed `__versicleTest.reader` seam.
  *
- * EXECUTION (Docker lane): these specs were authored and typechecked in a
- * lane without the hermetic runner; they run with the rest of the suite via
- * `./run_verification.sh` (Dockerfile.verification). Geometry assertions are
- * desktop-project scoped per the prep doc; mobile gets the smoke pass for
- * free (no geometry in the smoke assertions used here).
+ * Runs with the rest of the suite via `./run_verification.sh`
+ * (Dockerfile.verification). Geometry assertions are desktop-project scoped
+ * per the prep doc; mobile gets the smoke pass for free (no geometry in the
+ * smoke assertions used here).
  *
  * Sanitization is ON for this spec (test.use below): annotation/highlight
  * CFIs are computed post-sanitize in production, so the pins must measure
- * the real pipeline (prep doc Reality #10).
+ * the real pipeline (prep doc §Test plan, "Sanitization honesty").
  */
 import { test, expect } from './utils';
 import * as utils from './utils';
@@ -83,9 +81,9 @@ test('Characterization: annotation highlight add/remove round-trip', async ({ pa
   await expect.poll(() => highlightNodeCount(page, 'highlight-yellow'), { timeout: 10000 }).toBeGreaterThan(0);
 
   // Remove: delete from the annotations sidebar → SVG + counter drop.
-  // Deletion now routes through the in-app ConfirmDialog (Phase-8 useConfirm;
-  // AnnotationList.tsx:30-35) instead of an immediate remove(), so the
-  // teardown only fires after the confirm button is clicked.
+  // Deletion routes through the in-app ConfirmDialog (useConfirm in
+  // AnnotationList.tsx) rather than an immediate remove(), so the teardown
+  // only fires after the confirm button is clicked.
   await page.getByTestId('reader-annotations-button').click();
   await expect(page.getByTestId('reader-annotations-sidebar')).toBeVisible();
   await page.getByTestId('annotation-delete-button').first().click();
@@ -106,7 +104,7 @@ test('Characterization: TTS highlight follows playback with exactly ONE node', a
   await expect(page.getByTestId('compass-pill-active').getByLabel('Pause')).toBeVisible({ timeout: 10000 });
 
   // Single-node invariant while the sentence advances (orphan-sweep pin:
-  // ReaderTTSController.tsx:69-81/:107-118/:143-154 — soon ONE manager sweep).
+  // the HighlightLayerManager sweeps orphaned TTS SVG nodes on every add/remove).
   for (let i = 0; i < 4; i++) {
     await page.waitForTimeout(750);
     const count = await highlightNodeCount(page, 'tts-highlight');
@@ -164,7 +162,7 @@ test('Characterization: TTS highlight is on screen after the unlock resizes the 
   // Android: unlocking resumes the page and, often in the same frames,
   // resizes the WebView as the system-bar insets settle. epub.js answers a
   // resize by re-displaying the page it last reported — the one from before
-  // the screen went off — which used to land after the resume re-center and
+  // the screen went off — which can land after the resume re-center and
   // leave the spoken sentence's highlight pages away.
   await openDemoBook(page);
   await utils.navigateToChapter(page);
@@ -268,9 +266,8 @@ test('Characterization: note markers render in the overlay container and open th
   // clicked marker's annotation carries a note, the pill morphs straight into
   // the note EDITOR variant (compass-pill-annotation-edit), pre-filled with
   // the note text — the AnnotationPill enters edit mode whenever
-  // targetAnnotation.note is set (AnnotationPill.tsx:46-64; identical to the
-  // pre-overhaul CompassPill ui/CompassPill.tsx:205/223-225). The marker→
-  // popover round-trip is the user-observable outcome being pinned.
+  // targetAnnotation.note is set (AnnotationPill.tsx). The marker→popover
+  // round-trip is the user-observable outcome being pinned.
   await marker.click();
   const editor = page.getByTestId('compass-pill-annotation-edit');
   await expect(editor).toBeVisible({ timeout: 5000 });

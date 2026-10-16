@@ -8,6 +8,18 @@ export class CancellationError extends Error {
   }
 }
 
+import { createLogger } from './logger';
+
+const logger = createLogger('CancellableTaskRunner');
+
+// Helper to safely ignore promise rejections
+function safelyIgnorePromise(value: unknown) {
+  const thenable = value as { catch?: (onRejected: () => void) => void } | null | undefined;
+  if (value instanceof Promise || (thenable && typeof thenable.catch === 'function')) {
+    thenable!.catch!(() => {}); // Suppress unhandled promise rejection
+  }
+}
+
 /**
  * Runs a generator function that yields Promises, allowing for the execution flow to be cancelled.
  *
@@ -75,18 +87,6 @@ export class CancellationError extends Error {
  * @param onCancel - Optional callback invoked if the task is cancelled.
  * @returns An object containing `result` (Promise resolving to the generator's return value) and `cancel` (function to stop execution).
  */
-import { createLogger } from './logger';
-
-const logger = createLogger('CancellableTaskRunner');
-
-// Helper to safely ignore promise rejections
-function safelyIgnorePromise(value: unknown) {
-  const thenable = value as { catch?: (onRejected: () => void) => void } | null | undefined;
-  if (value instanceof Promise || (thenable && typeof thenable.catch === 'function')) {
-    thenable!.catch!(() => {}); // Suppress unhandled promise rejection
-  }
-}
-
 export function runCancellable<TReturn = void>(
   generator: Generator<unknown, TReturn, unknown>,
   onCancel?: () => void

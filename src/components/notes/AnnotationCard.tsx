@@ -16,9 +16,9 @@ interface AnnotationCardProps {
 }
 
 export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNavigate, contentLang }) => {
-    // Scoped selectors (jank fix): one card per annotation renders in the
-    // Notes view, and the bare useAnnotationStore() call re-rendered EVERY
-    // card whenever any annotation changed (e.g. editing one note).
+    // Scoped selectors: one card per annotation renders in the Notes view,
+    // and a bare useAnnotationStore() call would re-render EVERY card
+    // whenever any annotation changed (e.g. editing one note).
     const remove = useAnnotationStore(state => state.remove);
     const update = useAnnotationStore(state => state.update);
     const showToast = useToastStore(state => state.showToast);

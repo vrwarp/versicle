@@ -1,6 +1,6 @@
 /**
- * Library composition root (Phase 7 §B/§C; master plan §2 rule 3): wires
- * the domain's ports to the zustand stores and constructs the ONE
+ * Library composition root (plan/overhaul/README.md §2 rule 3): wires the
+ * domain's ports to the zustand stores and constructs the ONE
  * KeyedMutex + ImportOrchestrator + LibraryService trio. Lazily constructed
  * on first use; everything store-shaped the domain needs is injected here.
  */
@@ -140,8 +140,7 @@ export function getLibrary(): LibraryComposition {
     readingList,
     projection,
     persistence,
-    // Captured PER JOB — severs the old useTTSSettingsStore.getState()
-    // reach-ins inside lib/ (coupling #2).
+    // Captured PER JOB, so lib/ never reaches into useTTSSettingsStore itself.
     extractionOptions: () => ({
       sanitizationEnabled: useTTSSettingsStore.getState().sanitizationEnabled,
     }),

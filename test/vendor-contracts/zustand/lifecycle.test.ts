@@ -9,12 +9,14 @@ import { drain, replicate, countUpdates } from './helpers';
  * pill (phase2-fork-surgery.md §3 cases A.7, A.8).
  *
  * A.8 also pins two known gaps as current behavior (both covered at the app
- * level by Phase 4's synchronous pre-merge `meta` check, finding D5):
+ * level by the sync quarantine layers over `meta.schemaVersion`,
+ * src/domains/sync/core/quarantine.ts, finding D5):
  *   - a map that never carries __schemaVersion never quarantines;
  *   - quarantine happens AFTER the Y-level merge — the doc itself has
  *     already absorbed the too-new data.
- * A third gap — creation-time hydration was not version-guarded — is fixed
- * in the fork (vrwarp/zustand-middleware-yjs#40) and pinned as fixed below.
+ * A third potential gap — creation-time hydration of a too-new doc — is
+ * version-guarded in the fork (vrwarp/zustand-middleware-yjs#40) and pinned
+ * as guarded below.
  */
 
 interface State {

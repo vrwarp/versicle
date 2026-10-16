@@ -10,11 +10,12 @@
  *
  * Phases run strictly in {@link BOOT_PHASES} order; tasks within a phase run
  * sequentially in registration order. Each task returns or throws:
- *  - a throw rejects the boot promise → App routes to SafeModeView (crashes
- *    inside React render keep routing to ErrorBoundary /
- *    CriticalMigrationFailureView as before);
+ *  - a throw rejects the boot promise → App routes to SafeModeView, or to
+ *    CriticalMigrationFailureView for a MigrationError (crashes inside React
+ *    render are handled by ErrorBoundary);
  *  - `ctx.halt(reason)` stops the sequence after the current phase (used by
- *    the migration interceptor while a backup restore reloads the page).
+ *    the migration interceptor while a backup restore or staged workspace
+ *    switch reloads the page).
  */
 
 import { measureSince } from '@lib/perf';

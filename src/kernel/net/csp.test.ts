@@ -1,6 +1,5 @@
 /**
- * The registry==CSP invariant (Phase 7 §I, PR-N1 exit criterion — a
- * PERMANENT invariant from here on): the Content-Security-Policy is
+ * The registry==CSP invariant (permanent): the Content-Security-Policy is
  * generated from the egress destination registry, and every committed copy
  * carries exactly the generated policy. Editing the registry without
  * running `node scripts/generate-csp.mjs` fails this suite.
@@ -63,10 +62,10 @@ describe('registry==CSP invariant', () => {
 
   describe('regression: the strict flip holds (Phase 8 §H)', () => {
     it('the bare https: scheme wildcard appears in NO directive', () => {
-      // The pre-P8 policy carried `https:` in connect-src AND img-src —
-      // it ENUMERATED the registry without enforcing it. From the strict
-      // flip on, every fetch destination must be a registry host; a
-      // reappearing scheme wildcard would silently undo the enforcement.
+      // A policy carrying `https:` in connect-src or img-src would
+      // ENUMERATE the registry without enforcing it. Every fetch
+      // destination must be a registry host; a reappearing scheme wildcard
+      // would silently undo the enforcement.
       for (const [directive, sources] of parseCsp(renderCsp())) {
         expect(sources, `bare https: wildcard in ${directive}`).not.toContain('https:');
         expect(sources, `bare http: wildcard in ${directive}`).not.toContain('http:');

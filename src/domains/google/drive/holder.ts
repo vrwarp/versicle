@@ -1,8 +1,9 @@
 /**
  * Composition holders for the Drive singletons. Constructed and installed
- * by src/app/google/wireGoogle.ts (README §2 rule 8). The DriveClient has a
- * lazy auth-holder-backed fallback; DriveLibrarySync needs store-backed
- * ports, so reading it before wiring is a programming error and throws.
+ * by src/app/google/wireGoogle.ts (plan/overhaul/README.md §2 rule 8). The
+ * DriveClient has a lazy auth-holder-backed fallback; DriveLibrarySync needs
+ * store-backed ports, so reading it before wiring is a programming error and
+ * throws.
  */
 import { AppError } from '~types/errors';
 import { getGoogleAuthClient } from '../auth/holder';

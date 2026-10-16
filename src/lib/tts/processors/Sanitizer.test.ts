@@ -14,7 +14,7 @@ describe('Sanitizer', () => {
     // Basic test
     expect(Sanitizer.sanitize('Visit https://google.com for info')).toBe('Visit google.com for info');
 
-    // Test from plan
+    // Sentence-final period after a path is not part of the URL
     expect(Sanitizer.sanitize('You can find the sermons at https://old.thecrossing.website/sermons.')).toBe('You can find the sermons at old.thecrossing.website.');
 
     // Multiple URLs

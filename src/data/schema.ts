@@ -1,37 +1,37 @@
 /**
- * The EpubLibraryDB schema: store map + the versioned migration registry
- * (Phase 3, D2/D7 in plan/overhaul/prep/phase3-storage-gateway.md; the
- * baseline store set was absorbed verbatim from src/db/db.ts).
+ * The EpubLibraryDB schema: store map + the versioned migration registry.
  *
  * FORMAT SURFACE (C1): everything in this module is persisted-format
- * surface. v25 is Phase 3's ONE format change (master plan §4 rule 4 —
- * sequence: backup manifest v3 → CRDT v6 → **IDB v25**). What v25 does:
+ * surface; bumping DB_VERSION is governed by master plan §4 rule 4. The v25
+ * step (the registry's first entry) does:
  *
- *  1. **Straggler guard (snapshot-before-delete, the P9 fix):** before the
+ *  1. **Straggler guard (snapshot-before-delete):** before the
  *     legacy-store deletion loop runs, any surviving v17/v18 USER-DATA
  *     store has its rows serialized into
- *     `app_metadata['legacy-recovery-v25']` (size-capped, binaries elided).
- *     The pre-v25 upgrade silently destroyed a returning pre-Yjs user's
- *     data; it is now recoverable via support/diagnostics.
- *  2. **`app_metadata` repurposed** (dead since v18) as the typed
- *     schema-evolution envelope: `schemaHistory` appended on every upgrade,
- *     plus the recovery record (envelope schemas in rows/app.ts).
+ *     `app_metadata['legacy-recovery-v25']` (size-capped, binaries elided),
+ *     so a returning pre-Yjs user's data is recoverable via
+ *     support/diagnostics rather than silently destroyed.
+ *  2. **`app_metadata` as the typed schema-evolution envelope:**
+ *     `schemaHistory` appended on every upgrade, plus the recovery record
+ *     (envelope schemas in rows/app.ts).
  *  3. **`cache_audio_blobs.by_lastAccessed` index** for the LRU eviction
  *     job; the post-open idle `size` backfill lives in repos/audioCache.
- *  4. `sync_log` untouched (frozen for P4 to adopt or P9 to delete, ▲16).
+ *  4. `sync_log` untouched (a dead store with no readers or writers, kept
+ *     frozen).
  *
  * Reversibility note: v25 is additive (a snapshot, an index, metadata) —
- * but IDB versions are monotonic, so a v24 build cannot open a v25 DB.
- * That is why this lands only after the CRDT v6 stability window, and why
- * the straggler path is recoverable rather than destructive.
+ * but IDB versions are monotonic, so a v24 build cannot open a v25 DB. The
+ * straggler path is therefore recoverable rather than destructive.
  *
- * Post-Yjs migration, IDB only stores:
+ * IDB only stores (user data lives in the Yjs CRDT):
  * - STATIC: immutable book content (manifests, blobs, structure)
- * - CACHE: ephemeral/regenerable data (render metrics, audio, TTS prep)
- * - APP: sync checkpoints, logs, and the schema-evolution envelope
+ * - CACHE: ephemeral/regenerable data (render metrics, audio, TTS prep,
+ *   search/embedding corpora, Drive previews)
+ * - APP: sync checkpoints, flight snapshots, the frozen sync_log, and the
+ *   schema-evolution envelope
  */
 import type { DBSchema, IDBPDatabase, IDBPTransaction, StoreNames } from 'idb';
-// rows/ is the source of truth for persisted shapes (D4): every store's
+// rows/ is the source of truth for persisted shapes: every store's
 // value type is its row type. The row types are supersets of the ~types
 // domain interfaces that include persisted reality the interfaces elide —
 // e.g. cache_audio_blobs' `size` + legacy `alignmentData` fields, and the
@@ -68,29 +68,20 @@ import { createLogger } from '@lib/logger';
 
 const logger = createLogger('DB');
 
-/** The IndexedDB database name (shared with the SW read path, D3). */
+/** The IndexedDB database name (shared with the SW read path, sw-contract.ts). */
 export const DB_NAME = 'EpubLibraryDB';
 
 /**
  * Current schema version. Bumping this is a user-data format change and is
- * governed by the one-in-flight rule (master plan §4 rule 4). v25 (P3-13)
- * was Phase 3's format change. v26 (Phase 7 §F) is the sanctioned additive
- * fallback the P7 prep doc names ("additive v26 through P3's versioned
- * migration registry"): it only CREATES the empty `cache_search_text` store
- * — cache-domain, rebuildable, no data is touched, absence on older builds
- * simply means search re-extracts (current behavior). v27 is the same shape of
- * additive bump for semantic (meaning-based) search: it only CREATES the empty
- * `cache_embeddings` + `cache_embed_jobs` stores — cache-domain, device-local,
- * rebuildable; on an older build their absence just means the book gets
- * re-embedded. This bump is DECOUPLED from the reserved sync_log/SW cleanup,
- * which was never done and would take v28. v28 (embedding-model switch) CLEARS
- * the `cache_embeddings` + `cache_embed_jobs` stores once: the default embedding
- * model moved from `gemini-embedding-001` to `gemini-embedding-2` (useGenAIStore
- * persist v2), and the two embedding spaces are incompatible, so the legacy
- * vectors are dead weight — clearing reclaims their bytes at upgrade time and
- * every book re-embeds under the new model on its next index pass. Cache-domain,
- * device-local, rebuildable — nothing user-authored is touched. The next IDB
- * bump must add a MIGRATIONS step, never edit an existing one.
+ * governed by the one-in-flight rule (master plan §4 rule 4): append a step
+ * to {@link MIGRATIONS}, never edit a released one. The steps after v25 are
+ * all additive or clear-only and touch only cache-domain, device-local,
+ * rebuildable stores (nothing user-authored); each `migrateToVNN` below
+ * documents its own step: v26 `cache_search_text`, v27 `cache_embeddings` +
+ * `cache_embed_jobs`, v28 a one-time clear of those two for the
+ * embedding-model switch, v29/v30 `cache_query_embeddings`, v31
+ * `cache_drive_previews`. The `sync_log` / SW legacy-`books` cover-fallback
+ * cleanup has not shipped in any bump yet.
  */
 export const DB_VERSION = 31;
 
@@ -128,7 +119,7 @@ export interface EpubLibraryDB extends DBSchema {
     key: string;
     value: CacheAudioBlobRow;
     indexes: {
-      /** v25: LRU eviction order (D5.1). Older rows lacking `size` are
+      /** v25: LRU eviction order. Older rows lacking `size` are
        *  still indexed — `lastAccessed` has always been required. */
       by_lastAccessed: number;
     };
@@ -144,7 +135,7 @@ export interface EpubLibraryDB extends DBSchema {
       by_bookId: string;
     };
   };
-  /** v26 (Phase 7 §F): per-book plain-text search corpus, written at import
+  /** v26: per-book plain-text search corpus, written at import
    *  and deleted with the book. Rebuildable — absence triggers re-extraction. */
   cache_search_text: {
     key: string;
@@ -213,7 +204,7 @@ type UpgradeTransaction = IDBPTransaction<
 >;
 
 /**
- * One step of the versioned migration registry (D7). Steps are append-only:
+ * One step of the versioned migration registry. Steps are append-only:
  * a released step's body is part of the persisted format and must never be
  * edited — a later bug gets a later step.
  */
@@ -291,7 +282,7 @@ function serializeLegacyRow(row: unknown): string {
 }
 
 /**
- * D7 step 1 — the straggler guard. Serializes every surviving legacy
+ * The v25 straggler guard. Serializes every surviving legacy
  * user-data store into `app_metadata['legacy-recovery-v25']` BEFORE the
  * deletion loop runs (never reorder: validation/snapshot first, destruction
  * second). No surviving stores → no record.
@@ -354,7 +345,7 @@ async function captureLegacyUserData(
   tx.objectStore('app_metadata').put(record, APP_METADATA_KEYS.legacyRecoveryV25);
 }
 
-/** The legacy-store deletion loop (moved from the v24 callback, ▲18). */
+/** The legacy-store deletion loop. */
 function deleteDeprecatedStores(db: IDBPDatabase<EpubLibraryDB>): void {
   for (const store of DEPRECATED_STORES) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -366,7 +357,7 @@ function deleteDeprecatedStores(db: IDBPDatabase<EpubLibraryDB>): void {
   }
 }
 
-/** The v25 step (D7): straggler guard → deletion loop → LRU index. */
+/** The v25 step: straggler guard → deletion loop → LRU index. */
 async function migrateToV25(
   db: IDBPDatabase<EpubLibraryDB>,
   tx: UpgradeTransaction,
@@ -376,7 +367,7 @@ async function migrateToV25(
   await captureLegacyUserData(db, tx, oldVersion);
   deleteDeprecatedStores(db);
 
-  // 2. The LRU eviction index (D5.1's "later optimization"). The companion
+  // 2. The LRU eviction index. The companion
   //    `size` backfill is a post-open idle job (repos/audioCache), not part
   //    of the upgrade transaction.
   const audioBlobs = tx.objectStore('cache_audio_blobs');
@@ -386,7 +377,7 @@ async function migrateToV25(
 }
 
 /**
- * The v26 step (Phase 7 §F): create the EMPTY `cache_search_text` store —
+ * The v26 step: create the EMPTY `cache_search_text` store —
  * the persisted per-book search corpus written at import and lazily on
  * first search. Purely additive: no existing data is read or moved.
  * Cache-domain and rebuildable, so the rollback story is trivial (the store
@@ -404,8 +395,7 @@ function migrateToV26(db: IDBPDatabase<EpubLibraryDB>): void {
  * progress, both keyed by bookId. Purely additive: no existing data is read or
  * moved, and each create is guarded by `contains()`. Cache-domain,
  * device-local and rebuildable, so the rollback story is trivial (the stores
- * are re-embedded if ever lost). Decoupled from the reserved sync_log/SW
- * cleanup (never done; that would take v28).
+ * are re-embedded if ever lost).
  */
 function migrateToV27(db: IDBPDatabase<EpubLibraryDB>): void {
   if (!db.objectStoreNames.contains('cache_embeddings')) {
@@ -481,7 +471,7 @@ function migrateToV31(
 }
 
 /**
- * The versioned migration registry (D7). APPEND-ONLY: released steps are
+ * The versioned migration registry. APPEND-ONLY: released steps are
  * persisted-format surface (migrations.test.ts runs them against committed
  * v18/v24 fixtures); a later fix is a later step, never an edit. Ordered
  * ascending; the final entry's `toVersion` must equal {@link DB_VERSION}
@@ -498,9 +488,9 @@ export const MIGRATIONS: readonly IdbMigration[] = [
 ];
 
 /**
- * Step 0 — the unversioned baseline, kept verbatim from the v24 callback so
- * any pre-24 straggler still converges: create-if-missing for every current
- * store. Runs on EVERY upgrade before the versioned steps.
+ * Step 0 — the unversioned baseline, so any pre-24 straggler still
+ * converges: create-if-missing for every current store. Runs on EVERY upgrade
+ * before the versioned steps.
  */
 function ensureBaselineStores(
   db: IDBPDatabase<EpubLibraryDB>,
@@ -571,7 +561,7 @@ function ensureBaselineStores(
   }
 }
 
-/** D7 step 2: append `{ from, to, at }` to `schemaHistory` on every upgrade. */
+/** Append `{ from, to, at }` to `schemaHistory` on every upgrade. */
 async function appendSchemaHistory(
   tx: UpgradeTransaction,
   from: number,

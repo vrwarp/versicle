@@ -1,5 +1,5 @@
 /**
- * Exact-occurrence search navigation (Phase 7 §F, PR-S4's reader half):
+ * Exact-occurrence search navigation:
  * display(href) → offset-resolved CFI → display(cfi) + temporary 'search'
  * highlight (auto-removed). Runs against the FakeReaderEngine — the port
  * contract is the only surface the navigator may touch.
