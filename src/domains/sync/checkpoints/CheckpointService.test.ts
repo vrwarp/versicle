@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
     const getAll = vi.fn();
     const del = vi.fn();
     // The injected pauseSync handle — restore/apply sever sync through it.
+    // (Named for the Firestore provider teardown it stands in for.)
     const firestoreDestroy = vi.fn();
     const disconnectYjs = vi.fn(async () => undefined);
 

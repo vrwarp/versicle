@@ -65,8 +65,9 @@ interface, so no `useTTSStore` / `ReaderView` call site changed.
   engine. `setProvider(ITTSProvider)` → `client.setProviderById(id)` (live objects can't cross
   the boundary). `TTSVoice.originalVoice` (a live `SpeechSynthesisVoice`) is stripped at the
   boundary.
-- **`getInProcessAudioPlayer()`** builds the engine in-process; used by the jsdom fallback and
-  by the engine-internals unit tests (which can't spawn a real Worker).
+- **No in-process builder:** where `Worker` is unavailable (jsdom/SSR) the handle degrades to a
+  no-op; engine-internals unit tests construct `PlaybackController` directly through the
+  `FakeEngineContext` / `parityHostDb` ports.
 - **Verified (real Chromium):** `verification/test_tts_worker.spec.ts` › *"the app engine
   (getAudioPlayer) is worker-backed and routes through the Worker"* asserts `getAudioPlayer()`
   is the `WorkerEngineHandle` and round-trips `getVoices()` worker→host→worker→main.

@@ -2,7 +2,7 @@
  * Boot interceptor for the workspace-migration state machine
  * (see MigrationStateService for the states).
  *
- * - STAGED → run the idempotent staged apply (phase4-sync-strangler.md §D4:
+ * - STAGED → run the idempotent staged apply (plan/overhaul/prep/phase4-sync-strangler.md §D4:
  *   wipe main + rewrite from the durable staging DB under the cross-tab swap
  *   lock, transition to AWAITING_CONFIRMATION, reload) and HALT the boot
  *   sequence. A crash anywhere in apply re-enters this arm on next boot —
