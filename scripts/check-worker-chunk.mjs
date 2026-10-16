@@ -66,8 +66,8 @@ const FORBIDDEN = [
   // The Yjs persistence/bridge forks. y-idb in the worker chunk means a
   // second Y.Doc persistence inside the worker, the data-corruption scenario
   // this script exists to prevent.
-  { pattern: 'packages/zustand-middleware-yjs/', label: 'zustand-middleware-yjs (vendored)' },
-  { pattern: 'packages/y-idb/', label: 'y-idb (vendored)' },
+  { pattern: 'node_modules/zustand-middleware-yjs/', label: 'zustand-middleware-yjs (fork)' },
+  { pattern: 'node_modules/y-idb/', label: 'y-idb (fork)' },
 ];
 
 if (!skipBuild) {
@@ -310,7 +310,7 @@ const ENTRY_FORBIDDEN = [
   { pattern: 'node_modules/@firebase/', label: '@firebase' },
   // The y-cinder sync provider rides FirestoreBackend (the lazy composeSync
   // chunk).
-  { pattern: 'packages/y-cinder/', label: 'y-cinder (vendored sync provider)' },
+  { pattern: 'node_modules/y-cinder/', label: 'y-cinder (fork sync provider)' },
   { pattern: 'node_modules/epubjs/src/epub.js', label: 'epubjs (engine entry)' },
   { pattern: 'node_modules/epubjs/src/book.js', label: 'epubjs (Book)' },
   { pattern: 'node_modules/epubjs/src/rendition.js', label: 'epubjs (Rendition)' },
