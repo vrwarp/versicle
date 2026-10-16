@@ -1,14 +1,9 @@
 /**
- * KeyboardShortcutService (Phase 8 §E) — THE structural home of the P0
- * keyboard-gating hotfix.
- *
- * Before this service, TWO overlapping window keydown registries existed
- * (useReaderNavigation page turns + ReaderTTSController playback keys),
- * each carrying a hand-rolled predicate about the OTHER's state — the
- * exact destructive-conflict class the P0 hotfix papered over ("Interim
- * mitigation until the Phase 8 KeyboardShortcutService replaces both").
- * Both registries and both interim predicates are deleted; their behavior
- * survives byte-identically as scope-stacked registrations:
+ * KeyboardShortcutService — the single keyboard dispatcher. Every window
+ * and reader-iframe keydown funnels through one scope-stacked registry, so
+ * no listener needs a hand-rolled predicate about another listener's state
+ * (the destructive-conflict class where a page turn and a TTS sentence
+ * jump both fire on the same arrow key).
  *
  *   'global' < 'reader' < 'tts-active' < 'overlay'   (top-most wins)
  *
@@ -16,10 +11,10 @@
  * key matches and whose `when()` passes — so the TTS sentence-jump owns
  * ArrowLeft/ArrowRight while `tts-active` is live (playing|paused), and
  * the reader page-turn gets them back the instant it is not. One
- * keypress, exactly one action, in every TTS state (the §E acceptance
- * matrix pins this).
+ * keypress, exactly one action, in every TTS state (the matrix in
+ * readerShortcuts.test.tsx pins this).
  *
- * Built-in policies (absorbed from the two registries):
+ * Built-in policies:
  *  - `e.repeat` is ignored (no page-turn/jump spam on held keys);
  *  - keypresses while typing (input/textarea/contenteditable) are ignored;
  *  - Space NEVER fires when a focusable interactive control has focus
@@ -69,7 +64,6 @@ export type Unregister = () => void;
 /**
  * Focused interactive controls own Space themselves; hijacking it (and
  * calling preventDefault) would swallow e.g. a header button's activation.
- * (Moved verbatim from ReaderTTSController — the P0 hotfix.)
  */
 const INTERACTIVE_TARGET_SELECTOR = 'button, a[href], select, summary, [role="button"]';
 
@@ -77,7 +71,6 @@ const INTERACTIVE_TARGET_SELECTOR = 'button, a[href], select, summary, [role="bu
  * An open overlay (Radix dialog/sheet/menu/popover) owns Escape: it
  * dismisses the overlay, and stopping playback at the same time would
  * kill the audio session the user only meant to close a dialog over.
- * (Moved verbatim from ReaderTTSController — the P0 hotfix.)
  */
 const OPEN_OVERLAY_SELECTOR = [
   '[role="dialog"][data-state="open"]',
@@ -147,7 +140,7 @@ export class KeyboardShortcutService {
    * and by the reader engine's forwarded iframe keydown stream.
    */
   handleKeyEvent(event: KeyboardEvent): void {
-    // Held keys never spam actions (both legacy registries guarded this).
+    // Held keys never spam actions.
     if (event.repeat) return;
 
     // Typing wins over every shortcut (Search/Notes inputs, note editor).

@@ -12,7 +12,7 @@ import { bookContent } from '@data/repos/bookContent';
  * `URL.createObjectURL(coverBlob)` and properly revokes it on unmount or when dependencies change
  * to prevent memory leaks.
  *
- * perf (P-mem): the fallback lane no longer depends on the projection holding
+ * perf: the fallback lane does not depend on the projection holding
  * every book's cover bytes. `BookRepository` omits `coverBlob` while the page
  * is SW controlled, so when the controller is absent but the projection still
  * says a cover exists (`coverUrlFromSelector` is set), this hook reads THAT

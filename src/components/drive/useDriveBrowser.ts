@@ -30,8 +30,7 @@ export const useDriveBrowser = (initialFolderId = 'root'): UseDriveBrowserReturn
         setError(null);
         const currentReq = ++requestCounter.current;
         try {
-            // User-gesture surface: interactive token acquisition (popup-on-demand)
-            // — the policy the deleted DriveService façade applied wholesale.
+            // User-gesture surface: interactive token acquisition (popup-on-demand).
             const files = await getDriveClient().listFolders(folderId, { interactive: true });
             if (currentReq === requestCounter.current) {
                 setItems(files);

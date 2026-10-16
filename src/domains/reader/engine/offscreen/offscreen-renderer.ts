@@ -336,8 +336,8 @@ export async function extractContentOffscreen(
     let tablesMs = 0;
 
     for (let i = 0; i < totalItems; i++) {
-      // Cancellation point between chapters (Phase 7: extractBook's
-      // `signal`). The finally block below releases the rendition/container.
+      // Cancellation point between chapters (extractBook's `signal`). The
+      // finally block below releases the rendition/container.
       if (signal?.aborted) {
         throw new CancellationError('Extraction cancelled');
       }
@@ -363,7 +363,7 @@ export async function extractContentOffscreen(
         const body = doc.body;
         const win = contents.window || doc.defaultView;
 
-        // New logic: Accumulate styles for global evaluation
+        // Accumulate styles for global evaluation
         if (win) {
           const stylesStart = performance.now();
           accumulateChapterStyles(doc, win, globalStyleAccumulator);
@@ -375,8 +375,9 @@ export async function extractContentOffscreen(
 
         // Extract sentences with CFIs. The async variant hands the main
         // thread back at block boundaries on the SAME 16 ms budget the
-        // chapter loop uses below — a single-XHTML book used to block for
-        // the whole book, since the only yield was between chapters.
+        // chapter loop uses below — a single-XHTML book would otherwise block
+        // for the whole book, since the loop alone only yields between
+        // chapters.
         const sentencesStart = performance.now();
         // The yields are deliberate sleeps INSIDE this window, and a chained
         // zero-delay timeout is clamped once nesting passes a few levels — so
@@ -465,7 +466,7 @@ export async function extractContentOffscreen(
       }
 
       // Yield to main thread
-      // OPTIMIZATION: Instead of waiting 50ms every chapter (which adds seconds of delay for large books),
+      // OPTIMIZATION: Rather than a fixed sleep every chapter (which adds seconds of delay for large books),
       // we only yield if we've been blocking the main thread for more than 16ms (1 frame).
       // When we do yield, we use setTimeout(0) to resume as soon as possible.
       if (shouldYieldToMainThread(lastYieldTime, performance.now())) {
@@ -481,7 +482,6 @@ export async function extractContentOffscreen(
     measureTotal('import:offscreen:sentences-yield', sentencesYieldMs);
     measureTotal('import:offscreen:tables', tablesMs);
 
-    // After the for loop before finally block:
     const baseStyles = calculateDominantStyle(globalStyleAccumulator);
     if (baseStyles) {
       logger.info(`Calculated global base font size: ${baseStyles.fontSize}px`);

@@ -36,9 +36,9 @@ export const DeleteBookDialog: React.FC<DeleteBookDialogProps> = ({ isOpen, onCl
             logger.error("Failed to delete book", error);
             showToast("Failed to delete book", "error");
         } finally {
-             // If we closed the dialog, this state update might happen on an unmounted component,
-             // but React handles that gracefully now, or we can skip it if we know we closed.
-             // However, if there was an error, we stay open.
+             // Re-enable the controls on both paths. After a successful delete the
+             // dialog has already closed, so the reset is harmless; after an error
+             // it stays open so the user can retry.
              setIsDeleting(false);
         }
     };

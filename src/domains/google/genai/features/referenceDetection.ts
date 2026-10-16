@@ -1,32 +1,27 @@
 /**
- * End-of-chapter reference-section detection (Phase 7 §H feature module).
+ * End-of-chapter reference-section detection (GenAI feature module).
  *
- * The prompt-minimization technique is preserved VERBATIM (a named keeper):
- * asymmetric truncation (front 60% to ~8 words, tail 40% to ~120 chars),
- * sparse leadsWithMarker flags, deterministic enumerator hint with forced
- * agree/disagree justification.
+ * Prompt minimization: asymmetric truncation (front 60% to ~8 words, tail 40%
+ * to ~120 chars), sparse leadsWithMarker flags, deterministic enumerator hint
+ * with forced agree/disagree justification.
  *
- * The GG-5 clamp: `referenceStartIndex` must be an integer in [-1, n-1] —
- * the legacy mapping treated ANY non-(-1) value as a valid start, so a
- * model returning -2 flagged EVERY group as reference and poisoned the
- * synced contentAnalysis map. Out-of-range now throws
- * GENAI_INVALID_RESPONSE and the callers' status:'error' machinery handles
- * it.
+ * The GG-5 clamp: `referenceStartIndex` must be an integer in [-1, n-1].
+ * Any other value would be read as a valid start (a model returning -2 would
+ * flag EVERY group as reference and poison the synced contentAnalysis map),
+ * so out-of-range throws GENAI_INVALID_RESPONSE and the callers'
+ * status:'error' machinery handles it.
  *
- * The former 40% positional guard is GONE. On the Jul–Sep 2026 activity-log
- * export it fired nine times on five sections and every one was a correct
- * answer — an "End Notes" section, a chapter whose 158 numbered endnotes start
- * at 35% of the groups, a "Further Reading" bibliography and two index
- * sections — while never once catching a wrong one. Rejecting those answers
- * read the notes aloud and burned a retry on every revisit. The detector now
- * records the position fraction of every accepted answer in the
- * `detectReferenceStart` telemetry instead, so an early index stays visible
- * to offline review without being enforced online.
+ * There is deliberately NO positional guard on the answer: an early reference
+ * start is often correct (an "End Notes" section, a chapter whose numbered
+ * endnotes start at 35% of the groups, a bibliography, an index section), and
+ * rejecting it would read the notes aloud and burn a retry on every revisit.
+ * The detector instead records the position fraction of every accepted answer
+ * in the `detectReferenceStart` telemetry, so an early index stays visible to
+ * offline review without being enforced online.
  *
  * `agreedWithHeuristic` is only requested (and only required by the response
  * schema) when a deterministic hint was actually given: without a hint there
- * is nothing to agree with, and a forced boolean was pure noise — 195 of 197
- * logged answers carried a meaningless value.
+ * is nothing to agree with, so a forced boolean would be a meaningless value.
  */
 import { z } from 'zod';
 import { GenAIInvalidResponseError } from '../errors';

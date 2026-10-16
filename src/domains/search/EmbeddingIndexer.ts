@@ -145,8 +145,8 @@ type QuantizePort = (vec: Float32Array) => { vectors: Int8Array; scale: number }
  * the user has the same book embedded elsewhere and synced to their cloud, the
  * indexer can download those vectors instead of re-embedding from scratch.
  * `probe` is a cheap availability check; `hydrate` downloads the blob and writes
- * the local embedding rows. It is optional so indexer constructions that pass no
- * port compile and behave exactly as before. The app layer owns the consent
+ * the local embedding rows. It is optional: an indexer constructed without it
+ * never consults another device. The app layer owns the consent
  * gate and must make both calls short-circuit to `false` cheaply when no cloud
  * backend is connected, so the common no-sync case adds zero latency.
  */
@@ -452,7 +452,7 @@ export class EmbeddingIndexer {
     const { bookId, corpus, order, config, job, rowSections, jobSections, persistedHrefs, embeddableSections, opts, pass } = args;
     const sections = corpus.sections;
 
-    // Batched persistence. Writing after EVERY section re-serialized the whole
+    // Batched persistence. Writing after EVERY section would re-serialize the whole
     // row each time — O(sections²) bytes structured-cloned through the gated IDB
     // path while the user reads. The batch flushes every
     // {@link FLUSH_EVERY_SECTIONS} sections or once it holds

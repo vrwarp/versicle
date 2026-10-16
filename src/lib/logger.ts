@@ -84,7 +84,6 @@ export function getRecentLogs(): LogRecord[] {
 
 /**
  * A logger instance bound to a specific namespace/context.
- * Preferred for new code.
  */
 class ScopedLogger {
   private namespace: string;

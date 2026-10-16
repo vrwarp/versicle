@@ -1,11 +1,9 @@
 /**
- * playbackCache repo contract suite (Phase 3 D5.2 / Test plan R).
+ * playbackCache repo contract suite.
  *
- * Pins the WebKit-hang-safe session block that moved verbatim from
- * DBService, including the assertions absorbed from src/db/DBService.test.ts
- * when the façade was deleted (P3-12; test-absorption ledger):
- * the DELIBERATE teardown drop (dropPending cancels — never flushes — the
- * debounced write) and the mirror/coalescing round-trip.
+ * Pins the WebKit-hang-safe session block, including the DELIBERATE teardown
+ * drop (dropPending cancels — never flushes — the debounced write) and the
+ * mirror/coalescing round-trip.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { playbackCache } from './playbackCache';
@@ -79,7 +77,7 @@ describe('data/repos/playbackCache', () => {
 
   describe('regression: session mirror is bounded', () => {
     // The mirror (one record per book touched, each carrying that book's whole TTS queue)
-    // was never pruned, in BOTH the worker and the main-thread instance. It is now an
+    // must stay bounded, in BOTH the worker and the main-thread instance. It is an
     // insertion-ordered LRU; an evicted book re-seeds from disk on its next touch.
     //
     // Eviction is asserted through observable behaviour rather than a spy on the connection:
@@ -141,7 +139,7 @@ describe('data/repos/playbackCache', () => {
    * (createRepoSessionStore) memoizes: once a book is evicted, a saveQueue built
    * its record from scratch — `{bookId, playbackQueue, updatedAt}` — and the next
    * write dropped every other field the persisted row carried, the previous
-   * session's pause stamp included. saveQueue is cold-safe now: the flush merges
+   * session's pause stamp included. saveQueue is cold-safe: the flush merges
    * the persisted row in first (outside the gate, before the synchronous put).
    */
   describe('regression: a cold saveQueue keeps what the persisted row carried', () => {

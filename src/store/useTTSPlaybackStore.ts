@@ -4,8 +4,8 @@ import type { TTSStatus } from '@lib/tts/engine/TtsEngine';
 import type { TTSQueueItem } from '~types/tts';
 
 /**
- * EPHEMERAL TTS playback state — the other half of the 5b split of the legacy
- * `tts-storage` god store (plan/overhaul/prep/phase5-tts-strangler.md §5b.4).
+ * EPHEMERAL TTS playback state — the counterpart of the persisted
+ * `useTTSSettingsStore` (design: plan/overhaul/prep/phase5-tts-strangler.md §5b.4).
  *
  * Never persisted, never replicated into the worker: this store is the
  * main-thread mirror of the engine's PlaybackSnapshot stream (written
@@ -13,7 +13,7 @@ import type { TTSQueueItem } from '~types/tts';
  * runtime state (readiness, the loaded voice list, voice-download progress).
  *
  * Because playback state lives HERE and the replicated settings live in
- * `useTTSSettingsStore`, an engine broadcast can no longer re-enter the
+ * `useTTSSettingsStore`, an engine broadcast cannot re-enter the
  * settings replication slice — the per-sentence echo loop (S6) is dead by
  * construction (pinned in replication.test.ts).
  */

@@ -79,7 +79,7 @@ describe('PlatformIntegration', () => {
     });
 
     it('regression: transient loading/completed report mediaState=playing (native STATE_IDLE avoidance)', () => {
-        // BUG-2: mapping inter-utterance 'loading'/'completed' to media-state 'none' drove
+        // Mapping inter-utterance 'loading'/'completed' to media-state 'none' would drive
         // the native Media3 proxy into Player.STATE_IDLE every utterance boundary, tearing
         // down the notification and thrashing the legacy session (the Bluetooth/AVRCP
         // "metadata to sync" timeout). The media-state fold must agree with the

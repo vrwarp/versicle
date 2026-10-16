@@ -1,9 +1,7 @@
 /**
  * useDeviceMarkers — other devices' reading positions resolved to spine
- * hrefs for TOC badges (Phase 6 §5 table "DeviceMarkers (TOCPanel-local)",
- * prep/phase6-reader-engine.md PR-9). Extracted verbatim from the legacy
- * ReaderView; mounted next to the TOCPanel so the computation only exists
- * while the TOC is visible (the legacy `showToc` gate, structurally).
+ * hrefs for TOC badges. Mounted next to the TOCPanel so the computation
+ * only exists while the TOC is visible.
  */
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';

@@ -40,7 +40,8 @@ describe('useDeviceStore', () => {
         registerCurrentDevice('device-123', mockProfile);
 
         const device = useDeviceStore.getState().devices['device-123'];
-        // Name will be "Unknown on Unknown" because UA parser mocks are empty/default in test env
+        // The generated name depends on the test env's user agent, so only
+        // assert below that it is defined.
         expect(device).toMatchObject({
             id: 'device-123',
             created: now,
@@ -68,8 +69,7 @@ describe('useDeviceStore', () => {
     });
 
     it('should update a device name without changing created date', () => {
-        // registerCurrentDevice doesn't take name anymore, it auto-generates or keeps existing.
-        // To test rename, we use renameDevice.
+        // Renaming an already-registered device goes through renameDevice.
 
         const t1 = 1000;
         vi.setSystemTime(t1);
@@ -91,11 +91,8 @@ describe('useDeviceStore', () => {
         const device = useDeviceStore.getState().devices['device-123'];
         expect(device.name).toBe('My iPhone');
         expect(device.created).toBe(t1);
-        // renameDevice shouldn't necessarily update lastActive, but let's check store impl
-        // The implementation says: if (!existing) return state; return { ... [deviceId]: { ...existing, name } }
-        // It does NOT update lastActive.
-        // Wait, the previous test expected lastActive to be t2? No, that was a register call. 
-        // Here we just check name update.
+        // renameDevice only spreads `existing` with the new name; it does NOT
+        // update lastActive, so only the name and created date are asserted.
     });
 
     it('should touch a device to update last active', () => {
@@ -235,7 +232,7 @@ describe('useDeviceStore', () => {
 });
 
 /**
- * F5(a): the QuotaGovernor publishes this device's rolling daily spend on
+ * The QuotaGovernor publishes this device's rolling daily spend on
  * EVERY embedding acquire AND commit. Each accepted publish is a synced CRDT
  * write (Y.Doc transaction → y-idb row → outbound push) and a notification to
  * every `devices` subscriber (one ResumeBadge per mounted book card). The

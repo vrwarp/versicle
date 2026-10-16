@@ -1,14 +1,14 @@
 /**
- * The NFKD/extraction re-ingestion wave (Phase 7 §E, PR-L6).
+ * The NFKD/extraction re-ingestion wave.
  *
- * Detection is STAMP-BASED (the P0/P5c fix-forward heuristics, not the
- * stale analysis-era "non-ASCII content" idea):
+ * Detection is STAMP-BASED (the per-book `extractionVersion`), not a scan for
+ * "non-ASCII content":
  *
  *  - rows missing `extractionVersion` are implicit v1 — segmented against
  *    NFKD-normalized text; their CFIs may have drifted wherever decomposable
  *    characters (é, ﬁ, …) precede a sentence start;
  *  - v2 rows have CORRECT offsets (raw-text segmentation) but carry
- *    ingest-time refinement baked in; v3 ("raw at rest", P5c) playback
+ *    ingest-time refinement baked in; v3 ("raw at rest") playback
  *    re-refines tolerantly, so v2 rows keep working — their re-ingest is
  *    pure convergence work;
  *  - the restamp FAST PATH: a v1 row whose every sentence satisfies
@@ -24,8 +24,8 @@
  * Offloaded/ghost books are skipped (no binary) and heal on restore/import,
  * which always writes the current version.
  *
- * Graft R4: old rows are retained until the re-extraction passes the
- * alignment self-check (`derivedContentSane`, threaded through
+ * Old rows are retained until the re-extraction passes the alignment
+ * self-check (`derivedContentSane`, threaded through
  * `reprocessBookContent({ verifyDerived })`); a failed re-extract degrades
  * to current behavior, never worse.
  */
@@ -55,7 +55,7 @@ export interface ReingestWaveDeps {
    * any. When it equals {@link TTS_EXTRACTION_VERSION} the wave returns
    * immediately — WITHOUT calling {@link ReingestWaveDeps.listVersions},
    * whose cursor materializes every sentence row of every book to read one
-   * integer each. Omitted ⇒ the wave always scans (the pre-marker behavior).
+   * integer each. Omitted ⇒ the wave always scans.
    */
   convergedVersion?(): Promise<number | undefined>;
   /** Persist the convergence marker. Called only after a COMPLETED wave. */
@@ -73,7 +73,7 @@ export interface ReingestWaveReport {
   skipped: string[];
 }
 
-/** True when every persisted sentence is NFKD-invariant (the §E fast-path proof). */
+/** True when every persisted sentence is NFKD-invariant (the restamp fast-path proof). */
 export function rowsAreNfkdInvariant(rows: CacheTtsPreparationRow[]): boolean {
   for (const row of rows) {
     for (const sentence of row.sentences) {
@@ -84,7 +84,7 @@ export function rowsAreNfkdInvariant(rows: CacheTtsPreparationRow[]): boolean {
 }
 
 /**
- * The R4 alignment self-check, run BEFORE persisting a re-extraction: a
+ * The alignment self-check, run BEFORE persisting a re-extraction: a
  * sane re-extract must still produce sentences (unless the old rows had
  * none) and must not collapse — fresh CFIs are generated from the rendered
  * DOM (self-consistent by construction), so the catastrophic failure mode

@@ -1,42 +1,37 @@
 /**
  * The CRDT migration coordinator (plan/overhaul/prep/phase2-fork-surgery.md
- * §5.2, contract-first.md C11 boot contract).
+ * §5.2; C11 boot contract in plan/overhaul/proposals/contract-first.md).
  *
- * Replaces the legacy `runMigrations` runner that lived in
- * src/store/yjs-provider.ts. Each operating rule below reverses a numbered
- * hazard of that runner (§5.1):
+ * Operating rules:
  *
  * - **Static imports, single call site** — invoked exactly once per boot from
  *   the bootstrap 'migrations' phase (src/app/boot/crdtMigrations.ts); a
  *   module-level promise guards in-tab re-entry. No dynamic-import
- *   dependency dodges, no per-store `onLoaded` fan-out (the legacy runner
- *   could fire up to 9× per boot). [hazards 1, 7]
+ *   dependency dodges, no per-store `onLoaded` fan-out.
  * - **Reads the doc, not store state** — `readDocSchemaVersion` takes
  *   `max(meta.schemaVersion, library.__schemaVersion)`; the max tolerates
- *   partial dual-writes. No casts through store state. [hazard 2]
+ *   partial dual-writes. No casts through store state.
  * - **One transaction per step, bump atomic with its transform** — the
  *   version bump executes inside the same `doc.transact` as the step's
  *   transform, so observers (other clients, y-idb) never see
- *   transformed-but-unversioned data. Steps run sequentially. [hazards 3, 4]
+ *   transformed-but-unversioned data. Steps run sequentially.
  * - **DOC transforms, not store setState** — steps mutate Y types directly;
  *   the middleware receives the migration as ordinary inbound traffic
  *   (origin = MIGRATION_ORIGIN ≠ any store api) and patches stores normally.
- *   There is no stale-state race and no microtask ordering to outrun — the
- *   nested-queueMicrotask hack is structurally unnecessary. [hazard 5]
+ *   There is no stale-state race and no microtask ordering to outrun.
  * - **Loud failure** — any throw aborts the run and surfaces a
  *   {@link MigrationError} carrying the pre-migration checkpoint id to the
  *   boot sequence (App.tsx routes it to CriticalMigrationFailureView with
  *   the existing checkpoint-restore flow). No silent catch anywhere.
- *   [hazard 6]
  * - **Pre-migration checkpoint** — if any step will run on a doc that holds
- *   data, a protected checkpoint (CheckpointService, the P0 pinning hotfix)
- *   is created BEFORE the first transform. Checkpoint failure aborts the
- *   migration: the protection must exist before the destructive op.
- * - **Cross-client safety stays determinism + LWW** (the sound core of the
- *   legacy design): transforms are deterministic and idempotent
- *   (delete-if-present, copy-if-absent, sorted iteration), so concurrent
- *   migrations by two clients merge to the same terminal state — pinned by
- *   the F.3 convergence tests in
+ *   data, a protected checkpoint (CheckpointService; protected checkpoints
+ *   are pinned against the rolling prune) is created BEFORE the first
+ *   transform. Checkpoint failure aborts the migration: the protection must
+ *   exist before the destructive op.
+ * - **Cross-client safety is determinism + LWW**: transforms are
+ *   deterministic and idempotent (delete-if-present, copy-if-absent, sorted
+ *   iteration), so concurrent migrations by two clients merge to the same
+ *   terminal state — pinned by the F.3 convergence tests in
  *   src/store/__tests__/crdt-contract/migrations.test.ts.
  */
 import * as Y from 'yjs';
@@ -85,17 +80,17 @@ export class MigrationError extends AppError {
 
 // ─── Version read ────────────────────────────────────────────────────────────
 
-// Relocated to the sync domain with P4-4 (quarantine layers reuse the
-// coordinator's EXACT read — risk R4); re-exported for existing importers.
+// Defined in the sync domain (the quarantine layers reuse the coordinator's
+// EXACT read); re-exported for existing importers.
 export { readDocSchemaVersion };
 
 /**
  * A doc with no content at all (fresh install / post-wipe boot). Version
  * follows data: fresh docs are NOT stamped — the first persisted write
  * carries the store's declared `__schemaVersion` and the chain runs on a
- * later boot, exactly like the legacy runner's lifecycle. Stamping an empty
- * doc would mark cloud data that merges in later as already-migrated.
- * An empty Y update encodes to 2 bytes; tombstones count as content.
+ * later boot. Stamping an empty doc would mark cloud data that merges in
+ * later as already-migrated. An empty Y update encodes to 2 bytes;
+ * tombstones count as content.
  */
 const isDocEmpty = (doc: Y.Doc): boolean => Y.encodeStateAsUpdate(doc).byteLength <= 2;
 
@@ -133,9 +128,7 @@ const legacyPreferenceMapNames = (doc: Y.Doc): string[] =>
 
 /**
  * v1 → v2: prune reading sessions whose startTime/endTime are not numbers
- * (the legacy-history corruption the original v1→v2 migration existed for).
- * Doc-transform reimplementation of yjs-provider.ts:120-164; the F.3 fixture
- * matrix pins equivalence with the legacy runner's terminal state.
+ * (corrupted legacy history). Pinned by the F.3 fixture matrix.
  */
 const pruneInvalidReadingSessions = (doc: Y.Doc): void => {
   const progressRoot = doc.getMap('progress').get('progress');
@@ -160,18 +153,16 @@ const pruneInvalidReadingSessions = (doc: Y.Doc): void => {
   });
 };
 
-/** Default font profiles the v4→v5 migration backfills (yjs-provider.ts:177-183, verbatim). */
+/** Default font profiles the v4→v5 migration backfills. */
 const DEFAULT_FONT_PROFILES = {
   en: { fontSize: 100, lineHeight: 1.5 },
   zh: { fontSize: 120, lineHeight: 1.8 },
 } as const;
 
 /**
- * v4 → v5: initialize `fontProfiles` where absent. The legacy runner
- * backfilled only the CURRENT device's preferences store; the doc transform
- * backfills every per-device map (copy-if-absent, sorted iteration) — a
- * deterministic superset of the legacy behavior that closes the gap where
- * other devices' profiles were left to be hydration-wiped (D2).
+ * v4 → v5: initialize `fontProfiles` where absent, in every per-device map
+ * (copy-if-absent, sorted iteration) so no device's profiles are left to be
+ * wiped by hydration.
  */
 const backfillFontProfiles = (doc: Y.Doc): void => {
   for (const name of legacyPreferenceMapNames(doc)) {
@@ -187,7 +178,7 @@ const backfillFontProfiles = (doc: Y.Doc): void => {
  * v5 → v6 (phase2-fork-surgery.md §5.3, deliberately DOWN-SCOPED):
  *
  * 1. Delete the residual `annotations.popover` Y.Map key (transient UI state
- *    that leaked into the CRDT; store-side hotfixed in P0 — see
+ *    that leaked into the CRDT; the store never syncs it — see
  *    useAnnotationStore.ts. Idempotent: deleting an absent key is a no-op).
  * 2. Preferences fold: copy each legacy top-level `preferences/<deviceId>`
  *    map into `preferences.<deviceId>` (nested map), copy-if-absent for LWW
@@ -195,17 +186,15 @@ const backfillFontProfiles = (doc: Y.Doc): void => {
  *    **COPY-WITHOUT-CLEAR**: the legacy maps are intentionally left in place
  *    — clearing them would let the D5 window (per-map quarantine is async
  *    and only library-guarded) wipe a still-v5 device's live preferences
- *    before its UI locks. The husks stop mattering once stores rebind to the
- *    folded map (flip item) and are cleared in v9 (P9) with the dual-write
- *    retirement (program renumbering: v7 = vocabulary canonicalization,
- *    v8 = reading-list bookId FK).
+ *    before its UI locks. The husks stop mattering once stores bind to the
+ *    folded map and are cleared in v9 (see clearHusksAndRetireDualWrite).
  *
  * The `meta` map creation + schemaVersion dual-write is NOT here — it is the
  * coordinator's generic atomic bump (every step dual-writes meta + library
  * inside its transaction). Per program rule 5 (N+1 staging) nothing reads
  * `meta` for enforcement in the v6 release: v5 clients keep quarantining via
- * the dual-written `library.__schemaVersion`; Phase 4's synchronous pre-merge
- * check is the first reader.
+ * the dual-written `library.__schemaVersion`; the doc-level quarantine layers
+ * (src/domains/sync/core/quarantine.ts) are the first readers of `meta`.
  */
 const migrateV5toV6 = (doc: Y.Doc): void => {
   doc.getMap('annotations').delete('popover');
@@ -224,10 +213,10 @@ const migrateV5toV6 = (doc: Y.Doc): void => {
 };
 
 /**
- * v6 → v7 (Phase 6 §7.5, prep/phase6-reader-engine.md PR-13, CH-6 —
- * program decision: the vocabulary canonicalization IS the v7 bump, so the
- * standing quarantine machinery keeps any not-yet-upgraded client from
- * writing fresh traditional keys into a canonicalized doc):
+ * v6 → v7 (prep/phase6-reader-engine.md §7.5, CH-6 — the vocabulary
+ * canonicalization IS the v7 bump, so the standing quarantine machinery
+ * keeps any not-yet-upgraded client from writing fresh traditional keys into
+ * a canonicalized doc):
  *
  * Every `vocabulary.knownCharacters` key is rewritten to its SIMPLIFIED
  * form via the COMMITTED single-char trad→simp table (the inverse of the
@@ -236,9 +225,6 @@ const migrateV5toV6 = (doc: Y.Doc): void => {
  * knowledge wins. Deterministic (sorted iteration, code-versioned table)
  * and idempotent (canonical keys map to themselves), so concurrent
  * migrations by two clients converge per the coordinator's LWW core.
- *
- * Deliberately NOT here: husk-clearing + dual-write retirement (earmarked
- * v9/P9 per the program numbering decision; v8 = reading-list bookId FK).
  */
 const canonicalizeVocabularyKeys = (doc: Y.Doc): void => {
   const knownCharacters = doc.getMap('vocabulary').get('knownCharacters');
@@ -259,8 +245,8 @@ const canonicalizeVocabularyKeys = (doc: Y.Doc): void => {
 };
 
 /**
- * v8 → v9 (Phase 9 — the LAST format change of the overhaul program;
- * phase2-fork-surgery.md §9 items 1–2, phase8-shell-pwa.md §RC-10):
+ * v8 → v9 (the terminal cleanup bump; phase2-fork-surgery.md §9 items 1–2,
+ * phase8-shell-pwa.md §RC-10):
  *
  * 1. **Preferences husk-clearing.** v6 folded the legacy top-level
  *    `preferences/<deviceId>` maps into the keyed `preferences` map
@@ -276,33 +262,33 @@ const canonicalizeVocabularyKeys = (doc: Y.Doc): void => {
  *
  * 2. **`library.__schemaVersion` dual-write retirement — meta becomes the
  *    sole version authority.** The N+1 staging audit (program rule 5):
- *    the `meta` map's WRITE shipped at v6 (P2, three format generations
- *    ago); its first enforcement READERS shipped with the P4 doc-level
- *    quarantine layers (pre-attach metadata probe, pre-apply scratch
- *    check, live `meta` observer) — between the v6 and v7 releases. The
- *    fleet-quarantine chain that makes meta-only safe at v9:
+ *    the `meta` map's WRITE shipped at v6; its first enforcement READERS
+ *    are the doc-level quarantine layers (pre-attach metadata probe,
+ *    pre-apply scratch check, live `meta` observer — see
+ *    src/domains/sync/core/quarantine.ts), which shipped between the v6 and
+ *    v7 releases. The fleet-quarantine chain that makes meta-only safe at v9:
  *      - clients ≤ v7-era: already locked by the v8 bump's dual write
  *        (their per-map pill saw library.__schemaVersion = 8), and the
  *        FROZEN library stamp keeps tripping them on every future boot;
  *      - v8-era clients (the only ones still live on a v8 doc): every
- *        v8-era build is ≥ P7 and therefore carries the P4 meta layers,
- *        so `meta.schemaVersion = 9` alone quarantines them.
+ *        v8-era build carries the doc-level `meta` layers, so
+ *        `meta.schemaVersion = 9` alone quarantines them.
  *    The stale `library.__schemaVersion = 8` key is deliberately KEPT, not
- *    deleted: it is the ONLY quarantine layer pre-P4-era builds possess
- *    (an offline v6-era straggler that missed v7/v8 still trips on 8 > 6),
- *    and deleting it would invite middleware resurrection writes (the
+ *    deleted: it is the ONLY quarantine layer builds that predate the
+ *    doc-level layers possess (an offline v6-era straggler that missed
+ *    v7/v8 still trips on 8 > 6), and deleting it would invite middleware
+ *    resurrection writes (the
  *    store's declared `__schemaVersion` default diffed against an absent
  *    key). It is frozen at 8 forever; `readDocSchemaVersion`'s
  *    `max(meta, library)` reads through it.
  *
- * 3. **`activeContext` husk pruning.** P8 §J moved the library/notes
- *    switch to ROUTE state and dropped `activeContext` from the
- *    preferences syncedKeys (read-time-only change, no format bump — the
- *    P8 slot was released). The key lingers in every folded per-device
- *    map (and the legacy husks, which item 1 clears wholesale); v9 deletes
- *    it. A not-yet-quarantined v8-era client built before P8 can race a
- *    re-add into its local doc — inert (v9+ stacks never hydrate the key)
- *    and stopped fleet-wide by the bump itself.
+ * 3. **`activeContext` husk pruning.** The library/notes switch is ROUTE
+ *    state and `activeContext` is not among the preferences syncedKeys.
+ *    The key lingers in every folded per-device map (and the legacy husks,
+ *    which item 1 clears wholesale); v9 deletes it. A not-yet-quarantined
+ *    v8-era client that still writes it can race a re-add into its local
+ *    doc — inert (v9+ stacks never hydrate the key) and stopped fleet-wide
+ *    by the bump itself.
  *
  * Transform discipline (the F.3 pattern): deterministic (sorted
  * iteration), idempotent (clearing empty maps / deleting absent keys are
@@ -343,16 +329,15 @@ const LAST_DUAL_WRITTEN_SCHEMA_VERSION = 8;
 
 /**
  * The ordered migration registry. `from: 3` exists because v3 was a pure
- * version bump (Firestore path change, no doc-shape change) — the legacy
- * runner folded v2/v3 into one branch.
+ * version bump (Firestore path change, no doc-shape change).
  *
- * v7 → v8 (Phase 7 §D, the rule-4 post-merge step): the one-time
- * reading-list `bookId` FK linker — see migrations.linkReadingList.ts for
- * the join semantics and why the FK needs a quarantining bump (pre-v8
- * clients drop unknown fields on whole-entry rebuilds).
+ * v7 → v8: the one-time reading-list `bookId` FK linker — see
+ * migrations.linkReadingList.ts for the join semantics and why the FK needs
+ * a quarantining bump (pre-v8 clients drop unknown fields on whole-entry
+ * rebuilds).
  *
- * v8 → v9 (Phase 9): the program's terminal cleanup bump — husk clearing,
- * dual-write retirement, activeContext pruning (docblock above).
+ * v8 → v9: the terminal cleanup bump — husk clearing, dual-write
+ * retirement, activeContext pruning (docblock above).
  */
 export const CRDT_MIGRATIONS: readonly CrdtMigration[] = [
   { from: 1, to: 2, migrate: pruneInvalidReadingSessions },
@@ -382,8 +367,8 @@ export interface RunCrdtMigrationsOptions {
   targetVersion?: number;
   /**
    * Pre-migration checkpoint factory; returns the checkpoint id. Defaults to
-   * `CheckpointService.createCheckpoint(trigger, { protected: true })` — the
-   * P0 pinning hotfix keeps it from being pruned while it matters.
+   * `CheckpointService.createCheckpoint(trigger, { protected: true })` — a
+   * protected checkpoint is pinned against pruning while it matters.
    */
   createCheckpoint?: (trigger: string) => Promise<number>;
 }

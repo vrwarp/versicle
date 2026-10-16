@@ -6,7 +6,7 @@
  * mirrored to a content-addressed blob (`embeddings/{key}.bin`) plus a small
  * companion HEAD record, and a sibling device downloads them for free.
  *
- * Privacy posture (the load-bearing gates — see GUARDRAILS):
+ * Privacy posture (the load-bearing gates — see plan/shared-ai-cache-design.md §3):
  *  - it runs ONLY when the user turned the default-OFF "Share AI caches across
  *    my devices" opt-in ON (useGenAIStore.shareAiCaches) — surfaced as the
  *    {@link ArtifactPublisherDeps.isUploadConsented} gate, built from the same

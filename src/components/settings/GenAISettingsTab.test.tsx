@@ -199,9 +199,10 @@ describe('GenAISettingsTab', () => {
 
     /**
      * The tab re-renders itself once a second (the tick that refreshes the live
-     * governor snapshots read during render). Every one of those renders used to
-     * re-render AND re-`JSON.stringify` the ENTIRE log buffer — up to 1000 full
-     * prompt/response payloads per second — into a 160px scroll box.
+     * governor snapshots read during render). Re-deriving the log rows on every
+     * one of those renders would re-`JSON.stringify` the ENTIRE log buffer — up
+     * to 1000 full prompt/response payloads per second — into a 160px scroll
+     * box, so the rows are derived once per logs change.
      */
     describe('regression: the debug log box does not re-stringify on every tick', () => {
         afterEach(() => {

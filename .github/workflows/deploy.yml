@@ -40,7 +40,7 @@ jobs:
         run: npm ci
 
       - name: Compile dictionary (vendored snapshot, checksum-verified)
-        # cedict.json left git at Phase 6 PR-12; compiled offline from the
+        # cedict.json is not committed; compiled offline from the
         # CC-CEDICT snapshot vendored in-repo (scripts/cedict-source.zip,
         # pinned by scripts/cedict.lock.json). No mdbg.net download — upgrades
         # land via the reviewed monthly PR (.github/workflows/update-dict.yml).

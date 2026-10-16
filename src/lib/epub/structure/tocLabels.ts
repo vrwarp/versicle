@@ -1,5 +1,6 @@
 /**
- * TOC label quality and source arbitration (plan §4.2, decisions §9.2/§9.5).
+ * TOC label quality and source arbitration (plan/epub-toc-cover-hardening.md
+ * §4.2, decisions §9.2/§9.5).
  *
  * Books in the wild ship TOC labels that are useless to a reader: tooling
  * placeholders (`*FIX_Title.543173.int`), every entry identical, file names,

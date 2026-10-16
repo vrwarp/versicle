@@ -1,14 +1,13 @@
 /**
  * Typed factory doubles for the highest-leverage service seams.
  *
- * Replaces the per-file repo-mock factory pattern (36+ copies,
- * each with a slightly different hand-rolled shape that nothing typechecks).
- * These factories are typed against the REAL service types, so a service
- * signature change breaks the double at compile time instead of letting
- * stale mocks keep passing.
+ * Use these instead of per-file repo-mock factories, whose hand-rolled shapes
+ * nothing typechecks. These factories are typed against the REAL service
+ * types, so a service signature change breaks the double at compile time
+ * instead of letting stale mocks keep passing.
  *
  * Prefer real DI seams over module mocking where they exist
- * (`createLibraryStore(db)`, `AudioPlayerService.createWithContext(…)`);
+ * (`PlaybackController.createWithContext(…)`, the `LibraryPersistence` port);
  * these doubles are what you inject into them.
  */
 import type { bookContent } from '@data/repos/bookContent';
@@ -52,7 +51,7 @@ function makeLoudDouble<T extends object>(name: string, overrides: Partial<T>): 
 
 /**
  * Typed double for the `bookContent` repo singleton
- * (`src/data/repos/bookContent.ts` — the carve of the deleted DBService).
+ * (`src/data/repos/bookContent.ts`).
  *
  * Every unstubbed method throws when called — a test can only depend on
  * behavior it explicitly declared. Overrides are typechecked against the
@@ -70,8 +69,7 @@ const unstubbed =
 
 /**
  * Typed double for the `LibraryPersistence` seam injected into the
- * ImportOrchestrator/LibraryService (`src/domains/library/ports.ts` —
- * Phase 7 replacement of the deleted `IDBService` store seam).
+ * ImportOrchestrator/LibraryService (`src/domains/library/ports.ts`).
  *
  * Required methods default to loud throwers; the OPTIONAL fast-path methods
  * (`getBookMetadataBulk`, `getAvailableResourceIds`) stay `undefined` unless

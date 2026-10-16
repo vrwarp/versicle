@@ -70,8 +70,9 @@ vi.mock('epubjs', () => {
     }
 });
 
-// cfi-utils imports EpubCFI from the lean submodule (epubjs/src/epubcfi) so the TTS worker
-// doesn't bundle DOM-heavy epubjs. Mirror the 'epubjs' mock onto that path (as a default export).
+// The kernel's epubcfiShim imports EpubCFI from the lean submodule (epubjs/src/epubcfi) so the
+// TTS worker doesn't bundle DOM-heavy epubjs. Mirror the 'epubjs' mock onto that path (as a
+// default export).
 vi.mock('epubjs/src/epubcfi', async () => {
     const epubjs = await import('epubjs') as { EpubCFI: unknown };
     return { default: epubjs.EpubCFI };
@@ -193,24 +194,20 @@ describe('cfi-utils', () => {
     it('handles standard CFI: specific path', () => {
         // /6/2!/4/2
         const cfi = 'epubcfi(/6/2!/4/2)';
-        // Should keep as is if depth is shallow
+        // The leaf step (/2) is stripped
         expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4)');
     });
 
     it('strips last segment (text node/leaf)', () => {
         const cfi = 'epubcfi(/6/2!/4/2/1:10)';
-        // Splitting path: ['', '4', '2', '1:10'] -> filter empty -> ['4', '2', '1:10']
-        // pop -> ['4', '2']
-        // depth check: 2 < 3.
+        // Content path /4/2/1:10 -> the leaf (/1:10) is stripped
         // Result: /4/2
         expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4/2)');
     });
 
     it('does not truncate deep paths (previously heuristic)', () => {
         // Path: /4/2/4/2/1:10
-        // Parts: ['4', '2', '4', '2', '1:10'] (Length 5)
-        // Truncate to: ['4', '2', '4', '2']
-        // New behavior: should preserve full path (minus leaf)
+        // The full path is preserved (minus the leaf): /4/2/4/2
         const cfi = 'epubcfi(/6/2!/4/2/4/2/1:10)';
         expect(getParentCfi(cfi)).toBe('epubcfi(/6/2!/4/2/4/2)');
     });
@@ -237,8 +234,6 @@ describe('cfi-utils', () => {
         expect(getParentCfi(cfi)).toBe('not-a-cfi');
     });
 
-    // New tests from "Design Doc: Precise EPUB CFI Grouping Heuristic"
-
     describe('Leaf Stripping', () => {
         it('Input: epubcfi(/6/4[chap1]!/4/2/1:0) -> Output: epubcfi(/6/4[chap1]!/4/2)', () => {
             expect(getParentCfi('epubcfi(/6/4[chap1]!/4/2/1:0)')).toBe('epubcfi(/6/4[chap1]!/4/2)');
@@ -253,7 +248,7 @@ describe('cfi-utils', () => {
         });
 
         it('Input: epubcfi(/6/2!/4/2/4/1:20) -> Output: epubcfi(/6/2!/4/2/4)', () => {
-            // This was previously snapped to /4/2 if depth logic was aggressive, but now it should just strip leaf
+            // Only the leaf is stripped; there is no depth-based snapping to /4/2
             expect(getParentCfi('epubcfi(/6/2!/4/2/4/1:20)')).toBe('epubcfi(/6/2!/4/2/4)');
         });
 
@@ -383,8 +378,8 @@ describe('cfi-utils', () => {
             // Input: /6/4!/2:10
             const input = "epubcfi(/6/4!/2:10)";
 
-            // Before fix: cleanCfi (/6/4!/2:10) starts with cleanRoot (/6/4!/2).
-            // Next char is ':'. If ':' not in boundary list, it failed.
+            // cleanCfi (/6/4!/2:10) starts with cleanRoot (/6/4!/2) and the
+            // next char is ':', which must be in the boundary separator set.
             expect(getParentCfi(input, knownBlockRoots)).toBe(root);
         });
 
@@ -484,7 +479,7 @@ describe('cfi-utils', () => {
         // TableAdaptationProcessor.preprocessTableRoots (deleted) escaped the interpolation —
         // `epubcfi(\${range.parent})` — so every range-CFI table got the literal string
         // 'epubcfi(${range.parent})' as its `original`, collapsing distinct adjacent tables
-        // into one bogus group identity. The call sites now use preprocessBlockRoots.
+        // into one bogus group identity. The call sites use preprocessBlockRoots.
         const tableRangeCfis = [
             'epubcfi(/6/14!/4/10,/2/1:0,/8/1:20)', // table 1
             'epubcfi(/6/14!/4/12,/2/1:0,/6/1:14)', // adjacent table 2
@@ -541,7 +536,7 @@ describe('cfi-utils', () => {
         const start = 'epubcfi(/6/2!/4/2/1:0)';
         const end = 'epubcfi(/6/2!/6/2/1:0)';
         // Code analysis:
-        // common stops before '/'. So common="epubcfi(/6/2!"
+        // common stops before '/'. So common="/6/2!"
         // startRel="/4/2/1:0", endRel="/6/2/1:0"
         // Result: "epubcfi(" + common + "," + startRel + "," + endRel + ")"
         // "epubcfi(/6/2!,/4/2/1:0,/6/2/1:0)"
@@ -551,11 +546,8 @@ describe('cfi-utils', () => {
     it('backtracks correctly to safe delimiter', () => {
         // start: .../123
         // end: .../124
-        // common string: .../12
-        // backtrack to /
-        // common: .../
-        // startRel: 123
-        // endRel: 124
+        // common string prefix: .../12 (not at a step boundary)
+        // backtrack to the last shared delimiter '/'
         const start = 'epubcfi(/a/b/123)';
         const end = 'epubcfi(/a/b/124)';
         // Common part excludes the delimiter found during backtrack.
@@ -565,7 +557,6 @@ describe('cfi-utils', () => {
     });
 
     it('normalizes common path when start is a prefix of end and ends at step boundary', () => {
-        // As reported:
         // Start: /6/28!/4/2
         // End: /6/28!/4/2/8
         // Common prefix: /6/28!/4/2
@@ -644,8 +635,7 @@ describe('cfi-utils', () => {
           const res = mergeCfiRanges([p]);
           expect(res).toHaveLength(1);
           // generateCfiRange converts point P into P,P -> parent,startRel,startRel
-          // /6/2!/4/2:5 -> /6/2!/4/2,:5,:5 (Old)
-          // /6/2!/4/2:5 -> /6/2!/4/2:5,,   (Canonical)
+          // /6/2!/4/2:5 -> /6/2!/4/2:5,,   (canonical form: full path as common, empty relatives)
           expect(res[0]).toBe('epubcfi(/6/2!/4/2:5,,)');
       });
 

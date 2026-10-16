@@ -1,8 +1,7 @@
 /**
- * Consolidated TextSegmenter spec (Phase 5c-PR2; absorption ledger row 19:
- * 9 files -> 3). The six per-area suites survive below as named
- * `describe('regression: <file stem>')` blocks, verbatim; the fuzz/perf
- * companions stay as TextSegmenter.fuzz.test.ts / TextSegmenter.perf.test.ts.
+ * TextSegmenter spec. The per-area suites live below as named
+ * `describe('regression: <name>')` blocks; the fuzz/perf companions are
+ * TextSegmenter.fuzz.test.ts / TextSegmenter.perf.test.ts.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
@@ -192,9 +191,9 @@ describe('TextSegmenter', () => {
   });
 
   describe('regression: NFKD normalization must not shift raw-text offsets (CFI drift on non-ASCII books)', () => {
-    // segment() used to NFKD-normalize its input and return indices into the
-    // normalized string. Every decomposable character (é → e+◌́, ﬁ → fi) before a
-    // sentence start shifted the offsets that extractSentencesFromNode maps back
+    // If segment() NFKD-normalized its input and returned indices into the
+    // normalized string, every decomposable character (é → e+◌́, ﬁ → fi) before a
+    // sentence start would shift the offsets that extractSentencesFromNode maps back
     // onto raw DOM text nodes, corrupting the persisted CFIs. The contract is:
     // index/length address the RAW input; only the outbound text is NFKD-normalized.
     const segmentAndCheckRoundTrip = (text: string) => {
@@ -212,8 +211,8 @@ describe('TextSegmenter', () => {
       const segments = segmentAndCheckRoundTrip(text);
 
       expect(segments).toHaveLength(3);
-      // Pre-fix, NFKD lengthened "café"/"Voilà" so these indices were 1 and 2
-      // characters too far right (18 and 34 instead of 17 and 32).
+      // Indices into the NFKD-normalized string would sit 1 and 2 characters too
+      // far right (18 and 34 instead of 17 and 32), since NFKD lengthens "café"/"Voilà".
       expect(segments[1].index).toBe(text.indexOf('Voilà'));
       expect(segments[2].index).toBe(text.indexOf('Fin.'));
       expect(text.slice(segments[2].index, segments[2].index + segments[2].length)).toBe('Fin.');
@@ -653,7 +652,7 @@ describe('regression: TextSegmenter.refine', () => {
 
         it('should handle merging across different elements (complex CFI)', () => {
             // This is a harder case where parents might be different or path is different.
-            // refineSegments falls back to generateCfiRange(last.cfi, current.cfi)
+            // refineSegments falls back to mergeCfiSlow(last.cfi, current.cfi), which uses generateCfiRange
             // Let's assume they share some common root.
 
             // Sent A: /6/2!/4/1:10 to /6/2!/4/1:20
@@ -729,8 +728,7 @@ describe('regression: TextSegmenter.regex', () => {
             });
 
             it('does not match trailing whitespace', () => {
-                // Because \S+ must be at the end ($), this will fail if there is trailing whitespace
-                // The code trims before using this regex, so this behavior is expected.
+                // \S+ must end at the end of the string ($), so trailing whitespace prevents a match.
                 expect('Trailing '.match(RE_LAST_WORD)).toBeNull();
             });
         });
@@ -764,8 +762,7 @@ describe('regression: TextSegmenter.regex', () => {
             });
 
             it('does not match leading whitespace', () => {
-                 // ^\S+ requires start with non-whitespace.
-                 // Code trims before use.
+                 // ^\S+ requires the string to start with non-whitespace.
                  expect(' Start'.match(RE_FIRST_WORD)).toBeNull();
             });
         });
@@ -826,7 +823,7 @@ describe('regression: TextSegmenter.regex', () => {
             });
 
             it('handles no punctuation at end', () => {
-                // The regex captures "([^.!?]+[.!?]+)"
+                // The regex captures "([^.!?。！？]+[.!?。！？]+)"
                 // It won't capture the trailing text if it lacks punctuation.
                 // The fallbackSegment method handles the remainder logic separately.
                 const text = 'Hello world. Incomplete';

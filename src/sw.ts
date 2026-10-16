@@ -21,7 +21,7 @@ cleanupOutdatedCaches()
  * precache keeps serving stale assets. Detect this environment and force
  * skipWaiting so the freshly-synced assets take effect on the next launch.
  *
- * On the web the prompt-style flow (Phase 8 §G) remains: a new SW WAITS
+ * On the web the prompt-style flow applies: a new SW WAITS
  * until the user accepts the in-app update toast (SWUpdatePrompt →
  * `updateServiceWorker()` → workbox-window posts SKIP_WAITING).
  *
@@ -67,7 +67,7 @@ const denySpaShellCaching: WorkboxPlugin = {
   },
 }
 
-// ── Runtime caching (Phase 8 §G) ────────────────────────────────────────────
+// ── Runtime caching ─────────────────────────────────────────────────────────
 // The precache covers `**/*.{js,css,html}` only (vite.config.ts
 // injectManifest); everything below is fetched on demand and far beyond the
 // 4 MB precache budget. All routes are SAME-ORIGIN by construction (origin
@@ -77,9 +77,8 @@ const denySpaShellCaching: WorkboxPlugin = {
 // Every cache name here is enumerated by prefix in @data/wipe.ts
 // APP_CACHE_PREFIXES (the wipe owns CacheStorage cleanup).
 
-// /dict/* (Phase 6 §7.4, PR-11): the compiled CC-CEDICT json (≈15 MB) is
-// cached on first fetch — the DictionaryService import works offline after
-// one online import.
+// /dict/*: the compiled CC-CEDICT json (≈15 MB) is cached on first fetch —
+// the DictionaryService import works offline after one online import.
 registerRoute(
   ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/dict/'),
   new CacheFirst({
@@ -89,8 +88,7 @@ registerRoute(
 )
 
 // /fonts/*: the pinyin overlay TTFs (Versicle Sans Narrow, ~0.9 MB total).
-// Matched by PATH PREFIX so the Phase 8 §I font rename (and any future
-// file) caches transparently.
+// Matched by PATH PREFIX so any font file under /fonts/ caches transparently.
 registerRoute(
   ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/fonts/'),
   new CacheFirst({
@@ -101,9 +99,9 @@ registerRoute(
 
 // /piper/*: the vendored Piper runtime pieces the precache skips — the
 // onnxruntime .wasm builds (~10 MB each, globIgnores) and the phonemizer
-// .data/.wasm blobs. Closes "offline Piper" (phase5 §Follow-ups P8 row):
-// after one online synthesis the runtime loads offline. The HF voice
-// models are CROSS-origin (egress 'hf-piper-models') and never match.
+// .data/.wasm blobs. After one online synthesis the runtime loads offline.
+// The HF voice models are CROSS-origin (egress 'hf-piper-models') and never
+// match.
 registerRoute(
   ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/piper/'),
   new CacheFirst({

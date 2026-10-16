@@ -16,9 +16,9 @@ interface ContentAnalysisReportProps {
 
 export const ContentAnalysisReport: React.FC<ContentAnalysisReportProps> = ({ isOpen, onClose, engine }) => {
     const sections = useContentAnalysisStore(state => state.sections);
-    // Scoped selectors (jank fix): the bare useReaderUIStore() call
-    // re-rendered this panel on every UI-store change (compass, immersive
-    // mode, section title churn) while mounted.
+    // Scoped selectors: a bare useReaderUIStore() call would re-render this
+    // panel on every UI-store change (compass, immersive mode, section title
+    // churn) while mounted.
     const currentBookId = useReaderUIStore(state => state.currentBookId);
     const toc = useReaderUIStore(state => state.toc);
 
@@ -39,11 +39,7 @@ export const ContentAnalysisReport: React.FC<ContentAnalysisReportProps> = ({ is
                 };
             });
 
-        // Sort by something? Maybe section index if we can figure it out.
-        // Or just alphabetical for now, or rely on insert order (not reliable).
-        // Since we don't have playOrder here easily without fetching structure,
-        // we can try to sort by finding index in TOC.
-
+        // Insert order is not meaningful; sortedSections below orders by TOC position.
         return result;
     }, [sections, currentBookId]);
 

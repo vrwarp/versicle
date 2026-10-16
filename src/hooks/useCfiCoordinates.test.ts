@@ -4,11 +4,10 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { ReaderEngine, ReaderEngineEvent, RangeRects } from '@domains/reader/engine/ReaderEngine';
 
 /**
- * Phase 6: the geometry hook consumes the ReaderEngine port
- * (getRangeRects/getOverlayContainer/subscribe) instead of reaching into the
- * rendition. The stub below maps the legacy fixture data (range rects +
- * iframe offsets 10/20) onto the port so every pre-port placement assertion
- * survives unchanged.
+ * The geometry hook consumes the ReaderEngine port
+ * (getRangeRects/getOverlayContainer/subscribe), never the rendition. The
+ * stub below serves fixture range rects and iframe offsets (10/20) through
+ * the port.
  */
 describe('useCfiCoordinates', () => {
   const IFRAME_OFFSET = { top: 10, left: 20 };
@@ -187,8 +186,8 @@ describe('useCfiCoordinates', () => {
   });
 
   /**
-   * perf: the hook used to measure EVERY note CFI on every relocation and
-   * resize tick. `getRangeRects` on a CFI whose section is not rendered still
+   * perf: measuring EVERY note CFI on every relocation and resize tick is
+   * wasteful. `getRangeRects` on a CFI whose section is not rendered still
    * parses a fresh EpubCFI and walks the manager's visible views, only to
    * return null — for a book with hundreds of notes that is hundreds of wasted
    * parses per page turn.

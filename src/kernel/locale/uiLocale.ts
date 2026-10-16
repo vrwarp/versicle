@@ -1,5 +1,5 @@
 /**
- * UI-locale resolution (Phase 8 §F; docs/adr/0001-i18n-strategy.md §3/§4).
+ * UI-locale resolution (docs/adr/0001-i18n-strategy.md §3/§4).
  *
  * THE two-locale rule: the value resolved here governs CHROME — formatter
  * output (kernel/locale/format.ts), collation, `document.documentElement.lang`.

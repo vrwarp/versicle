@@ -5,9 +5,8 @@ import type { DeviceInfo, DeviceProfile } from '~types/device';
 
 /**
  * Replication declaration (aggregated by src/store/registry.ts).
- * Flipped to merge-defaults + scopedDiff in flip wave 1 (phase2-fork-surgery.md
- * §2.6 #3): the registry self-heals — registerCurrentDevice runs every boot.
- * No hydration-fallback canaries existed.
+ * merge-defaults + scopedDiff: the registry self-heals — registerCurrentDevice
+ * runs every boot.
  */
 export const DEVICES_STORE_DEF: SyncedStoreDef<'devices'> = {
     name: 'devices',
@@ -45,9 +44,9 @@ interface DeviceState {
 
     /**
      * Publishes THIS device's rolling daily GenAI spend onto its own synced
-     * record (design §3.4) for the project-wide cross-device quota sum. Writes
-     * ONLY the given device's record via an immutable spread — never clobbers
-     * another device's entry.
+     * record (plan/semantic-search-design.md §3.4) for the project-wide
+     * cross-device quota sum. Writes ONLY the given device's record via an
+     * immutable spread — never clobbers another device's entry.
      *
      * COALESCED (see {@link EMBED_SPEND_RPD_STEP}): the QuotaGovernor calls
      * this on every acquire AND every commit of an embedding request, and each

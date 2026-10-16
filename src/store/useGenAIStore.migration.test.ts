@@ -1,15 +1,15 @@
 /**
- * genai-storage persist-migration suite (Phase 7 §H, PR-A5) — the
- * captured-artifact-fixture standard (master plan §3): a REAL pre-Phase-7
- * v0 blob (spread-partialize era: settings + persisted `logs` carrying full
- * prompts and base64 inlineData + dead `usageStats`) must rehydrate with
- * every setting intact and the logs STRIPPED.
+ * genai-storage persist-migration suite — the captured-artifact-fixture
+ * standard (master plan §3): a REAL v0 blob (spread-partialize era: settings +
+ * persisted `logs` carrying full prompts and base64 inlineData + dead
+ * `usageStats`) must rehydrate with every setting intact and the logs
+ * STRIPPED.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Captured shape of `localStorage['genai-storage']` at the pre-Phase-7 HEAD
- * (partialize spread the whole state; useGenAIStore.ts:105-107 then).
+ * Captured shape of `localStorage['genai-storage']` from the v0 era
+ * (partialize spread the whole state).
  * Trimmed to two representative log entries — one with base64 inlineData
  * (the table-adaptation payload class that blew the localStorage quota).
  */
@@ -143,7 +143,7 @@ describe('genai-storage v0→v1 migration (captured-blob regression)', () => {
     );
     const useGenAIStore = await loadFreshStore();
     expect(useGenAIStore.getState().embeddingModel).toBe('gemini-embedding-2');
-    // The rewritten blob is at v3 and carries the switched model.
+    // The rewritten blob is at the current persist version and carries the switched model.
     useGenAIStore.getState().setEnabled(true);
     const parsed = JSON.parse(localStorage.getItem('genai-storage')!);
     expect(parsed.version).toBe(5);
@@ -306,13 +306,13 @@ describe('genai-storage v4→v5 migration (model rotation on by default)', () =>
 });
 
 /**
- * F8: `logs` is an in-memory ring buffer outside the partialize allowlist, but
+ * `logs` is an in-memory ring buffer outside the partialize allowlist, but
  * zustand persist re-runs partialize + JSON.stringify and calls
- * `localStorage.setItem` SYNCHRONOUSLY after EVERY set — so every log line
- * (GenAI request, embedding request, TTS worker log; many per second during a
- * backfill) committed a byte-identical settings blob to disk. The deduped
- * storage (src/lib/persistStorage.ts) drops the commit when the payload is
- * unchanged; the migration chain above is untouched by it.
+ * `localStorage.setItem` SYNCHRONOUSLY after EVERY set — so without dedup every
+ * log line (GenAI request, embedding request, TTS worker log; many per second
+ * during a backfill) would commit a byte-identical settings blob to disk. The
+ * deduped storage (src/lib/persistStorage.ts) drops the commit when the
+ * payload is unchanged; the migration chain above is untouched by it.
  */
 describe('regression: addLog does not re-persist settings', () => {
   beforeEach(() => {

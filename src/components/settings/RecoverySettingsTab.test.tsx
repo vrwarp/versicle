@@ -23,7 +23,6 @@ describe('RecoverySettingsTab', () => {
 
     it('renders checkpoints when present', () => {
         const checkpoints = [
-            // Using blobs as per new type
             { id: 1, timestamp: 1706900000000, trigger: 'manual', blob: new Uint8Array(), size: 10 },
             { id: 2, timestamp: 1706900100000, trigger: 'sync', blob: new Uint8Array(), size: 20 }
         ];

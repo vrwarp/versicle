@@ -1,17 +1,14 @@
 /**
- * The EpubLibraryDB connection owner (Phase 3, D2 in
- * plan/overhaul/prep/phase3-storage-gateway.md). Absorbs src/db/db.ts and
- * fixes its connection defects (▲18) — all format-free:
+ * The EpubLibraryDB connection owner. Connection hardening, all format-free:
  *
  * - `blocked` / `blocking` / `terminated` are handled. `blocking` closes
  *   this connection so another tab's upgrade can proceed; `terminated`
  *   resets the cached promise so the next call reopens. The data layer
  *   never imports UI — app/boot wires the callbacks via
  *   {@link configureConnectionEvents}.
- * - A failed open no longer bricks DB access until reload: the open is
+ * - A failed open does not brick DB access until reload: the open is
  *   retried (3 attempts, 250 ms backoff) and a rejected promise is evicted
- *   from the cache so a later call can try again (db.ts cached the
- *   rejection forever).
+ *   from the cache so a later call can try again.
  * - `navigator.storage.persist()` is requested once after the first
  *   successful open (fire-and-forget, result logged) so the browser is far
  *   less likely to evict the library under storage pressure.
@@ -56,8 +53,7 @@ let persistRequested = false;
 
 /**
  * Ask the browser to mark this origin's storage as persistent so the
- * library cannot be silently evicted. Once per session, fire-and-forget
- * (D2; surfacing storage.estimate() in settings is P8).
+ * library cannot be silently evicted. Once per session, fire-and-forget.
  */
 function requestPersistentStorageOnce(): void {
   if (persistRequested) return;
@@ -130,7 +126,7 @@ export function getConnection(): Promise<IDBPDatabase<EpubLibraryDB>> {
         return db;
       })
       .catch((error) => {
-        // Reset-on-failure (▲18): only evict OUR promise — a blocking/
+        // Reset-on-failure: only evict OUR promise — a blocking/
         // terminated handler or concurrent close may have replaced it.
         if (dbPromise === promise) dbPromise = null;
         throw error;

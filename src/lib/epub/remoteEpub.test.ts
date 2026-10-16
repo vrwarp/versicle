@@ -1,5 +1,5 @@
 /**
- * RemoteEpubReader fixture matrix: real EPUB ZIPs built in-memory with jszip,
+ * remoteEpub fixture matrix: real EPUB ZIPs built in-memory with jszip,
  * read back through a buffer-backed RangeReader. Covers EPUB2/EPUB3 cover
  * conventions, stored vs deflated entries, ZIP comments, a central directory
  * that straddles the tail window, missing cover, malformed OPF, ZIP64 bail,
@@ -205,10 +205,10 @@ describe('readRemoteEpubPreview', () => {
 });
 
 describe('regression: percent-encoded cover href / cover via XHTML', () => {
-  // The Drive preview used its own cover heuristic (an image whose id/href
-  // says "cover") and looked zip entries up by the raw, percent-encoded
-  // manifest href. Books whose cover lives only in a cover page, or whose
-  // file name needs encoding, previewed with no cover.
+  // The preview resolves covers with the shared structure resolver and looks
+  // zip entries up by the decoded manifest href. Books whose cover lives only
+  // in a cover page, or whose file name needs percent-encoding, must still
+  // preview with a cover.
   const fixture = (name: string) => MALFORMED_EPUB_FIXTURES.find((f) => f.name === name)!;
   const coverBytes = (name: string, zipPath: string) => fixture(name).files[zipPath] as Uint8Array;
 

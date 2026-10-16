@@ -4,9 +4,9 @@ import { TableAdaptationProcessor } from './TableAdaptationProcessor';
 import { contentAnalysisRepository } from '@app/repositories/ContentAnalysisRepository';
 
 // ContentAnalysisRepository.getContentAnalysis is synchronous, but these tests
-// (written when it was async) install async implementations; the processor
-// tolerates the returned promise. Keep runtime behaviour identical and give
-// the mock an async-shaped view of the method for the type checker.
+// install async implementations (the EngineContext port is Promise-returning);
+// the processor tolerates the returned promise. Keep runtime behaviour identical
+// and give the mock an async-shaped view of the method for the type checker.
 const getContentAnalysisAsyncMock = contentAnalysisRepository.getContentAnalysis as unknown as (
     bookId: string,
     sectionId: string,

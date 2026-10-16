@@ -9,11 +9,10 @@
  * The same `WorkerTtsEngine` + `EngineHost` contract is verified in `WorkerTtsEngine.test.ts`
  * over a MessageChannel; here the transport is a real `Worker`.
  *
- * NOTE on adoption: this returns an *async* (Comlink) engine, whereas `getAudioPlayer()` is the
- * synchronous in-process engine. Swapping the app onto the worker means awaiting
- * `createWorkerEngineClient()` once at startup and routing the TtsController through the returned
- * proxy (fire-and-forget calls work unchanged; `subscribe` already returns a Comlink proxy
- * unsubscribe). See PORTING-TO-WORKER.md.
+ * NOTE: this returns an *async* (Comlink) engine, whereas the app talks to the synchronous
+ * `TtsEngine` interface. `getAudioPlayer()` (mainThreadAudioPlayer.ts) bridges the two with
+ * a `WorkerEngineHandle`, which awaits `createWorkerEngineClient()` once and queues
+ * fire-and-forget calls until it resolves. See src/lib/tts/engine/PORTING-TO-WORKER.md.
  */
 import * as Comlink from 'comlink';
 import { installAppErrorTransferHandler } from '@lib/comlinkAppError';
@@ -124,7 +123,7 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
 
     // The real audio backend lives on the main thread; its events are forwarded into the
     // worker. The build-context source is injected HERE (the composition root) — the
-    // manager itself never reads a store (5a-PR3 ctx-passing flip).
+    // manager itself never reads a store.
     const backend = new TTSProviderManager({
         onStart: () => { void engine.dispatchBackendEvent({ type: 'start' }); },
         onEnd: () => { void engine.dispatchBackendEvent({ type: 'end' }); },

@@ -1,14 +1,14 @@
 /**
- * PageTurnRails — the paginated-mode page-turn affordance (compass-pill
- * rework Phase 1). Full-height tap targets at the left/right edges of the
- * reading column that let the compass pill stop moonlighting as a page-turner.
+ * PageTurnRails — the paginated-mode page-turn affordance. Full-height tap
+ * targets at the left/right edges of the reading column, so the compass pill
+ * can stay a pure audio transport instead of doubling as a page-turner.
  *
- * Why this exists: in paginated mode there was no swipe and no tap-zone (the
- * touch handlers in useReaderNavigation are scrolled-mode only), so the pill's
- * tiny corner arrows were the ONLY way to turn a page on a touchscreen. Those
- * arrows then had to flip meaning (page vs section) with TTS state — the
- * confusion this rework removes. The rails give page-turning its own large,
- * always-present, reachable home so the pill can become a pure audio transport.
+ * Why this exists: in paginated mode there is no swipe and no tap-zone (the
+ * touch handlers in useReaderNavigation are scrolled-mode only), so without
+ * the rails the only touchscreen page-turn would be a tiny control on the
+ * pill, whose arrows would have to flip meaning (page vs section) with TTS
+ * state. The rails give page-turning its own large, always-present,
+ * reachable home.
  *
  * Rendered in the PARENT document (not the epub.js iframe), so it never
  * wrestles with iframe event capture, text selection, or RTL coordinate

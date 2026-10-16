@@ -3,14 +3,14 @@
 // Mock implementation of the Web Speech API for e2e tests.
 //
 // The speech "engine" (word-by-word timing that drives start/boundary/end events)
-// runs ON THE MAIN THREAD via setTimeout. It used to live in a Web Worker
-// (public/mock-tts-worker.js), but WebKit's worker<->main postMessage delivery is
-// unreliable in the headless test container: messages (e.g. the 'start' event, or a
-// 'PAUSE') intermittently get dropped or stalled. Because the app's WebSpeechProvider
-// resolves play() on the utterance 'start' event and serialises play/pause through a
-// single task chain, a dropped 'start' wedges the whole TTS sequencer — which is exactly
-// why the audio-bookmarking journey was WebKit-flaky. Running the engine inline removes
-// the worker message channel entirely, so the events fire deterministically.
+// runs ON THE MAIN THREAD via setTimeout, not in a Web Worker: WebKit's worker<->main
+// postMessage delivery is unreliable in the headless test container, so messages
+// (e.g. the 'start' event, or a 'PAUSE') would intermittently get dropped or stalled.
+// Because the app's WebSpeechProvider resolves play() on the utterance 'start' event
+// and serialises play/pause through a single task chain, a dropped 'start' wedges the
+// whole TTS sequencer (and made the audio-bookmarking journey WebKit-flaky). Running the
+// engine inline avoids the worker message channel entirely, so the events fire
+// deterministically.
 
 (function () {
     if (window.__mockTTSLoaded) return;
@@ -23,9 +23,9 @@
 
     // Create debug element
     function ensureDebugElement() {
-        // TOP FRAME ONLY. Playwright init scripts run in every frame, so this
-        // used to inject the fixed-position readout into epub.js's paginated
-        // content iframe as well. There, WebKit resolves the `right: 10px`
+        // TOP FRAME ONLY. Playwright init scripts run in every frame, so without
+        // this guard the fixed-position readout would also be injected into epub.js's
+        // paginated content iframe. There, WebKit resolves the `right: 10px`
         // fixed element against a document whose width epub.js re-derives from
         // scrollWidth on every layout pass — a feedback loop that balloons the
         // rendition by ~97k px per re-layout (thousands of blank columns), so
@@ -97,7 +97,7 @@
                 { name: 'Mock Voice 2', lang: 'en-GB', default: false, localService: true, voiceURI: 'mock-2' }
             ];
 
-            // Main-thread speech engine state (was the Web Worker).
+            // Main-thread speech engine state.
             this._state = 'IDLE'; // IDLE | SPEAKING | PAUSED
             this._queue = [];     // pending utterances
             this._current = null; // { utterance, words: [{word, index}], wordIndex }

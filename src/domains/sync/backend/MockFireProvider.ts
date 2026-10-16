@@ -1,8 +1,7 @@
 /**
  * MockFireProvider
  * 
- * A mock implementation of y-fire's FireProvider for testing.
- * Follows the same pattern as MockDriveProvider.ts.
+ * A mock implementation of y-cinder's FireProvider for testing.
  * 
  * Features:
  * - Stores Yjs updates in localStorage for cross-context persistence
@@ -24,8 +23,7 @@ const logger = createLogger('MockFireProvider');
 // Mock state stored in localStorage
 const MOCK_STORAGE_KEY = 'versicle_mock_firestore_snapshot';
 
-// Re-defining config interface to match usage (FireProviderConfig from y-cinder might differ but we need to match what's passed)
-// The original file used a local interface MockFireProviderConfig.
+// Subset of y-cinder's FireProvider config that this mock honors.
 interface MockFireProviderConfig {
     firebaseApp: unknown;
     ydoc: Y.Doc;
@@ -42,14 +40,13 @@ interface MockStorageData {
 
 /**
  * Event-surface parity with the real y-cinder FireProvider
- * (phase4-sync-strangler.md §D6.2): the real provider emits
+ * (plan/overhaul/prep/phase4-sync-strangler.md §D6.2): the real provider emits
  * `connection-error | sync-failure | save-rejected | corrupted-document`
  * (node_modules/y-cinder/dist/provider.js). The mock mirrors that surface so
  * the C3 contract suite can pin event drift as a red CI, plus `saved` — the
- * save-success event the P4 y-cinder fork delta adds (it powers
- * `lastSyncTime`-from-flush). The mock emits `saved` after every successful
- * snapshot write to localStorage, which is its equivalent of a committed
- * Firestore save.
+ * save-success event (it powers `lastSyncTime`-from-flush). The mock emits
+ * `saved` after every successful snapshot write to localStorage, which is its
+ * equivalent of a committed Firestore save.
  */
 interface MockSaveRejectedEvent {
     code: 'permission-denied' | 'document-too-large' | 'max-retries-exceeded';
@@ -198,10 +195,9 @@ export class MockFireProvider extends ObservableV2<MockFireProviderEvents> {
             };
 
             localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(allData));
-            // Parity with the P4 y-cinder `saved` fork delta: a committed
-            // save announces itself (drives lastSyncTime-from-flush).
+            // Parity with y-cinder's `saved` event: a committed save
+            // announces itself (drives lastSyncTime-from-flush).
             this.emit('saved', [at]);
-            // logger.debug(`Saved snapshot (${snapshot.byteLength} bytes)`);
         } catch (e) {
             logger.error('Failed to save to storage:', e);
         }

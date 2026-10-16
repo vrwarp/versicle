@@ -3,7 +3,7 @@
  *
  * Every reference inside an EPUB (manifest hrefs, nav/NCX links, `<img src>`)
  * is a URL relative to the document that contains it. epub.js only ever
- * resolves against the OPF's directory, which is what broke TOCs whose nav
+ * resolves against the OPF's directory, which misresolves TOCs whose nav
  * document sits in a subfolder. These helpers are the one definition the
  * import pipeline, the live reader and the Drive range reader share.
  *

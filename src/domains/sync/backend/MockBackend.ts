@@ -1,10 +1,7 @@
 /**
- * `MockBackend` — the E2E/dev C3 implementation, absorbing
- * FirestoreSyncManager's `__VERSICLE_MOCK_FIRESTORE__` branches verbatim
- * (FirestoreSyncManager.ts @ fb3dcd3f: validateWorkspaceIsAlive :213-227,
- * performCleanSync mock probe :408-425, createWorkspace :684-690,
- * listWorkspaces :863-867, deleteWorkspace :894-918) plus the
- * MockFireProvider transport.
+ * `MockBackend` — the E2E/dev C3 implementation behind
+ * `__VERSICLE_MOCK_FIRESTORE__`: a localStorage-backed workspace directory and
+ * snapshot store plus the MockFireProvider transport.
  *
  * Selected ONLY at the composition root (src/app/sync/createSync.ts) behind
  * `import.meta.env.DEV || VITE_E2E` + `isMockFirestoreEnabled()` via a

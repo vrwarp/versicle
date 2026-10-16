@@ -27,9 +27,9 @@ interface ReaderUIState {
      * playback session starts. Ephemeral, device-local — never synced.
      */
     followingAudio: boolean;
-    // (The playFromSelection/jumpToLocation callback fields died with
-    // Phase 6 §5a: commands live in the ReaderCommands context/registry —
-    // this store keeps DATA state only.)
+    // (This store keeps DATA state only: reader commands such as
+    // playFromSelection/jumpToLocation live in the ReaderCommands
+    // context/registry.)
 
     setIsLoading: (isLoading: boolean) => void;
     setToc: (toc: NavigationItem[]) => void;
@@ -41,7 +41,7 @@ interface ReaderUIState {
     /**
      * The compass pill's interaction state (see compassMachine.ts). Ephemeral,
      * device-local — never synced via Yjs (its selection payload carries
-     * screen coordinates; the popover-desync hotfix moved that data here).
+     * screen coordinates, which must not replicate to other devices).
      * Mutated exclusively through `dispatchCompass`.
      */
     compass: CompassInteraction;

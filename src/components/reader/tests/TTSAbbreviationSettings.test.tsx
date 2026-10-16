@@ -70,7 +70,7 @@ describe('TTSAbbreviationSettings', () => {
     });
 
     it('handles upload for abbreviations', async () => {
-        // Phase 8 §D: the import flow confirms through the ConfirmDialog.
+        // The import flow confirms through the ConfirmDialog.
         render(<><ConfirmHost /><TTSAbbreviationSettings /></>);
 
         const file = new File(['Abbreviation\nNew1.\nNew2.'], 'test.csv', { type: 'text/csv' });
@@ -98,7 +98,7 @@ describe('TTSAbbreviationSettings', () => {
         const readerInstance = (global as any).__mockFileReader;
         expect(mockReadAsText).toHaveBeenCalledWith(file);
 
-        // Simulate onload (async since Phase 8 §D — it awaits the dialog)
+        // Simulate onload (async — it awaits the dialog)
         readerInstance.result = 'Abbreviation\nNew1.\nNew2.';
         readerInstance.onload({ target: { result: readerInstance.result } });
 

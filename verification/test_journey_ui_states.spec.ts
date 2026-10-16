@@ -1,9 +1,9 @@
 import { test, expect } from "./utils";
 import { resetApp, ensureLibraryWithBook, captureScreenshot, openSettings, gotoSettingsTab } from "./utils";
 
-// Settings became a Radix-Tabs SettingsShell at /settings/:tab. Each tab is a real
-// role="tab" inside the "Settings sections" tablist (testid settings-tab-<id>), no
-// longer a role=button sidebar entry. The content panel heading per tab is unchanged.
+// Settings is a Radix-Tabs SettingsShell at /settings/:tab. Each tab is a real
+// role="tab" inside the "Settings sections" tablist (testid settings-tab-<id>).
+// The content panel heading per tab is asserted below.
 const tabs = [
   { tabId: "General", tabKey: "general", contentText: "Advanced Import" },
   { tabId: "TTS", tabKey: "tts", contentText: "Provider Configuration" },

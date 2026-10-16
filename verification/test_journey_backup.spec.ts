@@ -27,7 +27,7 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   // The reader gear (reader-settings-button) nests Settings under
   // /read/:id/settings, so the reader stays mounted behind the overlay and the
   // Dictionary tab's "Manage Rules" reaches the book-aware Lexicon Manager.
-  // Let the book display first (was a fixed 1s sleep).
+  // Let the book display first.
   await utils.waitForReaderLocated(page);
 
   await page.getByTestId("reader-settings-button").click({ force: true });
@@ -94,8 +94,7 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
 
   // 5. Restore Backup
   // The card leaves before the delete dialog closes (it closes once removeBook
-  // resolves); let it go so its backdrop can't eat the force-click (was a fixed
-  // 500ms sleep).
+  // resolves); let it go so its backdrop can't eat the force-click.
   await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 5000 }).catch(() => {});
   await page.getByTestId("header-settings-button").click({ force: true });
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
@@ -111,8 +110,8 @@ test('Journey Backup & Restore (Light JSON)', async ({ page }) => {
   await page.locator("[data-testid=\"backup-file-input\"]").waitFor({ state: "attached", timeout: 15000 });
   await page.setInputFiles("data-testid=backup-file-input", backupPath);
 
-  // The restore now uses an in-app ConfirmDialog (the old window.confirm() is gone);
-  // confirm the "merge data" prompt before the restore proceeds.
+  // The restore uses an in-app ConfirmDialog; confirm the "merge data" prompt
+  // before the restore proceeds.
   await utils.acceptConfirm(page);
 
   // Wait for reload
@@ -180,7 +179,7 @@ test('Journey Full Backup & Restore (ZIP)', async ({ page }) => {
   await expect(bookCard).not.toBeVisible({ timeout: 5000 });
 
   // 4. Restore Backup
-  // Let the delete dialog close first (was a fixed 500ms sleep; see test above).
+  // Let the delete dialog close first (see test above).
   await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 5000 }).catch(() => {});
   await page.getByTestId("header-settings-button").click({ force: true });
   await expect(page.getByRole("dialog")).toBeVisible({ timeout: 10000 });
@@ -197,7 +196,7 @@ test('Journey Full Backup & Restore (ZIP)', async ({ page }) => {
   await page.locator("[data-testid=\"backup-file-input\"]").waitFor({ state: "attached", timeout: 15000 });
   await page.setInputFiles("data-testid=backup-file-input", backupPath);
 
-  // Restore uses an in-app ConfirmDialog now (native window.confirm() removed).
+  // Restore uses an in-app ConfirmDialog.
   await utils.acceptConfirm(page);
 
   // Wait for reload

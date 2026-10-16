@@ -1,6 +1,6 @@
 /**
- * Typed embedding errors (Increment C §1; append-only GENAI_* code, mirrors
- * errors.ts:7 GenAINotConfiguredError).
+ * Typed embedding errors (append-only GENAI_* code; mirrors
+ * GenAINotConfiguredError in ../errors.ts).
  */
 import { AppError } from '~types/errors';
 

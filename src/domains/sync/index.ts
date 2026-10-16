@@ -2,10 +2,9 @@
  * `domains/sync` published surface (master plan §2 geography; boundary
  * rule 3: other domains import only this index).
  *
- * P4 lands this domain incrementally: the C3 backend seam (P4-2), the
- * SyncEvent bus (P4-3a), and the orchestrator decomposition (P4-3 —
- * AuthSession/ProviderConnection/WorkspaceService/SyncOrchestrator over
- * injected ports; FirestoreSyncManager is deleted). The ONE production
+ * The domain comprises the C3 backend seam, the SyncEvent bus, and the
+ * orchestrator decomposition (AuthSession/ProviderConnection/
+ * WorkspaceService/SyncOrchestrator over injected ports). The ONE production
  * orchestrator instance is composed by src/app/sync/createSync.ts, which
  * injects the store-backed ports (boundary: domains/ holds no store
  * imports — depcruise `domains-no-store`). MockBackend is deliberately NOT
@@ -46,7 +45,6 @@ export { downloadWorkspaceState } from './core/downloadWorkspaceState';
 export type { DownloadWorkspaceStateOptions } from './core/downloadWorkspaceState';
 export { getSyncEventBus } from './events';
 export type { SyncEvent, SyncEventBus } from './events';
-// Phase 8 §D: the rules-lockout COPY moved into the typed catalog
-// (kernel/locale/messages.ts, 'sync.rulesOutOfDate') — the transport keeps
-// only the DETECTION predicate.
+// The rules-lockout COPY lives in the typed catalog (kernel/locale/messages.ts,
+// 'sync.rulesOutOfDate') — the transport keeps only the DETECTION predicate.
 export { isPermissionDeniedEvent } from './backend/permissionDenied';

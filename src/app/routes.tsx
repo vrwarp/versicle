@@ -1,24 +1,24 @@
 /**
- * The route tree (Phase 8 §A). Defined at module scope so the router is
- * created once, never per render.
+ * The route tree. Defined at module scope so the router is created once,
+ * never per render.
  *
  * Route map:
  *   /                → LibraryView (EAGER — the boot surface)
  *   /notes           → LibraryView in notes context (GlobalNotesView itself
- *                      is lazy inside LibraryView; replaces the synced
- *                      `activeContext` preference switch, §J)
+ *                      is lazy inside LibraryView; the view context is route
+ *                      state, not a synced preference)
+ *   /search          → LibraryView in search context (the global semantic
+ *                      search view, lazy inside LibraryView)
  *   /drive           → LibraryView in Drive context (the Drive shelf, lazy
- *                      inside LibraryView — the promoted DriveImportDialog;
- *                      the import dialog's "Google Drive" choice navigates
- *                      here instead of opening a modal)
+ *                      inside LibraryView; the import dialog's "Google Drive"
+ *                      choice navigates here instead of opening a modal)
  *   /read/:id        → ReaderShell, React.lazy (pulls epubjs out of the
  *                      entry chunk — asserted by check 4 of
  *                      scripts/check-worker-chunk.mjs)
  *   /settings/:tab?  → SettingsShell over the library (URL-addressable
- *                      overlay; the registry-driven replacement for
- *                      GlobalSettingsDialog, §B). Closing = history back,
- *                      so hardware/browser back "closes the dialog" with
- *                      no dedicated guard.
+ *                      overlay; registry-driven, see ./settings/registry.ts).
+ *                      Closing = history back, so hardware/browser back
+ *                      "closes the dialog" with no dedicated guard.
  *   /read/:id/settings/:tab? → the SAME SettingsShell, but nested under the
  *                      reader so opening settings from a book does NOT unmount
  *                      ReaderShell (the book stays live behind the overlay and

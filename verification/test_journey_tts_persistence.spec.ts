@@ -38,9 +38,8 @@ test("journey tts persistence", async ({ page }) => {
   await btn.click();
   await expect(btn).toHaveAttribute("aria-label", "Play");
 
-  // The fixed waits this journey used to take also let the debounced writes
-  // (reading position window, TTS session cache, y-idb) land before the reload;
-  // flush them deterministically instead.
+  // Flush the debounced writes (reading position window, TTS session cache,
+  // y-idb) so they land before the reload.
   await waitForPersistedWrites(page);
 
   // 8. Refresh

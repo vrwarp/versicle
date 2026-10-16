@@ -70,7 +70,7 @@ export function deriveChapterTitle(doc: ParentNode, bodyText: string, index: num
 
 /**
  * The extraction loop yields to the event loop only after it has held the
- * main thread for longer than a frame — a fixed per-chapter sleep added
+ * main thread for longer than a frame — a fixed per-chapter sleep would add
  * seconds to a large book for no benefit.
  */
 export const YIELD_AFTER_MS = 16;

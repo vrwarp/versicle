@@ -1,9 +1,6 @@
 /**
- * Locale-aware formatters (Phase 8 §F) — the ONE home for user-facing
- * date/time/number formatting, replacing the ad-hoc `toLocale*` call
- * sites, the three hand-rolled relative-time implementations
- * (DeviceList/DriveImportDialog/SyncPulseIndicator) and the duplicated
- * byte-size/duration formatters (gap report I18N-4/5/6/10).
+ * Locale-aware formatters — the ONE home for user-facing date/time/number
+ * formatting.
  *
  * All formatters resolve the UI locale via {@link getUILocale}
  * (kernel/locale/uiLocale.ts — the two-locale rule: these take the UI
@@ -17,7 +14,7 @@
  * call sites.
  *
  * Lint: `toLocale*` calls are banned outside this directory
- * (eslint no-restricted-syntax, Phase 8).
+ * (eslint no-restricted-syntax).
  */
 import { getUILocale, onUILocaleChange } from './uiLocale';
 
@@ -62,7 +59,7 @@ function toDate(input: DateInput): Date {
   return input instanceof Date ? input : new Date(input);
 }
 
-/** Date only — `6/12/2026` (en-US). The `toLocaleDateString()` replacement. */
+/** Date only — `6/12/26` (en-US). */
 export function formatDate(input: DateInput, locale?: string): string {
   return dateTimeFormat({ dateStyle: 'short' }, locale).format(toDate(input));
 }
@@ -78,9 +75,8 @@ export function formatDateTime(input: DateInput, locale?: string): string {
 }
 
 /**
- * Relative time for a past (or future) timestamp — `5 min. ago`, `2 hr.
- * ago`, `now` (en). Falls back to {@link formatDate} beyond 7 days, like
- * every hand-rolled implementation it replaces did.
+ * Relative time for a past (or future) timestamp — `5m ago`, `3h ago`,
+ * `now` (en). Falls back to {@link formatDate} beyond 7 days.
  */
 export function formatRelativeTime(timestamp: number, nowMs: number = Date.now(), locale?: string): string {
   const loc = locale ?? getUILocale();
@@ -106,9 +102,8 @@ export function formatRelativeTime(timestamp: number, nowMs: number = Date.now()
 const BYTE_UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte'] as const;
 
 /**
- * Human byte size via Intl unit formatting — `1.2 MB`, `512 KB` (en).
- * Binary-1024 scaling, one decimal at most (matching the five formatters
- * it replaces).
+ * Human byte size via Intl unit formatting — `1.5 MB`, `2 kB` (en).
+ * Binary-1024 scaling, one decimal at most.
  */
 export function formatBytes(bytes: number, locale?: string): string {
   const abs = Math.abs(bytes);
@@ -132,7 +127,6 @@ export function formatPercent(ratio: number, locale?: string): string {
 
 /**
  * Duration from minutes — `2h 5m` / `12m` (en), via Intl unit parts.
- * Replaces the duplicated BookCard/BookListItem reading-time renderers.
  */
 export function formatDuration(totalMinutes: number, locale?: string): string {
   const minutes = Math.max(0, Math.round(totalMinutes));
@@ -146,10 +140,9 @@ export function formatDuration(totalMinutes: number, locale?: string): string {
 
 /**
  * Title comparator for sorted lists — cached `Intl.Collator` with numeric
- * collation ("Book 2" before "Book 10"), replacing the bare
- * `localeCompare` sorts (I18N-10). UI locale on purpose: per the
+ * collation ("Book 2" before "Book 10"). UI locale on purpose: per the
  * two-locale rule this does NOT switch to pinyin collation by
- * `book.language` (recorded ADR consequence).
+ * `book.language` (ADR §4).
  */
 export function compareTitles(a: string, b: string, locale?: string): number {
   const loc = locale ?? getUILocale();

@@ -92,9 +92,6 @@ test("tts cross chapter transition", async ({ page }) => {
 });
 
 test("tts chapter navigation during playback", async ({ page }) => {
-  // Previously WebKit-skipped (TOC sidebar render bug + TTS queue/IDB-hang timing). Now
-  // passes after the IndexedDB hang fixes (Yjs persistence throttle + hang-safe
-  // cache_session_state writes) and the main-thread mock TTS stabilised WebKit playback.
   console.log("Starting Chapter Navigation During Playback Test...");
   await resetApp(page);
   await ensureLibraryWithBook(page);

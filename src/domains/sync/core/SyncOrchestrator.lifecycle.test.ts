@@ -3,11 +3,11 @@
  *
  * SyncOrchestrator.test.ts drives the orchestrator through the REAL
  * FirestoreBackend with a mocked firestore SDK; the characterization and
- * quarantine suites pin the legacy-parity flows. This file replaces the
- * backend with a scripted double so each decision on the connect path can
- * be isolated: the enablement gate, smart routing, the tombstone
- * pre-flight, both pre-attach quarantine layers, the reconnect-on-app-swap
- * rule, the metadata stamp, and the clean-sync fork.
+ * quarantine suites pin the end-to-end flows over the mock backend. This
+ * file replaces the backend with a scripted double so each decision on the
+ * connect path can be isolated: the enablement gate, smart routing, the
+ * tombstone pre-flight, both pre-attach quarantine layers, the
+ * reconnect-on-app-swap rule, the metadata stamp, and the clean-sync fork.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';

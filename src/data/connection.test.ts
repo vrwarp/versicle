@@ -1,17 +1,14 @@
 /**
- * Connection-hardening suite (P3-4, design D2 in
- * plan/overhaul/prep/phase3-storage-gateway.md):
+ * Connection-hardening suite:
  *
- * - schema parity: the exact store set at the current version (v25 since
- *   P3-13; the store SET is unchanged from v24 — v25 added an index and
- *   repurposed app_metadata, pinned by migrations.test.ts);
- * - open retry + reset-on-failure (▲18: db.ts cached a rejected dbPromise
- *   forever — one transient failure bricked DB access until reload);
+ * - schema parity: the exact store set at the current version;
+ * - open retry + reset-on-failure (a rejected dbPromise must not stay cached
+ *   forever, or one transient failure bricks DB access until reload);
  * - navigator.storage.persist() requested once after first success;
- * - multi-connection blocked/blocking handling (the P3-4 exit gate): the
- *   current-version holder gets onBlocking and closes so a newer-version
- *   open can proceed; the new opener sees `blocked` first. (The shipping
- *   v24→v25 two-tab upgrade is pinned in migrations.test.ts M.5.)
+ * - multi-connection blocked/blocking handling: the current-version holder
+ *   gets onBlocking and closes so a newer-version open can proceed; the new
+ *   opener sees `blocked` first. (The shipping v24→v25 two-tab upgrade is
+ *   pinned in migrations.test.ts M.5.)
  *
  * NOTE: this suite mutates module-level connection state, so every test
  * leaves the database deleted and the cache reset (vitest isolates files,
@@ -135,7 +132,7 @@ describe('open retry + reset-on-failure (▲18)', () => {
     installFailingFactory(Number.POSITIVE_INFINITY);
     await expect(getConnection()).rejects.toThrow('Simulated transient open failure');
 
-    // The defect this pins: db.ts cached that rejection forever. Restoring
+    // The defect this pins: caching the rejected promise forever. Restoring
     // a healthy factory, the very next call must succeed.
     Object.defineProperty(globalThis, 'indexedDB', { value: realIndexedDB, configurable: true });
     const db = await getConnection();

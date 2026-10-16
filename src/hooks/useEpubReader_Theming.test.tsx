@@ -1,12 +1,11 @@
 /**
- * Theme-change reflow semantics (Phase 6 PR-4 / D5,
- * prep/phase6-reader-engine.md §2b "Theming semantics").
+ * Theme-change reflow semantics.
  *
- * The legacy settings effect called `flow()` + `display(currentLoc)` on
- * EVERY input change — a theme/font tweak reflowed the book and fired a
- * spurious relocation event (which feeds the session recorder). D5: the
- * reflow happens ONLY when the view mode actually changed. This suite pins
- * the hook-level behavior; epubTheming.test.ts pins the module parameter.
+ * Calling `flow()` + `display(currentLoc)` on every input change would make
+ * a theme/font tweak reflow the book and fire a spurious relocation event
+ * (which feeds the session recorder). The reflow happens ONLY when the view
+ * mode actually changed. This suite pins the hook-level behavior;
+ * epubTheming.test.ts pins the module parameter.
  */
 import React, { useEffect, useRef } from 'react';
 import { render, waitFor, act } from '@testing-library/react';
@@ -148,7 +147,7 @@ describe('regression: theme change does not reflow (D5)', () => {
 /**
  * The app hands this hook a LIVE library projection: `useBook` returns a new
  * object on every progress write (every page turn, every TTS sentence), and
- * the metadata effect used to `setMetadata` it unconditionally — committing a
+ * an unconditional `setMetadata` in the metadata effect would commit a
  * SECOND full render pass of the host (the whole reader tree, none of which is
  * memoized) for fields the hook never reads.
  */

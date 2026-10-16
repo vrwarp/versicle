@@ -1,11 +1,8 @@
 /**
  * ProviderDescriptor registry — the single source of truth for TTS providers
- * (Phase 5a, plan/overhaul/prep/phase5-tts-strangler.md §5a.1).
+ * (design: plan/overhaul/prep/phase5-tts-strangler.md §5a.1).
  *
- * Everything previously hand-maintained across six sites (the union re-declared in
- * `useTTSStore`, the construction switch in `providerFactory`, the hardcoded items and
- * aliases in `TTSSettingsTab`, the magic `'local'` fallback key in `TTSProviderManager`,
- * the `as any` piper capability probing) derives from {@link PROVIDERS}:
+ * Everything provider-shaped derives from {@link PROVIDERS}:
  *
  *  - the provider-id unions ({@link RegisteredProviderId}, {@link TTSProviderId},
  *    {@link TTSApiKeyProviderId}),
@@ -13,18 +10,17 @@
  *    {@link ProviderBuildContext} — no store reach-ins from this module),
  *  - the settings UI ({@link selectableProviders}), and
  *  - capability routing ({@link asVoiceDownloadable}, {@link asLocaleAware} — descriptor-
- *    driven type guards replacing `provider.id === 'piper' … as any`).
+ *    driven type guards, not `provider.id === 'piper' … as any` probing).
  *
- * Speed/pitch are deliberately NOT capabilities: the P0 speed policy (synthesize at 1.0,
+ * Speed/pitch are deliberately NOT capabilities: the speed policy (synthesize at 1.0,
  * playback rate applied at the audio sink, speed-free cache key) is the law of the tree —
  * no `synthesisSpeed` capability exists because no provider may opt out of it.
  *
- * The `'local'` id: the PERSISTED id split landed with the 5b settings-store migration —
- * `tts-settings` carries 'webspeech'/'capacitor' and the settings UI surfaces the device
- * entry under its real id. `'local'` survives only as an accepted legacy alias on the
- * engine command path (the manager's fallback key and any pre-split id still in flight),
- * resolved per platform by {@link resolveDescriptor}; both device provider INSTANCES still
- * claim `id = 'local'` (instance-id rename rides the 5b-PR4 decomposition).
+ * The `'local'` id: the PERSISTED id is the real device id — `tts-settings` carries
+ * 'webspeech'/'capacitor' and the settings UI surfaces the device entry under it.
+ * `'local'` survives only as an accepted alias on the engine command path (the engine's
+ * fallback key and any legacy persisted id), resolved per platform by
+ * {@link resolveDescriptor}; both device provider INSTANCES still report `id = 'local'`.
  *
  * Main-thread only (provider classes wrap speechSynthesis / Capacitor / cloud fetch +
  * audio). The worker engine never imports this module — provider ids cross the boundary
@@ -51,7 +47,7 @@ export interface ProviderBuildContext {
     language: string;
     /**
      * The shared audio-output device for providers that play synthesized blobs.
-     * ONE sink, owned and injected by `TTSProviderManager` (5a-PR2) so swapped-in
+     * ONE sink, owned and injected by `TTSProviderManager` so swapped-in
      * providers reuse the same `HTMLAudioElement` instead of leaking one each.
      * Optional only for direct construction in tests; the manager always passes it.
      */
@@ -61,7 +57,7 @@ export interface ProviderBuildContext {
 type ProviderKind = 'device' | 'wasm' | 'cloud';
 
 export interface ProviderDescriptor {
-    /** Stable provider id ('local' stays an alias for the device pair until 5b). */
+    /** Stable provider id ('local' is accepted as an alias for the device pair; see {@link resolveDescriptor}). */
     readonly id: string;
     readonly displayName: string;
     readonly kind: ProviderKind;
@@ -135,15 +131,15 @@ export const PROVIDERS = [
     },
 ] as const satisfies readonly ProviderDescriptor[];
 
-/** Every registered descriptor id (the post-5b id space, incl. webspeech/capacitor). */
+/** Every registered descriptor id (incl. the device ids webspeech/capacitor). */
 type RegisteredProviderId = (typeof PROVIDERS)[number]['id'];
 
 /**
  * The PERSISTED provider-id union (`useTTSSettingsStore.providerId`, settings UI
- * values). Since the 5b `tts-settings` migration this is the full registered id
- * space — the device pair persists as 'webspeech'/'capacitor'. The legacy
- * `'local'` value is mapped per platform by the migration and remains accepted
- * (alias) by {@link resolveDescriptor}.
+ * values). This is the full registered id space — the device pair persists as
+ * 'webspeech'/'capacitor'. A legacy persisted `'local'` value is mapped per
+ * platform by the settings-store migration and remains accepted (alias) by
+ * {@link resolveDescriptor}.
  */
 export type TTSProviderId = RegisteredProviderId;
 
@@ -169,8 +165,7 @@ function deviceDescriptor(platform: Platform): ProviderDescriptor {
 
 /**
  * Resolve a provider id (persisted `'local'` alias included) to its descriptor.
- * Unknown ids fall back to the platform device provider — the pre-registry
- * `providerFactory` default branch, preserved verbatim.
+ * Unknown ids fall back to the platform device provider.
  */
 export function resolveDescriptor(providerId: string, platform: Platform = currentPlatform()): ProviderDescriptor {
     if (providerId === 'local') return deviceDescriptor(platform);
@@ -179,8 +174,8 @@ export function resolveDescriptor(providerId: string, platform: Platform = curre
 
 /**
  * Descriptor lookup for a LIVE provider instance (capability guards). Both device
- * providers report `id === 'local'` until the 5b id split, so the alias resolves per
- * platform — harmless for guards because the device pair's capabilities are identical.
+ * provider instances report `id === 'local'`, so the alias resolves per platform —
+ * harmless for guards because the device pair's capabilities are identical.
  */
 function descriptorForInstance(provider: ITTSProvider): ProviderDescriptor | undefined {
     if (provider.id === 'local') return deviceDescriptor(currentPlatform());
@@ -189,7 +184,7 @@ function descriptorForInstance(provider: ITTSProvider): ProviderDescriptor | und
 
 /** What the settings UI renders for one provider choice. */
 export interface ProviderOption {
-    /** The persisted id (the device entry surfaces under the `'local'` alias). */
+    /** The persisted id (the device entry surfaces under its real id, never the `'local'` alias). */
     readonly id: TTSProviderId;
     readonly displayName: string;
     readonly kind: ProviderKind;
@@ -200,7 +195,7 @@ export interface ProviderOption {
 
 /**
  * The provider choices for the settings UI on the given platform, in stable UI order:
- * the platform's device provider (under its REAL post-split id), then every
+ * the platform's device provider (under its REAL id, not the `'local'` alias), then every
  * non-device descriptor available on that platform.
  */
 export function selectableProviders(platform: Platform = currentPlatform()): ProviderOption[] {
@@ -225,7 +220,7 @@ function optionFields(d: ProviderDescriptor): Omit<ProviderOption, 'id'> {
 }
 
 // ---------------------------------------------------------------------------
-// Capability interfaces + descriptor-driven type guards (S12: no `as any`).
+// Capability interfaces + descriptor-driven type guards (no `as any`).
 // ---------------------------------------------------------------------------
 
 /** Providers whose voices are downloaded artifacts (Piper models). */

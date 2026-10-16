@@ -1,8 +1,8 @@
 /**
- * SectionQueueBuilder suite (Phase 5c; phase5-tts-strangler.md §5c.2).
- * Carries the surviving assertions of the deleted AudioContentPipeline
- * loadSection/Bible suites as named regression blocks (absorption ledger
- * row 17) — rewritten against the PURE builder: no ports, no mocks.
+ * SectionQueueBuilder suite. Carries the surviving assertions of the deleted
+ * AudioContentPipeline loadSection/Bible suites as named regression blocks
+ * (absorption ledger row 17) — written against the PURE builder: no ports,
+ * no mocks.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { buildSectionQueue, generatePreroll } from './SectionQueueBuilder';
@@ -113,10 +113,9 @@ describe('empty-section filler is deterministic and language-keyed (5c-PR2; i18n
 });
 
 describe('regression: AudioContentPipeline_Bible', () => {
-    // The deleted suite asserted which abbreviation set reached
-    // TextSegmenter.refineSegments. That decision is now the composition of
-    // resolveBiblePreference (per-book pref vs global flag) and the async
-    // AbbreviationMerger (lazy Bible JSON since 5c-PR3); the builder hands
+    // Which abbreviation set reaches TextSegmenter.refineSegments is the
+    // composition of resolveBiblePreference (per-book pref vs global flag) and
+    // the async AbbreviationMerger (lazy Bible JSON); the builder hands
     // settings.abbreviations through verbatim (pinned via a refineSegments spy).
     let BIBLE_ABBREVIATIONS: string[] = [];
     beforeAll(async () => {

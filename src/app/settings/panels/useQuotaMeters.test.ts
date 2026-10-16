@@ -53,10 +53,10 @@ describe('useQuotaMeters', () => {
   });
 
   /**
-   * The poll built a fresh meters object every second whether or not a single
-   * number had moved, so GenAIPanel re-rendered — and with it the ~900-line
-   * GenAISettingsTab (every meter bar in it), which is an unmemoized child.
-   * That is the render the bail-out removes. The tab keeps its OWN 1 s
+   * A poll that built a fresh meters object every second, whether or not a
+   * single number had moved, would re-render GenAIPanel — and with it the
+   * ~900-line GenAISettingsTab (every meter bar in it), which is an unmemoized
+   * child. That is the render the bail-out removes. The tab keeps its OWN 1 s
    * `setTick` interval and still commits once a second, so what this buys is
    * one tab render a second instead of two, not an idle tab.
    */

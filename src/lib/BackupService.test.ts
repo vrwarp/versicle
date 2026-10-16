@@ -60,7 +60,7 @@ vi.mock('@store/yjs-provider', async (importOriginal) => {
 });
 
 // Mock the bookContent repo (the static/locations read+write surface the
-// backup path uses since the P3-8 carve)
+// backup path uses)
 vi.mock('@data/repos/bookContent', () => ({
   bookContent: {
     listManifests: vi.fn(),
@@ -107,14 +107,14 @@ vi.mock('@store/useAnnotationStore', () => ({
 }));
 
 /**
- * uint8ArrayToBase64 built its output with a per-byte `binary +=
- * String.fromCharCode(b)` — measured ~74 ms/MB, so a library with a few
- * hundred covers spent well over a second blocking the main thread inside
- * generateManifest. The chunked helpers must produce byte-identical output.
+ * A per-byte `binary += String.fromCharCode(b)` encoder measures ~74 ms/MB, so
+ * a library with a few hundred covers would spend well over a second blocking
+ * the main thread inside generateManifest. The chunked helpers must produce
+ * byte-identical output.
  */
 describe('regression: base64 helpers are chunked', () => {
   const service = new BackupService();
-  /** The pre-fix implementation, verbatim, as the oracle. */
+  /** The naive per-byte implementation, as the oracle. */
   const referenceEncode = (bytes: Uint8Array): string => {
     let binary = '';
     for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
@@ -171,16 +171,16 @@ describe('regression: base64 helpers are chunked', () => {
   });
 
   /*
-   * Absolute guard rail only. There used to be a RATIO assertion here
-   * (`chunkedMs * 2 < referenceMs`) comparing this implementation against the
-   * reference one in the same run. It does not belong in `npm test`, which is
-   * a required PR gate: both sides pay the decode cost, which this change
-   * barely touches, so the measured gap is a good deal smaller than the
-   * encode-only gap it was meant to express, and on an idle machine here the
-   * reference side alone swung between 271 ms and 516 ms across identical
-   * runs. Under CI contention a relative wall-clock comparison can invert.
-   * The oracle-equivalence tests above are what actually pin the behaviour;
-   * this one only catches a catastrophic blow-up.
+   * Absolute guard rail only — deliberately NOT a RATIO assertion
+   * (`chunkedMs * 2 < referenceMs`) against the reference implementation in
+   * the same run. That does not belong in `npm test`, which is a required PR
+   * gate: both sides pay the decode cost, which chunking barely touches, so
+   * the measured gap is a good deal smaller than the encode-only gap it would
+   * express, and on an idle machine the reference side alone swung between
+   * 271 ms and 516 ms across identical runs. Under CI contention a relative
+   * wall-clock comparison can invert. The oracle-equivalence tests above are
+   * what actually pin the behaviour; this one only catches a catastrophic
+   * blow-up.
    */
   it('stays far under a generous wall-clock budget', () => {
     const bytes = randomBytes(4 * 1024 * 1024);
@@ -197,10 +197,11 @@ describe('regression: base64 helpers are chunked', () => {
 });
 
 /**
- * createFullBackup used to call `zip.generateAsync({ type: 'blob' })`, which
- * accumulates every chunk, concatenates them into one Uint8Array, converts
- * that to an ArrayBuffer and only then builds the Blob — three copies of the
- * whole library in memory at once (five on native, where export base64s it).
+ * `zip.generateAsync({ type: 'blob' })` accumulates every chunk, concatenates
+ * them into one Uint8Array, converts that to an ArrayBuffer and only then
+ * builds the Blob — three copies of the whole library in memory at once (five
+ * on native, where export base64s it). createFullBackup streams the chunks
+ * into the Blob instead.
  */
 describe('regression: full backup streams instead of accumulating', () => {
   let service: BackupService;

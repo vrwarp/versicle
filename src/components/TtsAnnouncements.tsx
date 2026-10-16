@@ -8,10 +8,10 @@ import { announce } from '@kernel/locale/announcer';
 const SECTION_ANNOUNCE_DEBOUNCE_MS = 1000;
 
 /**
- * TTS playback announcements for screen-reader users (Phase 8 §D, a11y
- * item 2): a headless adapter that subscribes to the playback store and
- * announces STATE TRANSITIONS — "Playing — {section}", "Paused",
- * "Stopped" — plus debounced section changes while playing.
+ * TTS playback announcements for screen-reader users: a headless adapter
+ * that subscribes to the playback store and announces STATE TRANSITIONS —
+ * "Playing — {section}", "Paused", "Stopped" — plus debounced section
+ * changes while playing.
  *
  * NEVER per-sentence by construction: the subscription reads only
  * `status` (and the current section title); `currentIndex`/`activeCfi`

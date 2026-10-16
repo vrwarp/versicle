@@ -1,27 +1,22 @@
 /**
- * GoogleAuthClient (Phase 7 §G) — ONE class wrapping @capgo SocialLogin.
- *
- * Replaces the GoogleIntegrationManager + Web/Android strategy pair (the two
- * strategies were ~95% identical with signature drift — GG-6; platform
- * differences are constructor options now). Each design point reverses a
- * verified critical:
+ * GoogleAuthClient — ONE class wrapping @capgo SocialLogin; platform
+ * differences are constructor options (GG-6). Design points:
  *
  *  - Per-service token map with scope-superset validation on cache hits
- *    (GG-1: one accessToken/expiration instance pair served ALL scopes).
+ *    (GG-1), so a token cached for one service never serves another's scopes.
  *  - Strict interactive/silent split (GG-2): `connect()` may open UI;
  *    `getToken()` NEVER does — it throws typed GoogleAuthRequiredError so
  *    background flows show a reconnect affordance instead of popping blocked
  *    login UI or force-disconnecting.
- *  - NO auto-disconnect on token errors (the old manager force-disconnected
- *    on ANY failure, GG-2/GG-7): persisted connection state is cleared only
- *    by explicit `disconnect()` — popup-block/offline/5xx leave it alone.
- *    The persisted `connectedServices` list is demoted to a "has connected
- *    before" HINT (reconnect-vs-first-connect copy), never an authorization
- *    claim.
- *  - Login hint injected via `getLoginHint` (severs the lib→sync-store
- *    import, GG-12); `connect()` returns the FULL credential including
- *    idToken so auth-helper can consume `connect('identity')` instead of its
- *    parallel SocialLogin.login path (GG-13).
+ *  - NO auto-disconnect on token errors (GG-2/GG-7): persisted connection
+ *    state is cleared only by explicit `disconnect()` — popup-block/offline/5xx
+ *    leave it alone. The persisted `connectedServices` list is a "has
+ *    connected before" HINT (reconnect-vs-first-connect copy), never an
+ *    authorization claim.
+ *  - Login hint injected via `getLoginHint` (keeps this module free of a
+ *    sync-store import, GG-12); `connect()` returns the FULL credential
+ *    including idToken so auth-helper consumes `connect('identity')` rather
+ *    than driving SocialLogin.login itself (GG-13).
  *
  * No store imports (domains-no-store is at error): connection-state mirrors
  * are injected `hooks`, wired at the composition root
@@ -39,10 +34,7 @@ export interface GoogleCredential {
   scopes: readonly string[];
 }
 
-/**
- * Google access tokens live 3600s; refresh 10 minutes early (the constant
- * the strategies used since the beginning).
- */
+/** Google access tokens live 3600s; refresh 10 minutes early. */
 const TOKEN_TTL_MS = 50 * 60 * 1000;
 
 export interface GoogleAuthClientOptions {
@@ -133,8 +125,8 @@ export class GoogleAuthClient {
 
   /**
    * Convenience for user-gesture call sites: silent token when cached,
-   * interactive connect otherwise (today's popup-on-demand UX, made
-   * explicit). Background flows must use getToken().
+   * interactive connect otherwise (popup-on-demand UX). Background flows
+   * must use getToken().
    */
   async getTokenInteractive(serviceId: GoogleServiceId): Promise<string> {
     try {

@@ -1,5 +1,5 @@
 /**
- * Settings panel registry (Phase 8 §B) — the store-registry pattern
+ * Settings panel registry — the store-registry pattern
  * (src/store/registry.ts) applied to the settings surface: declarative
  * descriptors, lazy `load()` per panel (React.lazy source), ONE place that
  * knows the tab set. `SettingsShell` renders the whole surface from this

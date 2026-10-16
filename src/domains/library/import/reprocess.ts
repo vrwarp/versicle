@@ -1,17 +1,14 @@
 /**
- * Reprocess a book's DERIVED content from its stored binary (Phase 7 PR-L1
- * — the third `extractBookData` copy from `lib/ingestion.ts`, now expressed
- * over the shared preamble + `mapChapters`).
+ * Reprocess a book's DERIVED content from its stored binary, expressed over
+ * the shared preamble + `mapChapters`.
  *
  * Pure of stores: returns the palette delta for the caller to apply to the
- * synced inventory (`lib/ingestion.reprocessBook` keeps that store write for
- * its frozen reader-side consumers; the ImportOrchestrator routes
- * `reprocess` jobs here under the book's mutex).
+ * synced inventory (the ImportOrchestrator routes `reprocess` jobs here under
+ * the book's mutex and writes the delta to the inventory).
  *
  * The WebKit-safe write discipline (Blob → ArrayBuffer conversion before the
  * transaction; reads hoisted out; one synchronous gated transaction) lives
- * in `bookContent.replaceDerivedContent` — the repo absorbed the raw
- * 4-store transaction in Phase 3 (D5.3).
+ * in `bookContent.replaceDerivedContent`.
  */
 import { bookContent } from '@data/repos/bookContent';
 import type { CacheTtsPreparationRow } from '@data/rows/cache';
@@ -26,7 +23,7 @@ export interface ReprocessResult {
   /** Set when the cover palette was re-extracted — apply to the synced inventory. */
   coverPalette?: number[];
   perceptualPalette?: PerceptualPalette;
-  /** Fresh search corpus for the searchText repo (persisted from PR-S3 on). */
+  /** Fresh search corpus for the searchText repo (persisted by `LibraryPersistence.reprocess`). */
   searchText: BookSearchText;
 }
 
@@ -34,8 +31,8 @@ export interface ReprocessOptions {
   extraction?: ExtractionOptions;
   signal?: AbortSignal;
   /**
-   * The §E re-ingest self-check (graft R4): inspects the OLD rows vs the
-   * fresh mapping BEFORE anything is persisted. Returning false aborts with
+   * The re-ingest self-check: inspects the OLD rows vs the fresh mapping
+   * BEFORE anything is persisted. Returning false aborts with
    * INGEST_VERIFICATION_FAILED and the old rows are RETAINED — a failed
    * re-extract degrades to current behavior, never worse.
    */
@@ -54,11 +51,10 @@ export async function reprocessBookContent(
 
   const fileBlob = file instanceof Blob ? file : new Blob([file]);
 
-  // Reprocess parity: the palette is extracted from the RAW cover (no
-  // thumbnail compression), exactly as the legacy `reprocessBook` did.
+  // The palette is extracted from the RAW cover (no thumbnail compression).
   const preamble = await extractPreamble(fileBlob, { cover: 'raw', signal: opts.signal });
 
-  // Lazy (Phase 8 §A): the offscreen renderer (→ epubjs) loads at first
+  // Lazy: the offscreen renderer (→ epubjs) loads at first
   // reprocess, keeping it out of the eager LibraryView/orchestrator graph.
   const { extractContentOffscreen } = await import(
     '@domains/reader/engine/offscreen/offscreen-renderer'

@@ -1,5 +1,5 @@
 /**
- * QuotaGovernor behavioral spec (Phase A; kernel co-located test convention,
+ * QuotaGovernor behavioral spec (kernel co-located test convention,
  * mirrors src/kernel/net/NetworkGateway.test.ts). The clock and the
  * persistence port are both injected so every time-dependent assertion is
  * deterministic — no real `Date.now`, no real IndexedDB.
@@ -131,7 +131,7 @@ describe('QuotaGovernor', () => {
 
       await expect(g.acquire('bg', 1)).rejects.toBeInstanceOf(NetRateLimitedError);
 
-      g.release('fg'); // the gateway frees the claim (commit no longer releases)
+      g.release('fg'); // the gateway frees the claim (commit never releases)
       await expect(g.acquire('bg', 1)).resolves.toBeUndefined();
     });
 
@@ -184,7 +184,7 @@ describe('QuotaGovernor', () => {
       const g = newGovernor();
 
       // Emulate an embedding egress: acquire + the gateway's finally release,
-      // but NO governor commit (the embedding client has no governor wired).
+      // but NO governor commit (the embedding client never commits).
       await g.acquire('fg', 7);
       g.release('fg');
 
@@ -192,7 +192,7 @@ describe('QuotaGovernor', () => {
       expect(snap.rpm).toBe(1); // counted in the rolling RPM window
       expect(snap.tpm).toBe(7); // counted in the rolling TPM window (the estimate)
       expect(snap.rpd).toBe(1); // counted against the daily RPD
-      // …and persisted+published through the store (the A6 saveDailyUsage).
+      // …and persisted+published through the store (saveDailyUsage).
       expect(double.saved.at(-1)).toMatchObject({ rpd: 1, tpm: 7 });
     });
 
@@ -255,7 +255,7 @@ describe('QuotaGovernor', () => {
       const g = newGovernor();
 
       // The current-book document lane is refused AT the reserve boundary (unlike
-      // the plain 'fg' lane, which is what defeated the headroom before this fix)…
+      // the plain 'fg' lane, which spends the full daily budget)…
       const err = await g.acquire('fgd', 1).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(NetRateLimitedError);
       expect((err as NetRateLimitedError).context).toMatchObject({ reason: 'rpd-exhausted', limit: 8 });

@@ -1,8 +1,8 @@
 /**
- * artifactPublisher suite (Artifact Lane Phase C gates): drives the PURE
- * runArtifactPublish core with injected fakes + a real MockBackend.
+ * artifactPublisher suite: drives the PURE runArtifactPublish core with
+ * injected fakes + a real MockBackend.
  *
- * Pins the privacy + idempotency guardrails (see GUARDRAILS):
+ * Pins the privacy + idempotency guardrails (see plan/shared-ai-cache-design.md §3):
  *  (1) shareAiCaches OFF → isUploadConsented false → zero putArtifact;
  *  (2) shareAiCaches ON + self active + backend connected → uploads each
  *      locally-embedded book under the ROW-derived contentKey;

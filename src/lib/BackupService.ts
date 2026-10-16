@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-// Only the Y.Map cast remains since the snapshot primitives moved to
+// Type-only on purpose (just the Y.Map cast): the snapshot primitives live in
 // YjsSnapshotService — keep yjs out of this module's runtime graph.
 import type * as Y from 'yjs';
 import { exportFile } from './export';
@@ -89,7 +89,7 @@ export interface BackupManifestV3 {
 export type BackupManifest = BackupManifestV2 | BackupManifestV3;
 
 // Envelope validation lives with the other untrusted-ingress schemas in
-// src/data/rows/backup.ts (D4); per-row validation + binary sanitization
+// src/data/rows/backup.ts; per-row validation + binary sanitization
 // happen at write time in `processManifest`/`sanitizeManifestRow`.
 
 /** A loosely-typed manifest row as found inside a backup file. */
@@ -162,7 +162,7 @@ export class BackupService {
 
     // Get book IDs from Yjs library
     const libraryMap = getYDoc().getMap('library');
-    // Phase 2: Books are stored in 'books' submap
+    // Books are stored in the library map's 'books' submap
     const booksMap = libraryMap.get('books') as Y.Map<UserInventoryItem>;
     const bookIds = booksMap ? Array.from(booksMap.keys()) : [];
     const totalBooks = bookIds.length;
@@ -277,13 +277,13 @@ export class BackupService {
    */
   async generateManifest({ includeCovers = true }: { includeCovers?: boolean } = {}): Promise<BackupManifestV3> {
     // Ensure Yjs is synced before capturing snapshot, and drain the y-idb
-    // debounce queue (fork flush(), packages/y-idb/PROVENANCE.md surgery 1)
-    // so a backup can never miss the last 200ms write window.
+    // debounce queue (the y-idb fork's flush()) so a backup can never miss the
+    // last 200ms write window.
     await waitForYjsSync();
     await getYjsPersistence()?.flush();
 
-    // 1. Capture the entire Y.Doc state as a binary update
-    // 2. Capture the semantic tree concurrently with nothing destructive
+    // Capture the semantic tree (passive artifact), then the entire Y.Doc
+    // state as a binary update
     const semanticData = await import('./sync/semantic-tree').then(m => m.generateSemanticTree());
 
     const stateUpdate = captureDoc(getYDoc());
@@ -301,7 +301,7 @@ export class BackupService {
       locations: met.locations
     }));
 
-    // Note: Lexicon (formerly user_overrides) is now in Yjs, so it's captured in yjsSnapshot.
+    // Note: the Lexicon lives in Yjs, so it's captured in yjsSnapshot.
 
     return {
       version: this.BACKUP_VERSION,
@@ -413,10 +413,9 @@ export class BackupService {
     }
 
     // 2. Write the snapshot durably: applySnapshot resolves only after the
-    //    transaction has COMMITTED (the vendored y-idb fork's writeSnapshot,
-    //    through the cross-context write gate), so the reload after restore
-    //    cannot lose it. This replaces the raw indexedDB.open() block that
-    //    re-implemented y-idb's store layout here.
+    //    transaction has COMMITTED (the y-idb fork's writeSnapshot, through
+    //    the cross-context write gate), so the reload after restore cannot
+    //    lose it.
     logger.debug('Writing Yjs snapshot via YjsSnapshotService...');
     await applySnapshot(stateUpdate);
 
@@ -425,7 +424,7 @@ export class BackupService {
     // === Write Static Data to IDB (through the bookContent repo) ===
 
     // Write static manifests (for Ghost Book support). Untrusted-ingress row
-    // validation (src/data/rows, D4): rows that fail the backup-row schema
+    // validation (src/data/rows): rows that fail the backup-row schema
     // are SKIPPED with a warning instead of being written as garbage.
     const rawManifestRows = (manifest.staticManifests ?? []) as unknown[];
     const incomingManifests: BackupManifestRow[] = [];
@@ -441,7 +440,7 @@ export class BackupService {
       onProgress?.(40, 'Restoring metadata...');
 
       // Read existing rows BEFORE the write so we can merge covers (the repo
-      // writer is a synchronous gated transaction — D1 recipe).
+      // writer is a synchronous gated transaction).
       const existingRows = ((await bookContent.listManifests()) ?? []) as unknown as BackupManifestRow[];
       const existingByBookId = new Map(existingRows.map(row => [row.bookId, row]));
       const sanitized = incomingManifests.map(row =>
@@ -451,9 +450,9 @@ export class BackupService {
       await bookContent.putManifests(sanitized as unknown as StaticManifestRow[]);
     }
 
-    // Write locations. Untrusted-ingress row validation (src/data/rows, D4):
+    // Write locations. Untrusted-ingress row validation (src/data/rows):
     // a malformed row (e.g. `locations` missing/non-string) is skipped with a
-    // warning — the pre-rows/ behavior wrote `{ bookId, locations: undefined }`.
+    // warning rather than written as `{ bookId, locations: undefined }`.
     if (manifest.locations && manifest.locations.length > 0) {
       onProgress?.(60, 'Restoring locations...');
       const validLocations: { bookId: string; locations: string }[] = [];
@@ -477,11 +476,11 @@ export class BackupService {
 
       if (filesFolder) {
         // Collect the entries first, then inflate them a couple at a time.
-        // `Promise.all` over every entry started N simultaneous inflations —
-        // every EPUB in the backup decompressed into memory at once, each
-        // then waiting its turn on the single write gate. The bound keeps
-        // peak memory at ~RESTORE_CONCURRENCY books while the gate stays
-        // saturated.
+        // A `Promise.all` over every entry would start N simultaneous
+        // inflations — every EPUB in the backup decompressed into memory at
+        // once, each then waiting its turn on the single write gate. The
+        // bound keeps peak memory at ~RESTORE_CONCURRENCY books while the
+        // gate stays saturated.
         const entries: { bookId: string; zipFile: JSZip.JSZipObject }[] = [];
         filesFolder.forEach((relativePath, zipFile) => {
           if (relativePath.endsWith('.epub')) {
@@ -508,8 +507,7 @@ export class BackupService {
       }
 
       // Clear offloaded status for restored books — per-key deltas only
-      // (Phase 7 I-5: wholesale replacement of the offloaded set is no
-      // longer expressible on the projection store).
+      // (the projection store has no wholesale setter for the offloaded set).
       if (restoredBookIds.length > 0) {
         try {
           const { unmarkOffloaded } = useLibraryStore.getState();
@@ -521,9 +519,7 @@ export class BackupService {
       }
     }
 
-    // No flush wait needed: applySnapshot already awaited the commit (the
-    // 1000ms sleep that used to live here was covering for the lack of a
-    // durable write primitive).
+    // No flush wait needed: applySnapshot already awaited the commit.
     onProgress?.(100, 'Restore complete!');
     logger.info('Restore complete (Yjs snapshot applied)');
   }
@@ -597,11 +593,12 @@ export class BackupService {
   // === Utility Methods ===
 
   /**
-   * base64 in 32 KiB windows. The per-byte `binary += String.fromCharCode(…)`
-   * this replaces was quadratic in practice (rope flattening) — ~74 ms per
-   * MB, so a library with 500 covers plus the Yjs snapshot blocked the main
-   * thread for the better part of two seconds on every backup. Output is
-   * byte-identical: the windows are concatenated before the single btoa().
+   * base64 in 32 KiB windows. A per-byte `binary += String.fromCharCode(…)`
+   * is quadratic in practice (rope flattening) — ~74 ms per MB, so a
+   * library with 500 covers plus the Yjs snapshot would block the main
+   * thread for the better part of two seconds on every backup. The windows
+   * are concatenated before the single btoa(), so the output is identical to
+   * a one-shot encode.
    */
   private uint8ArrayToBase64(bytes: Uint8Array): string {
     const parts: string[] = [];
@@ -621,7 +618,7 @@ export class BackupService {
    *
    * `atob` also tolerates embedded ASCII whitespace (MIME-wrapped base64),
    * which would shift the window alignment — such input takes the
-   * single-shot path so the result stays identical to the old helper's.
+   * single-shot path so the result stays identical to a one-shot decode.
    */
   private base64ToUint8Array(base64: string): Uint8Array {
     if (base64.length <= BASE64_CHUNK_CHARS || /\s/.test(base64)) {

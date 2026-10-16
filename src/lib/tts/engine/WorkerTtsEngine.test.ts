@@ -8,7 +8,7 @@ import * as Comlink from 'comlink';
  * engine API call (main→worker), backend command (worker→host proxy), provider event
  * (host→worker), and the status callback (worker→main proxy).
  *
- * Storage is injected through the WorkerTtsEngine constructor ports (5b-PR4) — no vi.mock.
+ * Storage is injected through the WorkerTtsEngine constructor ports — no vi.mock.
  */
 import { WorkerTtsEngine, type EngineHost, type BackendEvent } from './WorkerTtsEngine';
 import type { EngineHostCommand } from './WorkerEngineContext';

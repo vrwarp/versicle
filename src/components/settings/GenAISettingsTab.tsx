@@ -191,13 +191,14 @@ export const GenAISettingsTab: React.FC<GenAISettingsTabProps> = ({
     const [searchQuery, setSearchQuery] = React.useState('');
     const [, setTick] = React.useState(0);
 
-    // The log box re-rendered EVERY row on EVERY render — including the 1 s
-    // tick below, which exists for the live quota snapshots read straight from
-    // the governor further down. With maxLogs up to 1000 that meant a thousand
-    // JSON.stringify calls per second over full prompt/response payloads, into
-    // a 160px scroll box. The rows are derived (and stringified) ONCE per logs
-    // change, newest first, and the tail beyond MAX_RENDERED_LOGS is summarized
-    // rather than rendered — Download Logs still exports every entry.
+    // The component re-renders every second (the 1 s tick below, which exists
+    // for the live quota snapshots read straight from the governor further
+    // down). Deriving the log rows on every render would mean up to maxLogs
+    // (1000) JSON.stringify calls per second over full prompt/response
+    // payloads, into a 160px scroll box. So the rows are derived (and
+    // stringified) ONCE per logs change, newest first, and the tail beyond
+    // MAX_RENDERED_LOGS is summarized rather than rendered — Download Logs
+    // still exports every entry.
     const logRows = React.useMemo(() => {
         const newestFirst = logs.slice().reverse();
         return newestFirst.slice(0, MAX_RENDERED_LOGS).map((log) => ({

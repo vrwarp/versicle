@@ -17,9 +17,9 @@ export class TTSCache {
    * the key; those simply miss and are regenerated — the cache is regenerable.)
    *
    * The trailing `|1` is the retired `pitch` parameter's slot: the param was always
-   * defaulted (vestige noted at Phase 5a), so it was removed from the signature with
-   * the hash input kept byte-identical — existing cache entries keep hitting. The
-   * golden-key regression test (TTSCache.test.ts) pins this.
+   * defaulted, so it is absent from the signature but the hash input is kept
+   * byte-identical — existing cache entries keep hitting. The golden-key regression
+   * test (TTSCache.test.ts) pins this.
    *
    * @param text - The text content.
    * @param voiceId - The ID of the voice used.

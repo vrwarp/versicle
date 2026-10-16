@@ -1,6 +1,6 @@
 /**
  * Boot failure routing for the CRDT migration coordinator
- * (phase2-fork-surgery.md §5.2 "loud failure → safe mode"):
+ * ("loud failure → safe mode"):
  *
  *  - a MigrationError rejecting the boot promise renders
  *    CriticalMigrationFailureView with the pre-migration checkpoint id wired

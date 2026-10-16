@@ -1,5 +1,5 @@
 /**
- * Typed Drive HTTP errors (Phase 7 §G; C10 code DRIVE_API_ERROR) + the
+ * Typed Drive HTTP errors (C10 code DRIVE_API_ERROR) + the
  * boundary mapping helper (the documented `handleDbError` convention from
  * ~types/errors): every catch in the Drive boundary funnels through
  * `handleDriveError`; layers above only ever see AppErrors.

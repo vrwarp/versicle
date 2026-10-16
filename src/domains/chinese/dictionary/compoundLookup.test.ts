@@ -1,8 +1,7 @@
 /**
- * compoundLookup suite (Phase 6 §7.4, PR-11): legacy getCompoundWord
- * semantics (4-left/4-right windows, longest hit wins, earliest start on
- * ties) plus the deliberate CH-1-consistent fix: windows are CODE-POINT
- * windows, so astral text never slices through surrogate pairs.
+ * compoundLookup suite: compound-word semantics (4-left/4-right windows,
+ * longest hit wins, earliest start on ties) with CODE-POINT windows, so
+ * astral text never slices through surrogate pairs.
  */
 import { describe, it, expect } from 'vitest';
 import type { DictEntryTuple } from '@data/repos/dictionary';
@@ -87,9 +86,10 @@ describe('findCompoundWord', () => {
 });
 
 /**
- * The triage card resolved compounds ONE FOCUSED CHARACTER AT A TIME: one
- * dictionary transaction per Han character in the selection, each re-splitting
- * the whole selection into code points (quadratic in the selection length).
+ * Resolving compounds ONE FOCUSED CHARACTER AT A TIME costs one dictionary
+ * transaction per Han character in the selection, each re-splitting the whole
+ * selection into code points (quadratic in the selection length); the batched
+ * form must stay a single lookup.
  */
 describe('regression: batched compound lookup', () => {
   const entries: Record<string, DictEntryTuple> = {
@@ -118,7 +118,7 @@ describe('regression: batched compound lookup', () => {
     // The one call carries de-duplicated candidates.
     expect(new Set(batched.calls[0]).size).toBe(batched.calls[0].length);
 
-    // The per-index path it replaces: one lookup (one IDB transaction) each.
+    // The per-index path: one lookup (one IDB transaction) each.
     const perIndex = countingLookup();
     for (const index of indices) await findCompoundWord(text, index, perIndex.lookup);
     expect(perIndex.calls).toHaveLength(indices.length);

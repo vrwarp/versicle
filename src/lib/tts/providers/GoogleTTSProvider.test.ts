@@ -2,8 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vite
 import { GoogleTTSProvider } from './GoogleTTSProvider';
 import type { TTSOptions } from './types';
 
-// Mock base dependencies to avoid instantiation issues if any
-// No module mocks (vi.mock is banned in providers/ since 5a-PR2): these tests only
+// No module mocks (vi.mock is banned in providers/): these tests only
 // exercise init/getVoices/fetchAudioData, which never touch the sink or the cache.
 
 describe('GoogleTTSProvider', () => {

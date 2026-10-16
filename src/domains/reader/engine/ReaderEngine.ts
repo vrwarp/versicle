@@ -1,29 +1,25 @@
 /**
- * ReaderEngine — contract C7, the reader engine port (Phase 6 §2,
- * prep/phase6-reader-engine.md). Components, panels and hooks consume THIS
- * surface; `EpubJsEngine` is the sole runtime epubjs importer (boundary
- * rule 8 — lint-enforced) and `FakeReaderEngine` proves the port is renderer
- * agnostic (the C7 acceptance: swapping to foliate-js is a one-module
- * change, demonstrated by the shell booting on the fake).
+ * ReaderEngine — contract C7, the reader engine port. Components, panels and
+ * hooks consume THIS surface; `EpubJsEngine` is the sole runtime epubjs
+ * importer (boundary rule 8 — lint-enforced) and `FakeReaderEngine` proves
+ * the port is renderer agnostic (the C7 acceptance: swapping to foliate-js
+ * is a one-module change, demonstrated by the shell booting on the fake).
  *
- * Reconciliations vs the prep-doc §2b sketch (tree moved since it was
- * written; recorded per the program rules):
- *  - `getRenderedRange(cfi)` added: the sync, rendition-backed range used by
+ * Notes on the surface:
+ *  - `getRenderedRange(cfi)` is the sync, rendition-backed range used by
  *    geometry/queue-matching call sites (renders only what is on screen);
  *    `getRange(cfi)` (async, book-backed) is the kernel CfiRangeResolver
- *    used for sentence snapping — they had different semantics in the
- *    legacy code and both are preserved.
- *  - `getNavLabel(target)` added: ReadingHistoryPanel's nav-based section
- *    label resolution moved verbatim behind the port (it was deep
- *    book.navigation/spine reach-in).
- *  - `getLanguage()` added: keeps reader-side sentence snapping on the OPF
- *    language (the P5c locale-aware kernel behavior) without handing
+ *    used for sentence snapping — they have different semantics and both
+ *    are kept.
+ *  - `getNavLabel(target)` keeps ReadingHistoryPanel's nav-based section
+ *    label resolution behind the port (no book.navigation/spine reach-in).
+ *  - `getLanguage()` keeps reader-side sentence snapping on the OPF
+ *    language (the locale-aware kernel behavior) without handing
  *    components the Book.
- *  - `locations.length()` added (panel guard parity); `applyTheme`/`setFlow`
- *    stay HOOK-side for now — the theming split is the separate
- *    epubTheming-extraction item (prep doc PR-4), not this port commit.
- *  - Event union gains 'statusChanged' and 'locationsReady' (the React
- *    adapter needs them; the doc's union predates the adapter design).
+ *  - The port has no theming/flow API: presentation is applied by the
+ *    `epubTheming` module, not through the engine.
+ *  - The event union includes 'statusChanged' and 'locationsReady' (the
+ *    React adapter needs them).
  */
 import type { CfiRangeResolver } from '@kernel/cfi';
 import type { NavigationItem } from '~types/book';
@@ -55,7 +51,7 @@ export type ReaderEngineEvent =
   | { type: 'relocated'; location: EngineLocation }
   | { type: 'selected'; cfiRange: string; range: Range; view: ContentView | null }
   | { type: 'click'; event: MouseEvent }
-  /** Forwarded iframe keydown stream (the P0 keyboard-gating hotfix path). */
+  /** Forwarded iframe keydown stream (bridged into the keyboard shortcut service). */
   | { type: 'keydown'; event: KeyboardEvent }
   /** Per-section render; chinese processing + overlays subscribe. */
   | { type: 'contentRendered'; view: ContentView }
@@ -108,7 +104,7 @@ export interface ReaderEngine extends CfiRangeResolver {
   getOverlayContainer(): Element | null;
   getContentViews(): ContentView[];
 
-  // highlights — the ONLY path to epub.js annotations (Phase 6 §4)
+  // highlights — the ONLY path to epub.js annotations
   readonly highlights: HighlightLayerManager;
 
   // structure
@@ -124,7 +120,7 @@ export interface ReaderEngine extends CfiRangeResolver {
   resolveSection(cfiOrHref: string): ResolvedSection | null;
   /** Nav-based human label for a section (ReadingHistoryPanel semantics). */
   getNavLabel(cfiOrHref: string): string | null;
-  /** Section text without re-unzipping (useSmartTOC; P7 search indexing). */
+  /** Section text without re-unzipping (useSmartTOC). */
   loadSectionText(href: string): Promise<string>;
 
   // locations registry

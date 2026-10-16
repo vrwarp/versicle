@@ -16,13 +16,12 @@
  *         workspace boots untouched
  *  row 2  crash after STAGED, before/during apply → apply re-runs from
  *         staging; switch completes
- *  row 3  crash after apply, before confirm → AWAITING_CONFIRMATION (P0)
- *  row 4  rollback / apply throws → RESTORING_BACKUP (P0; pinned in
+ *  row 3  crash after apply, before confirm → AWAITING_CONFIRMATION
+ *  row 4  rollback / apply throws → RESTORING_BACKUP (pinned in
  *         CheckpointService.test.ts boot-path block)
  *
- * Also carries the assertions absorbed from the deleted
- * CheckpointService.applyRemoteState (test-absorption ledger, rule 8):
- * durable byte-identical write and validate-before-destroy.
+ * Also pins the apply primitive's durable byte-identical write and
+ * validate-before-destroy behavior.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as Y from 'yjs';
@@ -108,8 +107,8 @@ describe('stagedSwap — crash-resume state table (§D4)', () => {
       // The id was reconciled (a kill between setStaged and the switch
       // path's own flip must not strand the previous id).
       expect(setActiveWorkspaceId).toHaveBeenCalledWith('ws_target');
-      // Handover to the P0 state machine, previousWorkspaceId preserved
-      // for a later rollback.
+      // Handover to the AWAITING_CONFIRMATION state, previousWorkspaceId
+      // preserved for a later rollback.
       expect(MigrationStateService.getState()).toEqual({
         status: 'AWAITING_CONFIRMATION',
         targetWorkspaceId: 'ws_target',

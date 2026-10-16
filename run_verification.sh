@@ -91,8 +91,8 @@ fi
 
 # Parallelism is configured in playwright.config.ts: 3 workers, with the webkit
 # project capped per-project (parallel WebKit instances contend for CPU/IO and
-# flake the timing-sensitive TTS journeys). That cap used to be a --workers=1
-# appended here, which also serialized any Chromium project in the same run.
+# flake the timing-sensitive TTS journeys). Passing --workers here would
+# override it for every project in the run, so none is appended.
 
 # Build the test image
 docker build -t versicle-verify -f Dockerfile.verification .

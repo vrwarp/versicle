@@ -1,19 +1,15 @@
 /**
- * P4-0 ENTRY GATE — characterization of the mock-path workspace lifecycle
- * AT LEGACY BEHAVIOR (phase4-sync-strangler.md §Execution order P4-0;
- * program rule 7: characterization before change). Written against
- * FirestoreSyncManager; retargeted to the SyncOrchestrator when P4-3
- * decomposed and deleted the manager — every ASSERTION is unchanged (the
- * suite pins observable behavior: stores, localStorage, status, toasts),
- * only the construction plumbing moved to the composition root.
+ * Characterization of the mock-path workspace lifecycle
+ * (phase4-sync-strangler.md §Execution order P4-0; program rule 7:
+ * characterization before change). The suite pins observable behavior of
+ * the SyncOrchestrator: stores, localStorage, status, toasts.
  *
  * Runs the mock stack end-to-end against the real MockFireProvider and the
  * real localStorage workspace directory (MockBackend, selected by
  * configureSyncBackendSelection exactly like the syncInit boot task does).
  *
  * The only spied collaborators are CheckpointService statics (IDB-touching
- * infrastructure that is NOT under test here, and applyRemoteState would
- * reload the page).
+ * infrastructure that is NOT under test here).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { resolveMessage, type MessageInput } from '@kernel/locale/messages';
@@ -67,8 +63,8 @@ const injectCloudSnapshot = (workspaceId: string, build: (doc: Y.Doc) => void): 
 };
 
 /**
- * Phase 8 §D: wireSyncEvents passes catalog keys; assertions pin the
- * RESOLVED user-visible copy verbatim.
+ * wireSyncEvents passes catalog keys; assertions pin the RESOLVED
+ * user-visible copy verbatim.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function expectToastShown(spy: { mock: { calls: any[][] } }, message: string | RegExp, type: string, duration?: number) {
@@ -110,8 +106,8 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
     useSyncStore.getState().setFirebaseAuthStatus('loading');
     useSyncStore.getState().setFirebaseUserEmail(null);
 
-    // Infrastructure spies: checkpoints hit IndexedDB and applyRemoteState
-    // reloads the page — neither is the subject of this suite.
+    // Infrastructure spy: checkpoints hit IndexedDB, which is not the
+    // subject of this suite.
     vi.spyOn(CheckpointService, 'createAutomaticCheckpoint').mockResolvedValue(null);
 
     showToast = vi.spyOn(useToastStore.getState(), 'showToast');
@@ -226,8 +222,8 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
 
       const manager = await getSyncOrchestratorAsync();
       // Call the connect path directly (handleAuthStateChange fires it
-      // without awaiting — pinned debt, phase4-sync-strangler.md item 17 —
-      // so going through start() would leave an unhandled rejection).
+      // without awaiting, so going through start() would leave an
+      // unhandled rejection).
       await expect(manager.connect(UID)).rejects.toThrow(WorkspaceDeletedError);
 
       expect(useSyncStore.getState().activeWorkspaceId).toBeNull();
@@ -279,12 +275,12 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
       const manager = await getSyncOrchestratorAsync();
       await manager.switchWorkspace('ws_b');
 
-      // Protected pre-migration checkpoint (P0 pinning semantics).
+      // Protected pre-migration checkpoint.
       expect(createCheckpointSpy).toHaveBeenCalledWith('pre-migration', { protected: true });
 
       // The commit point: STAGED, carrying the rollback target AND the
       // pre-switch workspace (so a later rollback reverts the local tie).
-      // AWAITING_CONFIRMATION engagement moved to the boot interceptor's
+      // AWAITING_CONFIRMATION is engaged later, by the boot interceptor's
       // idempotent apply (stagedSwap.applyStagedSwap).
       expect(MigrationStateService.getState()).toEqual({
         status: 'STAGED',
@@ -292,8 +288,8 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
         backupCheckpointId: 7,
         previousWorkspaceId: 'ws_a',
       });
-      // The id flips only at the commit point (legacy flipped it BEFORE the
-      // download — a crash mid-download left a dangling state).
+      // The id flips only at the commit point, so a crash mid-download
+      // leaves no dangling state.
       expect(useSyncStore.getState().activeWorkspaceId).toBe('ws_b');
       expectToastShown(showToast, 'Downloading workspace data...', 'info');
 
@@ -393,9 +389,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
 
       await manager.deleteWorkspace('ws_other');
 
-      // The legacy REAL path destroyed the whole manager on any delete;
-      // unified semantics never touch the live connection for non-active
-      // deletions.
+      // Deleting a non-active workspace never touches the live connection.
       expect(manager.getStatus()).toBe('connected');
       expect(useSyncStore.getState().activeWorkspaceId).toBe('ws_active');
       // …and the delete was honest: tombstone everywhere + purge toast.
@@ -407,7 +401,7 @@ describe('characterization: mock-path workspace lifecycle (P4 entry gate)', () =
     it('the purge maintenance action sweeps residuals of every tombstoned workspace', async () => {
       seedWorkspace('ws_alive');
       seedWorkspace('ws_dead', { deletedAt: Date.now() });
-      // Residual data a pre-P4-6 delete left behind in the dead workspace.
+      // Residual data left behind in the dead workspace.
       injectCloudSnapshot('ws_dead', (doc) => {
         doc.getMap('library').set('residual', 'leftover');
       });

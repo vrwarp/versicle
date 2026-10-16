@@ -8,9 +8,8 @@ import { drain, replicate, countUpdates } from './helpers';
  * Fork contract suite — the `scope: { key }` nested-map binding
  * (phase2-fork-surgery.md §2 options table, §5.3 preferences fold, risk
  * R8's named contract cases: creation timing, inbound path filtering,
- * obsolete check unaffected). Designed for `usePreferencesStore` rebinding
- * its unchanged flat state to `preferences.<deviceId>` so zero consumer
- * call sites change.
+ * obsolete check unaffected). Used by `usePreferencesStore` to bind its flat
+ * state to `preferences.<deviceId>` so no consumer call site sees the nesting.
  */
 
 interface PrefState {

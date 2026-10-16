@@ -2,8 +2,6 @@
  * Flight-recorder (diagnostics) types: the lightweight event shape recorded
  * on the playback hot path and the persisted ring-buffer snapshots.
  *
- * Extracted from types/db.ts in the Phase 1a type split
- * (plan/overhaul/README.md §Roadmap P1; layering-deps.md LD-1).
  * Layering rule: src/types/** imports nothing internal except other
  * src/types modules, and that graph stays acyclic.
  */
@@ -57,7 +55,8 @@ export interface FlightSnapshot {
   /**
    * The specific condition that caused this recording.
    * - 'manual': Triggered by the user from the Diagnostics UI.
-   * - 'anomaly:chapter_advance': Auto-triggered by PlaybackStateManager detection.
+   * - 'anomaly:chapter_advance': Auto-triggered by TTSFlightRecorder's
+   *   premature-chapter-advance detection.
    */
   trigger: string;
   /**
@@ -66,9 +65,9 @@ export interface FlightSnapshot {
    */
   note: string;
   /**
-   * A snapshot of the internal state of the AudioPlayerService at the moment
-   * of capture. This provides high-level context for the lower-level events
-   * stored in eventsJSON.
+   * A snapshot of the internal playback state (supplied by the playback
+   * controller's context provider) at the moment of capture. This provides
+   * high-level context for the lower-level events stored in eventsJSON.
    */
   context: {
     /** The book currently being played. */

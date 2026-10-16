@@ -1,7 +1,7 @@
 /**
- * searchText repo contract (Phase 7 §F / PR-S3): round-trip, absence
- * semantics, and the delete-with-book guarantee (the row dies inside
- * bookContent.deleteBook's gated transaction).
+ * searchText repo contract: round-trip, absence semantics, and the
+ * delete-with-book guarantee (the row dies inside bookContent.deleteBook's
+ * gated transaction).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { searchTextRepo, type CacheSearchTextRow } from './searchText';

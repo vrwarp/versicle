@@ -1,8 +1,7 @@
 /**
  * The egress destination registry — the single source of truth for "what
- * hosts may this app talk to" (Phase 7 §I, plan/overhaul/prep/
- * phase7-library-google.md; privacy report gap-privacy-posture-data-egress-ma
- * D1/D4 target design).
+ * hosts may this app talk to" (see docs/comprehensive/70-security-and-privacy.md
+ * §6).
  *
  * Every network destination the app may contact is declared here with its
  * data classification, consent requirement, timeout, and offline policy.
@@ -13,8 +12,7 @@
  *     (raw `fetch` is lint-banned outside src/kernel/net — eslint.config.js).
  *  2. The CSP `connect-src` is GENERATED from this registry
  *     (./csp.ts + scripts/generate-csp.mjs → nginx.conf, vite preview
- *     headers, build-time index.html meta) — the four hand-maintained copies
- *     at HEAD are replaced by one renderer.
+ *     headers, build-time index.html meta) — one renderer feeds every copy.
  *  3. The registry==CSP unit test (./csp.test.ts) is a permanent invariant:
  *     every gateway/sdk host below must appear in the generated connect-src.
  *
@@ -46,8 +44,8 @@ export type DestinationId =
  *  - 'metadata'      titles/filenames/listings, no book text
  *  - 'binary-asset'  opaque binaries (voice models, the user's own files)
  *  - 'auth'          OAuth flows / tokens
- *  - 'remote-code'   executable code (NONE at HEAD — Phase 5a vendored
- *                    onnxruntime; the cdnjs entry died with it)
+ *  - 'remote-code'   executable code (NONE — onnxruntime is vendored and
+ *                    served same-origin)
  */
 type EgressDataClass =
   | 'book-content'
@@ -103,8 +101,8 @@ export interface EgressDestination {
    * injected throttle on this `lane` before any bytes leave, rejecting requests
    * that exceed the provider's per-minute/per-day budget. Putting it on the
    * destination (rather than at each call site) makes throttling unbypassable,
-   * just like the host-allowlist/offline/consent checks; the caller no longer
-   * has to remember to ask. Absent ⇒ no throttling for this destination.
+   * just like the host-allowlist/offline/consent checks; the caller does not
+   * have to remember to ask. Absent ⇒ no throttling for this destination.
    *
    * NOTE: the lane union is spelled out here rather than imported from the
    * quota module because this file's "NO imports" rule (see top) feeds the
@@ -115,15 +113,12 @@ export interface EgressDestination {
 }
 
 /**
- * The verified egress matrix (privacy report rows 1–12; rows 13–15 are not
- * fetch-mediated). NOTE Phase 5a already vendored onnxruntime + the piper
- * worker assets (`/piper/**` is same-origin), so the report's
- * `cdnjs-onnxruntime` remote-code entry does NOT exist at HEAD.
+ * The verified egress matrix. onnxruntime and the piper worker assets are
+ * vendored (`/piper/**` is same-origin), so there is no remote-code entry.
  *
  * The TTS provider call sites (google-tts/openai-tts/lemonfox-tts/hf-*) in
- * src/lib/tts/providers/** route through egress() since the Phase 7 merge
- * (the parallel-chain freeze that exempted them is over; the lint ban now
- * carries zero production exemptions outside src/kernel/net).
+ * src/lib/tts/providers/** route through egress(); the lint ban carries zero
+ * production exemptions outside src/kernel/net.
  */
 export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
   {
@@ -179,7 +174,7 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
     dataClass: 'metadata',
     consent: 'provider-selection',
     timeoutMs: 30_000,
-    // Pairs with Phase 5a's voices.json caching: offline serves the cache.
+    // Pairs with the voices.json caching: offline serves the cache.
     offline: 'cache-fallback',
   },
   {
@@ -204,7 +199,7 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
     purpose: "Google Drive v3: folder/file listings + downloads of the user's own EPUBs",
     dataClass: 'binary-asset',
     consent: 'oauth',
-    // Downloads are unbounded-but-abortable (privacy report D10).
+    // Downloads are unbounded-but-abortable.
     timeoutMs: null,
     offline: 'fail',
   },
@@ -220,10 +215,10 @@ export const EGRESS_DESTINATIONS: readonly EgressDestination[] = [
   },
   {
     id: 'firebase',
-    // The user-configured BYO authDomain is NOT statically known (Risk #4 in
-    // the prep doc): web deploys proxy it same-origin via /__/auth (nginx +
-    // vite server proxy); a custom authDomain contacted directly is a
-    // documented limitation of the generated CSP until the P8 strict flip.
+    // The user-configured BYO authDomain is NOT statically known: web deploys
+    // proxy it same-origin via /__/auth (nginx + vite server proxy); a custom
+    // authDomain contacted directly is a documented limitation of the
+    // generated CSP (README §Self-hosting).
     hosts: [
       'firestore.googleapis.com',
       'identitytoolkit.googleapis.com',

@@ -22,9 +22,8 @@
  *  - A 429 feeds the quota governor a cooldown taken from the server's own
  *    signal (Retry-After header, RetryInfo detail or the "retry in Ns" text);
  *    a DAILY exhaustion cools the pool down until the next Pacific day. The
- *    Jul–Sep 2026 export showed the indexer re-sending into a spent daily cap
- *    every 91 s and hammering a per-minute limit at 1–8 s spacing — this
- *    client recorded no cooldown at all, so nothing ever held it back.
+ *    cooldown is what holds the indexer back from re-sending into a spent cap
+ *    or hammering a per-minute limit.
  *  - Successful calls are summarized at 'debug' at most once a minute (calls,
  *    texts, requests, failures, latency), so the log shows the embedding
  *    workload without one entry per text evicting everything else.
@@ -336,7 +335,8 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
         quotaIds: signals.quotaIds,
       };
     }
-    // Per PR comment, it's useful to log errors even if we omit successful calls.
+    // Errors are always logged, even though successful calls are only summarized
+    // (see recordActivity).
     this.deps.onLog?.({
       id: generateLogId(),
       timestamp: Date.now(),

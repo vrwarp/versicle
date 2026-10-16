@@ -26,10 +26,10 @@ test('Journey Lexicon CSV Import/Export', async ({ page }) => {
   expect(downloadPath).toBeTruthy();
 
   // 3. Import Sample CSV (using the downloaded file).
-  // The import "replace existing rules?" prompt is now the in-app ConfirmDialog
-  // (useConfirm in LexiconManager), not a native window.confirm — so the old
-  // page.on('dialog', d => d.accept()) handler never fires. Upload the file,
-  // then accept the in-app confirm to let the import proceed.
+  // The import "replace existing rules?" prompt is the in-app ConfirmDialog
+  // (useConfirm in LexiconManager), not a native window.confirm — so a
+  // page.on('dialog') handler would never fire. Upload the file, then accept
+  // the in-app confirm to let the import proceed.
   await page.locator('input[data-testid="lexicon-import-input"]').setInputFiles(downloadPath!);
   await utils.acceptConfirm(page);
 

@@ -23,8 +23,6 @@ export const OffloadBookDialog: React.FC<OffloadBookDialogProps> = ({ isOpen, on
     if (!book) return null;
 
     const confirmOffload = async () => {
-        // e.stopPropagation(); // REMOVED
-
         if (isOffloading) return;
         setIsOffloading(true);
 

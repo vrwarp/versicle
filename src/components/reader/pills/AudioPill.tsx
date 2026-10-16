@@ -1,11 +1,9 @@
 /**
  * AudioPill — the playback pill ('active' full bar / 'compact' immersive
- * bar), extracted from the dissolved ui/CompassPill (Phase 8 §C). ONE
- * component for both layouts so the immersive-mode morph re-renders
- * instead of remounting (the focus-destroying `key={variant}` remount was
- * a11y item 8). Chapter navigation goes through the ReaderCommands
- * registry — the pill stays TTS-agnostic, exactly like the CustomEvent
- * dispatch the registry replaced (P6).
+ * bar). ONE component for both layouts so the immersive-mode morph
+ * re-renders instead of remounting (a `key={variant}` remount would destroy
+ * focus). Chapter navigation goes through the ReaderCommands registry —
+ * the pill stays TTS-agnostic.
  */
 import React from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -61,19 +59,18 @@ export const AudioPill: React.FC<AudioPillProps> = ({
 
   const isLoading = status === 'loading';
 
-  // The pill is a pure audio transport (compass-pill rework Phase 1): the
-  // prev/next arrows skip TTS sections and carry ONE meaning regardless of
-  // playback state. They are disabled when there is no audio session — page
-  // turning moved to the reading surface (PageTurnRails + the ArrowLeft/Right
-  // shortcuts), so the arrows no longer flip between "page" and "chapter" under
-  // the user. Kept present-but-disabled (not hidden) to avoid the layout shift
-  // and focus loss of a control that mounts/unmounts with playback state.
+  // The pill is a pure audio transport: the prev/next arrows skip TTS
+  // sections and carry ONE meaning regardless of playback state. They are
+  // disabled when there is no audio session — page turning lives on the
+  // reading surface (PageTurnRails + the ArrowLeft/Right shortcuts), so the
+  // arrows never flip between "page" and "chapter" under the user. Kept
+  // present-but-disabled (not hidden) to avoid the layout shift and focus
+  // loss of a control that mounts/unmounts with playback state.
   const navDisabled = status === 'stopped';
 
   // Chapter navigation: the reader's command registry (the TTS-aware
   // routing lives in nextChapter/prevChapter — this pill stays agnostic).
-  // Null when no reader is open; the nav arrows are then no-ops, matching
-  // the legacy listener absence.
+  // Null when no reader is open; the nav arrows are then no-ops.
   const handleChapterNav = (direction: 'prev' | 'next') => {
     const commands = readerCommandsRegistry.get();
     if (!commands) return;

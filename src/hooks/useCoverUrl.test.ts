@@ -81,7 +81,7 @@ describe('useCoverUrl hook', () => {
   });
 
   /**
-   * perf (P-mem): the library projection no longer carries a Blob per book
+   * perf: the library projection carries no Blob per book
    * while the page is SW controlled. When the controller is gone but the
    * projection still says a cover exists, the fallback lane reads THAT ONE
    * cover from the data layer instead of relying on every book's bytes being

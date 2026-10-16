@@ -1,6 +1,6 @@
 /**
  * TaskSequencer — serialized execution of the engine's asynchronous commands,
- * with epoch-based cancellation (Phase 5b; phase5-tts-strangler.md §5b.3).
+ * with epoch-based cancellation.
  *
  * Serialize-all-mutations is the invariant the engine is built on: tasks run
  * strictly one at a time, in FIFO order, so playback state can never be
@@ -13,10 +13,10 @@
  *    a bump makes all previously enqueued (and the currently running) tasks
  *    *stale*.
  *  - **TaskContext**: each task receives `{signal, epoch, stale(), checkpoint()}`.
- *    `checkpoint()` throws {@link TaskCancelledError} when stale — the typed
- *    replacement for the hand-rolled `currentBookId !== originalBookId`
- *    guards (S7). A cancelled task RESOLVES void to its caller (exactly the
- *    old guard-bail semantics), and the chain continues undisturbed.
+ *    `checkpoint()` throws {@link TaskCancelledError} when stale — a typed
+ *    bail-out for superseded tasks (no ad-hoc `currentBookId !== originalBookId`
+ *    guards). A cancelled task RESOLVES void to its caller, and the chain
+ *    continues undisturbed.
  *  - **AbortSignal**: `ctx.signal` aborts when the task's epoch is superseded
  *    (or on destroy), so long-running work (cloud fetches) can be wired to
  *    real cancellation without polling.
@@ -46,7 +46,7 @@ export interface TaskContext {
     readonly epoch: number;
     /** Whether a context-switch command (stop/setBookId/loadSection) superseded this task. */
     stale(): boolean;
-    /** Throws {@link TaskCancelledError} when stale — replaces the hand-rolled book-id guards. */
+    /** Throws {@link TaskCancelledError} when stale, bailing a superseded task out. */
     checkpoint(): void;
 }
 
@@ -64,11 +64,10 @@ export class TaskSequencer {
     /**
      * Enqueues an asynchronous task to be executed sequentially.
      *
-     * Error semantics are caller-visible and unchanged from the pre-epoch
-     * sequencer: the returned promise resolves with the task's exact return
-     * value, rejects with the task's exact error, and a failed task never
-     * poisons the chain for subsequent tasks. A task cancelled via
-     * `ctx.checkpoint()` resolves void (the legacy guard-bail behavior).
+     * Error semantics are caller-visible: the returned promise resolves with
+     * the task's exact return value, rejects with the task's exact error, and
+     * a failed task never poisons the chain for subsequent tasks. A task
+     * cancelled via `ctx.checkpoint()` resolves void.
      *
      * @param label Stable task name for flight-recorder events + watchdog reports.
      * @param task The function to execute, receiving its {@link TaskContext}.
@@ -105,8 +104,7 @@ export class TaskSequencer {
                 return res;
             } catch (e) {
                 if (e instanceof TaskCancelledError) {
-                    // Cancellation is an outcome, not a failure: resolve void
-                    // (the legacy hand-rolled guards `return`ed the same way).
+                    // Cancellation is an outcome, not a failure: resolve void.
                     flightRecorder.record('TSQ', 'task.cancelled', { label, epoch });
                     return;
                 }

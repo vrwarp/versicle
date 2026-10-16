@@ -1,5 +1,5 @@
 /**
- * Lazy GenAI client facade (Phase 8 §A first-use splitting): implements the
+ * Lazy GenAI client facade (first-use splitting): implements the
  * GenAIClient contract over a one-time dynamic import of GeminiClient, so
  * the composition root (src/app/google/wireGoogle.ts) can install the
  * client at boot WITHOUT pulling the GenAI implementation into the entry

@@ -30,7 +30,6 @@ describe('Wait Utilities', () => {
     it('should throw with truncated value for large objects', async () => {
         const largeStr = 'a'.repeat(300);
 
-        // Better test:
         await expect(
             waitForConditionEquals(
                 () => largeStr,

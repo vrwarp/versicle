@@ -5,8 +5,8 @@
  * specs in src/test/harness/epubFixtures.ts (drift-gated) and reproduce real
  * packaging defects: a nav document in a subfolder whose hrefs are relative
  * to itself, no cover markers in the OPF, links to files outside the spine,
- * bare "Chapter N" labels. Before the hardening, every TOC click in such a
- * book failed silently and the library showed the "Aa" placeholder.
+ * bare "Chapter N" labels. Left unhandled, every TOC click in such a book
+ * fails silently and the library shows the "Aa" placeholder.
  */
 import { test, expect } from './utils';
 import * as utils from './utils';

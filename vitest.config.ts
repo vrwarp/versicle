@@ -3,9 +3,7 @@ import { defineConfig, configDefaults } from 'vitest/config';
 
 // THE single vitest config. Do not add a `test` block to vite.config.ts —
 // when a root vitest.config.ts exists, vitest ignores the `test` field of
-// vite.config.ts entirely, so anything added there is silently dead
-// (this exact drift already happened once: the .claude worktree excludes
-// landed in vite.config.ts and never took effect).
+// vite.config.ts entirely, so anything added there is silently dead.
 //
 // Path aliases: because this file REPLACES vite.config.ts for vitest (it
 // does not merge it), the resolve.alias map below is a deliberate copy of
@@ -17,7 +15,7 @@ export default defineConfig({
   resolve: {
     alias: {
       // `virtual:pwa-register/react` only exists inside a Vite build with
-      // vite-plugin-pwa active (Phase 8 §G); vitest resolves it to a typed
+      // vite-plugin-pwa active; vitest resolves it to a typed
       // inert stub with the same API shape.
       'virtual:pwa-register/react': fileURLToPath(
         new URL('./src/test/harness/pwaRegisterStub.ts', import.meta.url),
@@ -46,7 +44,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     testTimeout: 60000,
-    // All unit/integration tests live under src/, plus the relocated
+    // All unit/integration tests live under src/, plus the
     // contract suites for the upstream y-idb / y-cinder / zustand-middleware-yjs
     // deps (test/vendor-contracts/, black-box against the published packages).
     // The explicit include keeps vitest from discovering stray *.test.* files at
@@ -59,7 +57,7 @@ export default defineConfig({
     // Defense in depth if the include ever widens: never descend into the
     // Playwright suite (verification/) or .claude/ worktrees.
     exclude: [...configDefaults.exclude, 'verification/**', '.claude/**', '**/.claude/**'],
-    // Coverage baseline (Phase 0; plan/overhaul/README.md §4 rule 8): run via
+    // Coverage baseline (plan/overhaul/README.md §4 rule 8): run via
     // `npm run coverage`; totals are pinned in coverage-baseline.json and may
     // not decrease. Not a PR-blocking gate yet — the ratchet is enforced by
     // review against the committed baseline until a CI gate lands.

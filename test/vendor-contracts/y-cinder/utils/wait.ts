@@ -1,5 +1,5 @@
 /**
- * Async Polling Utilities (Improved)
+ * Async Polling Utilities
  *
  * Provides utilities for waiting on asynchronous conditions in tests with
  * meaningful error messages that include the last seen value on timeout.
@@ -172,7 +172,7 @@ export async function waitForConditionTruthy<T>(
 }
 
 /**
- * Generic predicate wait (similar to old waitForCondition but with options object support)
+ * Generic predicate wait.
  * DEPRECATED: Prefer specific helpers for better error messaging.
  */
 export async function waitForCondition(

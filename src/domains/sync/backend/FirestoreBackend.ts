@@ -1,19 +1,13 @@
 /**
- * `FirestoreBackend` — the production C3 implementation, absorbing
- * FirestoreSyncManager's real (non-mock) branches verbatim
- * (phase4-sync-strangler.md §D1/§D2; FirestoreSyncManager.ts @ fb3dcd3f:
- * validateWorkspaceIsAlive :229-247, performCleanSync probe :386-407,
- * connectFireProviderNormal :515-535, createWorkspace :691-698,
- * listWorkspaces :869-882, deleteWorkspace :920-957).
+ * `FirestoreBackend` — the production C3 (`SyncBackend`) implementation:
+ * the Firestore workspace directory, the y-cinder provider connection, the
+ * honest delete, and the shared embedding cache's blob + head-record storage.
  *
  * This is the ONLY sync module that may import `firebase/firestore` or
  * `firebase/storage` (boundary: every other sync module talks
- * `SyncBackend`). The storage import was delete-only (the P4-6 honest
- * delete's blob purge: `getStorage`/`ref`/`listAll`/`deleteObject`); the
- * shared embedding cache WIDENS it to read/write by ADDING
- * `uploadBytes`/`getBytes` for putArtifact/getArtifact. FirestoreBackend
- * remains the sole `firebase/storage` importer — no other sync module gains a
- * storage import.
+ * `SyncBackend`). The storage import serves the honest delete's blob purge
+ * (`getStorage`/`ref`/`listAll`/`deleteObject`) and the shared embedding
+ * cache's read/write (`uploadBytes`/`getBytes` for putArtifact/getArtifact).
  *
  * Paths (the live layout — `~types/workspace.ts` documents the same):
  *   - metadata directory: `users/{uid}/workspaces/{workspaceId}`
@@ -67,12 +61,11 @@ const logger = createLogger('FirestoreBackend');
 
 /**
  * The Firestore subcollections an honest delete must sweep. The first four
- * are y-cinder-managed (firestore.rules documents the same; the legacy
- * delete purged only `updates` — sync.md debt #2). `embedCache` holds the
- * cached-embedding head records: `purgeStoragePrefix` is Storage-only and
- * sweeps the blob for free under the workspace prefix, but the Firestore head
- * record is NOT swept "for free" — it needs this explicit entry so a workspace
- * delete leaves no orphaned head records.
+ * are y-cinder-managed (firestore.rules documents the same). `embedCache`
+ * holds the cached-embedding head records: `purgeStoragePrefix` is Storage-only
+ * and sweeps the blob for free under the workspace prefix, but the Firestore
+ * head record is NOT swept "for free" — it needs this explicit entry so a
+ * workspace delete leaves no orphaned head records.
  */
 const PURGE_SUBCOLLECTIONS = [
   'updates',
@@ -84,10 +77,9 @@ const PURGE_SUBCOLLECTIONS = [
 
 /**
  * The provider event surface the adapter listens to. y-cinder's emitter is
- * an untyped ObservableV2 at this boundary; `saved` was forward-wired here
- * ahead of the fork delta, and since the P9 vendoring + surgery 1
- * (packages/y-cinder/PROVENANCE.md) the provider emits it after every
- * committed save — `lastSyncTime`-from-flush is live on this backend.
+ * an untyped ObservableV2 at this boundary; the provider emits `saved` after
+ * every committed save, which is what feeds `lastSyncTime`-from-flush on this
+ * backend.
  */
 interface ProviderEmitter {
   on(event: string, cb: (...args: never[]) => void): void;
@@ -192,9 +184,9 @@ export class FirestoreBackend implements SyncBackend {
     const db = getFirestoreDb();
     if (!db) throw new Error('Firestore not initialized');
 
-    // Check the main document for compacted state. (The legacy probe also
-    // sniffed `snapshotBase64` — a mock-only field that never exists on real
-    // Firestore docs; dropped here per §D1.)
+    // Check the main document for compacted state. (`snapshotBase64` is a
+    // mock-only field that never exists on real Firestore docs, so it is not
+    // probed here.)
     const docSnap = await getDoc(doc(db, this.docPath(workspaceId)));
     const hasMainDocData = Boolean(
       docSnap.exists() && (docSnap.data()?.content || docSnap.data()?.stateVector)
@@ -284,10 +276,10 @@ export class FirestoreBackend implements SyncBackend {
     }
 
     // 2. Sweep the Cloud Storage blobs under exactly this workspace's
-    // prefix (risk R8: never broader). Storage failures must not strand
-    // the delete flow: BYO projects without a Storage bucket have nothing
-    // y-cinder could have uploaded — log and report zero; the purge
-    // maintenance action retries any genuine residue later.
+    // prefix (never broader: a BYO project's bucket may hold unrelated files).
+    // Storage failures must not strand the delete flow: BYO projects without a
+    // Storage bucket have nothing y-cinder could have uploaded — log and report
+    // zero; the purge maintenance action retries any genuine residue later.
     let blobsDeleted = 0;
     try {
       const app = getFirebaseApp();
@@ -406,9 +398,9 @@ export class FirestoreBackend implements SyncBackend {
     const db = getFirestoreDb();
     if (!db) throw new Error('Firestore not initialized');
 
-    // 1. List the embedCache head records (batched like purgeSubcollection, but
-    // we keep each record's createdAt/size to pick victims rather than blanket-
-    // deleting). Each record's id is the content `{key}`.
+    // 1. List the embedCache head records (a full read, not purgeSubcollection's
+    // blanket delete loop: we keep each record's createdAt/size to pick
+    // victims). Each record's id is the content `{key}`.
     const headColPath = `${this.docPath(workspaceId)}/embedCache`;
     const heads: { key: string; createdAt: number; size: number }[] = [];
     {
@@ -508,7 +500,7 @@ export class FirestoreBackend implements SyncBackend {
     p.on('save-rejected', ((event: never) => emitter.emit('save-rejected', event)) as never);
     p.on('corrupted-document', ((event: never) =>
       emitter.emit('corrupted-document', event)) as never);
-    // Live since the y-cinder `saved` fork delta (P9 surgery 1).
+    // Emitted after every committed save.
     p.on('saved', ((at: number) => emitter.emit('saved', at)) as never);
     // Epoch transitions (y-cinder squash — the long-lived-document floor
     // reset). Both events mean the same thing for this connection: the
@@ -549,7 +541,7 @@ export class FirestoreBackend implements SyncBackend {
         destroyed = true;
         // y-cinder's destroy() drains the pending update cache (one final
         // committed save) before resolving — returned so durability-needing
-        // callers can await it (C3 additive evolution, P9).
+        // callers can await it (optional Promise return on the C3 contract).
         return provider.destroy();
       },
     };
@@ -559,7 +551,7 @@ export class FirestoreBackend implements SyncBackend {
 /**
  * Read y-cinder's live provider state for the diagnostics export. Public
  * getters are read directly; the queue/retry internals are PRIVATE fields of
- * the vendored provider, read defensively through an untyped view — a field
+ * the y-cinder provider, read defensively through an untyped view — a field
  * that disappears in a future y-cinder simply reports `undefined`. Never
  * used for control flow.
  */

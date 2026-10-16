@@ -1,14 +1,13 @@
 /**
- * Vocabulary key canonicalization (Phase 6 §7.5,
- * prep/phase6-reader-engine.md PR-13 — CH-6).
+ * Vocabulary key canonicalization (CH-6).
  *
- * `knownCharacters` keys are SIMPLIFIED, always. The bug this kills: the
- * triage card wrote whatever script was DISPLAYED (Traditional mode wrote
- * 紅, Simplified wrote 红), and the overlay filter compared against the
- * displayed char — so vocabulary silently stopped matching whenever the
+ * `knownCharacters` keys are SIMPLIFIED, always. Without that, the triage
+ * card would write whatever script was DISPLAYED (Traditional mode wrote
+ * 紅, Simplified wrote 红), and the overlay filter would compare against the
+ * displayed char — so vocabulary would silently stop matching whenever the
  * script toggle changed, and the same character could exist twice.
  *
- * Three permanent layers, all through {@link canonicalizeChar}:
+ * Three layers, all through {@link canonicalizeChar}:
  *  1. write path  — useVocabularyStore actions canonicalize before writing;
  *  2. read path   — PinyinOverlay's suppression filter and the triage
  *     card's isKnown canonicalize the DISPLAYED char before lookup;

@@ -1,6 +1,5 @@
 /**
- * File-shape validation for the import pipeline's "validate" stage
- * (phase7-library-google.md §B). Moved verbatim from `src/lib/ingestion.ts`.
+ * File-shape validation for the import pipeline's "validate" stage.
  */
 import { createLogger } from '@lib/logger';
 

@@ -1,8 +1,7 @@
 /**
- * ReaderChrome — the reader header + immersive-mode exit button (Phase 6
- * §5 table, prep/phase6-reader-engine.md PR-9). Extracted verbatim from
- * the legacy ReaderView, including the WebKit flushSync navigation
- * workaround (load-bearing — see the inline comment).
+ * ReaderChrome — the reader header + immersive-mode exit button, including
+ * the WebKit flushSync navigation workaround (load-bearing — see the inline
+ * comment).
  */
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';

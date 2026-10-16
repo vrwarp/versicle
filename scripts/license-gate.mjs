@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * License gate (Phase 0; gap-third-party-licensing-provenan.md target design
- * step 3). Run as `npm run licenses:check`; CI-blocking in ci.yml.
+ * License gate. Run as `npm run licenses:check`; CI-blocking in ci.yml.
  *
  * Fails when:
  *   1. Any PRODUCTION npm dependency (incl. transitive) has a license outside
@@ -14,9 +13,9 @@
  *      honestly "UNKNOWN — needs investigation", but never absent.
  *   3. THIRD-PARTY-NOTICES.md is missing (regenerate: npm run licenses:generate).
  *
- * Private packages are excluded from the npm scan: the root package and the
- * private-marked vendored forks (zustand-middleware-yjs, y-idb), which are
- * licensed via their inventory.json entries instead.
+ * Private packages are excluded from the npm scan: the root package and any
+ * dependency marked `private` (e.g. the zustand-middleware-yjs fork), which
+ * are licensed via their inventory.json entries instead.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';

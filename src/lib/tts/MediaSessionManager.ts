@@ -383,9 +383,9 @@ export class MediaSessionManager {
   }
 
   /**
-   * Updates the playback state (playing/paused) and optionally position state.
+   * Updates the playback state (playing/paused/none).
    *
-   * @param state - The current playback state or just the string 'playing' | 'paused' | 'none' for compatibility.
+   * @param playbackState - The current playback state.
    */
   async setPlaybackState(playbackState: 'playing' | 'paused' | 'none') {
     logger.info('setPlaybackState', playbackState, this.isNative ? 'native' : (this.hasWebMediaSession ? 'web' : 'none'));
@@ -399,8 +399,7 @@ export class MediaSessionManager {
   }
 
   /**
-   * Updates the position state (duration, playback rate, current time).
-   * Kept for backward compatibility with Web implementation usage.
+   * Updates the position state (duration, playback rate, current position).
    *
    * @param state - The current position state.
    */

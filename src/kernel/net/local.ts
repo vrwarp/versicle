@@ -1,5 +1,5 @@
 /**
- * Same-origin / local-URL fetch helper (Phase 7 §I).
+ * Same-origin / local-URL fetch helper.
  *
  * The lint ban on raw `fetch` outside src/kernel/net needs a home for the
  * handful of LOCAL fetches (blob: cover URLs from epub.js, `/books/…`,

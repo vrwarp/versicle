@@ -50,10 +50,11 @@ export class MigrationStateService {
 
     /**
      * Transition to STAGED — the commit point of the crash-resumable staged
-     * switch (Phase 4 §D4 step 6): the verified blob is durably in the
-     * staging database; the boot interceptor's STAGED arm performs the
-     * idempotent apply. `previousWorkspaceId` records the pre-switch active
-     * workspace so a later rollback can revert the local tie.
+     * switch (phase4-sync-strangler.md §D4 step 6): the verified blob is
+     * durably in the staging database; the boot interceptor's STAGED arm
+     * performs the idempotent apply. `previousWorkspaceId` records the
+     * pre-switch active workspace so a later rollback can revert the local
+     * tie.
      */
     static setStaged(
         targetWorkspaceId: string,
@@ -88,7 +89,8 @@ export class MigrationStateService {
 
     /**
      * Transition to RESTORING_BACKUP.
-     * Called when user rejects the switch or ErrorBoundary detects a crash.
+     * Called when the user rejects the switch or the boot interceptor's staged
+     * apply fails.
      */
     static setRestoringBackup(): void {
         const current = MigrationStateService.getState();

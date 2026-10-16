@@ -49,8 +49,8 @@ interface LibraryMatch {
  *    cleanly as a separate entry, which the user may or may not want.
  *
  * Neither blocks the import; the sheet only states which one is about to
- * happen (the previous title-only hint promised "import anyway?" even when the
- * pipeline was about to refuse a plain add).
+ * happen, so it never promises "import anyway?" when the pipeline is about to
+ * refuse a plain add.
  */
 function useLibraryMatch(filename?: string, title?: string): LibraryMatch | undefined {
   const books = useBookStore((s) => s.books);

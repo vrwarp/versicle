@@ -7,15 +7,14 @@ import { drain } from './helpers';
 /**
  * Fork contract — `atomicKeys` is DEAD CODE under `disableYText: true`
  * (phase2-fork-surgery.md correction ▲3): the mapping/patch branches only
- * consult atomicKeys when disableYText is falsy, so the app's
- * `getYjsOptions({ atomicKeys: ['__schemaVersion'] })` (useBookStore.ts:99)
- * has been a no-op since the v4 disableYText flip (commit fb96dd97).
+ * consult atomicKeys when disableYText is falsy, so passing it alongside
+ * `disableYText: true` (the encoding defineSyncedStore applies to every
+ * synced store) is a no-op.
  *
- * The design doc keeps the option in the package's YjsOptions ("existing,
- * unchanged semantics" — §2's options surface); the vestigial APP usage is
- * deleted with defineSyncedStore in the registry item (P2-6). This test
- * proves that deletion is a guaranteed no-behavior-change: with
- * disableYText: true, configuring atomicKeys produces a byte-identical doc.
+ * The package keeps the option in its YjsOptions ("existing, unchanged
+ * semantics" — §2's options surface); the app does not pass it. This test
+ * pins that with disableYText: true, configuring atomicKeys produces a
+ * byte-identical doc.
  */
 
 interface State {

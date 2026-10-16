@@ -1,9 +1,8 @@
 /**
- * The library invariant suite (Phase 7 §C; entry gate PR-0a → cutover
- * PR-L4).
+ * The library invariant suite.
  *
- * Five historical race-regression files pinned exactly one interleaving
- * each; this suite lifts them into named SERVICE invariants:
+ * Five race-regression files each pinned exactly one interleaving; this
+ * suite lifts them into named SERVICE invariants:
  *
  *   I-1  hydrate() is a per-key merge — a book written after hydrate's read
  *        snapshot is never clobbered.
@@ -16,12 +15,10 @@
  *   I-5  the offloaded set is updated per-key (add/remove deltas), never
  *        replaced wholesale from a stale snapshot.
  *
- * CUTOVER NOTE (PR-L4): the suite was written at the phase entry gate
- * against the legacy `useLibraryStore` workflows through the
- * `LibraryWorkflows` adapter below; the adapter NOW constructs the real
- * `LibraryService`/`ImportOrchestrator` over the real stores — the
- * assertions are unchanged. The five per-bug files were deleted in the same
- * PR (rule 8; plan/overhaul/prep/phase7-absorption-ledger.md rows 5–9):
+ * The `LibraryWorkflows` adapter below constructs the real
+ * `LibraryService`/`ImportOrchestrator` over the real stores. The five
+ * per-bug files were absorbed here and deleted (rule 8;
+ * plan/overhaul/prep/phase7-absorption-ledger.md rows 5–9):
  *
  *   useLibraryStore.race.test.ts          → I-1
  *   useLibraryStore.removeRace.test.ts    → I-2
@@ -43,10 +40,7 @@ import {
 import type { LibraryPersistence } from '@domains/library';
 import type { BookMetadata } from '~types/book';
 
-/**
- * The workflow surface the invariants run against — satisfied by the real
- * LibraryService since the PR-L4 cutover.
- */
+/** The workflow surface the invariants run against — satisfied by the real LibraryService. */
 interface LibraryWorkflows {
   hydrate(forceBookIds?: string[]): Promise<void>;
   restore(id: string, file: File): Promise<void>;
@@ -70,8 +64,8 @@ function makeWorkflows(
   const { service } = makeTestLibrary({
     persistence,
     purgeBookArtifact,
-    // Restore's synced-download path runs a full extraction; the fake keeps
-    // the legacy 50ms "slow import" latency the I-3 pin was written with.
+    // Restore's synced-download path runs a full extraction; the fake adds a
+    // 50ms "slow import" latency so the I-3 interleaving is exercised.
     extract: vi.fn(async (file: File) => {
       await tick(50);
       return makeFullExtraction({ bookId: 'zombie-book', title: `Book from ${file.name}` });

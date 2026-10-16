@@ -117,8 +117,8 @@ export class WebSpeechProvider implements ITTSProvider {
             const errorMsg = `SpeechSynthesisError: ${e.error}`;
             if (!started) {
                 // Single-shot contract: a failure to START surfaces through the
-                // rejection ONLY — never additionally as an 'error' event (the
-                // pre-5a emit+reject double-signal fed the S2 fallback double-fire).
+                // rejection ONLY — never additionally as an 'error' event (a
+                // double-signal would make the engine's fallback fire twice).
                 reject(new Error(errorMsg));
                 return;
             }

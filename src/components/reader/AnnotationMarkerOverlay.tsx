@@ -30,9 +30,9 @@ export const AnnotationMarkerOverlay: React.FC<AnnotationMarkerOverlayProps> = (
 }) => {
   if (markers.length === 0 || !containerNode) return null;
 
-  // ReaderOverlay 'interactive' contract (Phase 6 §4): focusable marker
-  // buttons must NOT live inside an aria-hidden container (the app-shell
-  // a11y finding) — the overlay group carries an accessible name instead.
+  // ReaderOverlay 'interactive' contract: focusable marker buttons must NOT
+  // live inside an aria-hidden container (the app-shell a11y finding) — the
+  // overlay group carries an accessible name instead.
   return (
     <ReaderOverlay mode="interactive" label="Annotation notes" containerNode={containerNode} className="z-10">
       {markers.map(marker => (
@@ -54,7 +54,7 @@ export const AnnotationMarkerOverlay: React.FC<AnnotationMarkerOverlayProps> = (
           title={marker.note}
           aria-label={`Note: ${marker.note}`}
         >
-          {/* Subtle icon lines similar to the old CSS ::after */}
+          {/* Subtle icon lines */}
           <div className="absolute inset-x-[3px] top-[3px] h-[1px] bg-yellow-600 shadow-[0_3px_0_theme(colors.yellow.600),0_6px_0_theme(colors.yellow.600)]" />
         </button>
       ))}

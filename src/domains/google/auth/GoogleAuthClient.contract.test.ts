@@ -1,16 +1,11 @@
 /**
- * GoogleAuthClient contract suite (Phase 7 §G, PR-A1 entry gate): per-service
- * token isolation, scope-superset cache validation, silent-never-interactive,
- * and the revocation matrix (only explicit disconnect clears state;
- * popup-block/offline/5xx leave everything alone).
- *
- * Absorbs the assertions of the deleted characterization files (test-
- * absorption ledger, README §4 rule 8):
- *  - src/lib/google/AndroidGoogleAuthStrategy.test.ts (cache TTL, login_hint,
- *    platform options, forceRefresh→invalidate, disconnect-clears-cache)
- *  - src/lib/google/GoogleIntegrationManager.test.ts (connect mirrors the
- *    store hint, connect failure does not mirror, token-failure semantics —
- *    REVERSED here per the §G design: no force-disconnect)
+ * GoogleAuthClient contract suite: per-service token isolation,
+ * scope-superset cache validation, silent-never-interactive, and the
+ * revocation matrix (only explicit disconnect clears state;
+ * popup-block/offline/5xx leave everything alone). Also pins the cache TTL,
+ * login_hint and platform-option pass-through, invalidateToken forcing the
+ * next interactive call to re-login, disconnect clearing the cache, and
+ * connect mirroring the store hint only on success.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GoogleAuthClient } from './GoogleAuthClient';
@@ -84,7 +79,7 @@ describe('GoogleAuthClient contract', () => {
         platform: { style: 'bottom', autoSelectEnabled: true },
       });
       await client.connect('drive', 'user@example.com');
-      // regression: AndroidGoogleAuthStrategy login_hint + platform options
+      // regression: login_hint + platform options reach the plugin
       expect(login).toHaveBeenCalledWith({
         provider: 'google',
         options: {

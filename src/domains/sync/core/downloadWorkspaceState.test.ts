@@ -1,12 +1,13 @@
 /**
  * `downloadWorkspaceState` unit suite — THE temp-doc hydration utility
- * (§D2). Its three resolution arms each carry legacy semantics the callers
- * depend on, so each is pinned here directly rather than through the
- * clean-sync / switch flows that consume it:
+ * (§D2). Its three resolution arms each carry semantics the callers depend
+ * on, so each is pinned here directly rather than through the clean-sync /
+ * switch flows that consume it:
  *
  *  - handshake lands  → resolve with the temp doc's full state
  *  - budget expires   → resolve with WHATEVER synced (an unreachable remote
- *                       reads as "empty", not as an error)
+ *                       reads as "empty", not as an error) unless
+ *                       `onTimeout: 'reject'`
  *  - connect throws   → `onAttachError` decides: reject (switch) or resolve
  *                       with the current state (clean sync)
  *

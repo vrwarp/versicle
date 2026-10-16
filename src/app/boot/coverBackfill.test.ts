@@ -1,6 +1,7 @@
 /**
  * Cover backfill — the one-time recovery of covers for books imported
- * before the malformed-EPUB hardening (plan §5, decision §9.3).
+ * before the malformed-EPUB hardening (plan/epub-toc-cover-hardening.md §5,
+ * decision §9.3).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { StaticManifestRow } from '@data/rows/static';

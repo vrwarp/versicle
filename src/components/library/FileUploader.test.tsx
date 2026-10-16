@@ -14,7 +14,7 @@ vi.mock('@lib/ingestion', () => ({
   validateZipSignature: vi.fn(),
 }));
 
-// Phase 7: import workflows live on the shared controller, not the store.
+// Import workflows live on the shared controller, not the store.
 const { mockAddBook, mockAddBooks, mockReplaceFile } = vi.hoisted(() => ({
   mockAddBook: vi.fn(),
   mockAddBooks: vi.fn(),

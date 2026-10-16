@@ -1,12 +1,12 @@
 /**
- * The real LibraryPersistence (Phase 7 §B "persist"): one gated transaction
- * per ingest via the bookContent repo, plus the searchText corpus row.
+ * The real LibraryPersistence (the import pipeline's "persist" stage): one
+ * gated transaction per ingest via the bookContent repo, plus the searchText
+ * corpus row.
  *
- * WEBKIT INVARIANTS (bug history — do not weaken): Blob → ArrayBuffer
- * conversion happens BEFORE the transaction and reads are hoisted out of
- * readwrite transactions. Both disciplines live in the data layer
- * (`bookContent.ingest` / `replaceDerivedContent`, absorbed there in Phase 3
- * D5.3 after drifting between the ingestion copies caused D4) — this module
+ * WEBKIT INVARIANTS (do not weaken): Blob → ArrayBuffer conversion happens
+ * BEFORE the transaction and reads are hoisted out of readwrite
+ * transactions. Both disciplines live in the data layer
+ * (`bookContent.ingest` / `replaceDerivedContent`) — this module
  * deliberately adds NO transaction logic of its own.
  *
  * The two yjs-merged reads (BookRepository-backed) are INJECTED: domains
@@ -25,10 +25,9 @@ const logger = createLogger('LibraryPersist');
 
 /**
  * Retarget an extraction onto an EXISTING bookId (ghost adoption, replace,
- * synced-book restore). Absorbs `BookImportService.importBookWithId`'s id
- * rewrite: every bookId-bearing row — manifest, resource, structure, spine
- * ids, TTS prep ids, table ids, inventory, progress, overrides — is
- * rewritten consistently (ledger row 10).
+ * synced-book restore). Every bookId-bearing row — manifest, resource,
+ * structure, spine ids, TTS prep ids, table ids, inventory, progress,
+ * overrides — is rewritten consistently.
  */
 export function retargetExtraction(extraction: FullBookExtraction, bookId: string): FullBookExtraction {
   const originalBookId = extraction.bookId;
@@ -89,7 +88,7 @@ export function createLibraryPersistence(merged: MergedReadDeps): LibraryPersist
         },
         opts.mode,
       );
-      // The search corpus rides every ingest (Phase 7 §F). Failure is
+      // The search corpus rides every ingest. Failure is
       // non-fatal: the row is rebuildable on first search.
       try {
         await searchTextRepo.put({

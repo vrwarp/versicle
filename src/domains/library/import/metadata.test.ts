@@ -3,8 +3,6 @@
  * through here. A validation hole lets a malformed record into the store,
  * and a sanitization hole lets book-supplied HTML into the UI — EPUB
  * metadata is attacker-controlled content as far as this app is concerned.
- * Mutation testing scored this module at 6%, so essentially none of it was
- * being asserted on.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { getSanitizedBookMetadata, sanitizeString } from './metadata';

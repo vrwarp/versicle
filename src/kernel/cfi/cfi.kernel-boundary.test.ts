@@ -1,16 +1,16 @@
 /**
- * Kernel-boundary invariants (phase5-tts-strangler.md §5c.4):
+ * Kernel-boundary invariants:
  *
  *  1. `epubjs/src/epubcfi` is imported by EXACTLY ONE module — the kernel's
  *     typed shim (src/kernel/cfi/epubcfiShim.ts). The `@ts-expect-error`'d
  *     epubjs internals are quarantined there; everything else uses the
  *     kernel's typed surface.
  *  2. src/kernel/** imports nothing internal outside src/kernel/** except
- *     ~types (master plan §2 rule 1 — belt to the dependency-cruiser
- *     `kernel-imports-nothing` braces; this one also covers non-test files
- *     that depcruise excludes). ~types is the one sanctioned dependency:
- *     itself a zero-dep layer, it carries the C10 append-only AppError code
- *     union that kernel/net's typed NET_* errors extend (Phase 7 §I).
+ *     ~types (plan/overhaul/README.md §2 boundary rule 1 — belt to the
+ *     dependency-cruiser `kernel-imports-nothing` braces; this one also covers
+ *     non-test files that depcruise excludes). ~types is the one sanctioned
+ *     dependency: itself a zero-dep layer, it carries the C10 append-only
+ *     AppError code union that kernel/net's typed NET_* errors extend.
  *
  * Source-scan style follows the worker-chunk / single-instance checks: assert
  * the tree, not a convention.

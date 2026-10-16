@@ -20,8 +20,8 @@ const logger = createLogger('FileUploader');
 
 /**
  * A component for uploading EPUB files, ZIP archives, or directories via drag-and-drop or file selection.
- * Handles user interactions and triggers the book import process (Phase 7:
- * through the shared import controller — the store is a read-only projection).
+ * Handles user interactions and triggers the book import process through the
+ * shared import controller — the store is a read-only projection.
  *
  * @returns A React component rendering the file upload area.
  */
@@ -164,9 +164,9 @@ export const FileUploader: React.FC = () => {
     }
   };
 
-  // Browsing Drive is a route now (the shelf at /drive), not a modal. The
-  // token is still acquired from this gesture so the shelf can hydrate
-  // previews and import without needing a popup of its own.
+  // Browsing Drive navigates to the shelf route (/drive). The token is
+  // acquired from this gesture so the shelf can hydrate previews and import
+  // without needing a popup of its own.
   const handleBrowseDrive = async () => {
     try {
       await getGoogleAuthClient().getTokenInteractive('drive');

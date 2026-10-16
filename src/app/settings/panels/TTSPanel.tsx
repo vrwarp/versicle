@@ -1,9 +1,9 @@
 /**
- * TTS Engine settings panel (Phase 8 §B): self-contained wiring for the
- * presentational TTSSettingsTab. The provider list itself renders from the
- * 5a ProviderDescriptor registry inside TTSSettingsTab — adding a provider
- * does not touch settings code. Handlers (buffered API-key probe, piper
- * voice-readiness) moved verbatim from the deleted GlobalSettingsDialog.
+ * TTS Engine settings panel: self-contained wiring for the presentational
+ * TTSSettingsTab. The provider list itself renders from the ProviderDescriptor
+ * registry (@lib/tts/providers/registry) inside TTSSettingsTab — adding a
+ * provider does not touch settings code. Handlers: buffered API-key probe,
+ * piper voice-readiness.
  */
 import React, { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -46,7 +46,7 @@ const TTSPanel: React.FC = () => {
   })));
 
   // Runtime engine state (voice list, resolved voice, download progress) lives
-  // in the ephemeral playback store since the 5b split.
+  // in the ephemeral playback store.
   const { voice, voices, downloadProgress, downloadStatus, isDownloading } = useTTSPlaybackStore(useShallow(state => ({
     voice: state.voice,
     voices: state.voices,
@@ -61,9 +61,10 @@ const TTSPanel: React.FC = () => {
   const [isVoiceReady, setIsVoiceReady] = useState(false);
 
   /**
-   * Explicit "Test Key" action (5a buffered API-key edits): commit happened on
-   * blur; here we build a throwaway provider from the registry with the entered
-   * key and probe it (init + voice listing) WITHOUT touching the active provider.
+   * Explicit "Test Key" action (API-key edits are buffered): the commit
+   * happens on blur; here we build a throwaway provider from the registry
+   * with the entered key and probe it (init + voice listing) WITHOUT
+   * touching the active provider.
    */
   const handleTestApiKey = async (provider: TTSApiKeyProviderId, key: string) => {
     const descriptor = resolveDescriptor(provider);

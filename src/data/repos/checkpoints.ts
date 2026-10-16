@@ -1,9 +1,6 @@
 /**
- * `checkpoints` repository — local Yjs recovery checkpoints (Phase 3, D5.5
- * in plan/overhaul/prep/phase3-storage-gateway.md; carved LAST, after the
- * Phase 2 checkpoint work settled). Only the IDB access moved here:
- * CheckpointService itself lives in domains/sync/checkpoints (P4-3; its
- * legacy FirestoreSyncManager import cycle was cut by the §D7 inversion).
+ * `checkpoints` repository — local Yjs recovery checkpoints. Only the IDB
+ * access lives here: CheckpointService itself is in domains/sync/checkpoints.
  */
 import { getConnection } from '../connection';
 import { runExclusiveIdbWrite, write } from '../write-gate';
@@ -18,7 +15,7 @@ const CHECKPOINT_LIMIT = 10;
 class CheckpointsRepo {
   /**
    * Persist a checkpoint. Owns BOTH protected-flag invariants inside ONE
-   * gated transaction (moved verbatim from CheckpointService.createCheckpoint):
+   * gated transaction:
    *
    * - Supersede-older-protected: only one migration can be in flight at a
    *   time, so only the NEWEST protected checkpoint stays pinned — older

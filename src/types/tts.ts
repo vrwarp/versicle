@@ -1,15 +1,13 @@
 /**
  * TTS domain types: the canonical playback queue-item and audio-alignment
- * shapes, plus the persisted TTS session/position/content rows.
+ * shapes, plus the persisted TTS position row.
  *
- * This module is the canonical home of {@link TTSQueueItem} (formerly
- * defined in lib/tts/AudioPlayerService.ts) and {@link Timepoint} (formerly
- * defined in lib/tts/providers/types.ts). Those modules re-export them for
- * their existing consumers; defining them here breaks the types→lib/tts
- * dependency inversion (plan/overhaul/analysis/layering-deps.md LD-1).
+ * This module is the canonical home of {@link TTSQueueItem} and
+ * {@link Timepoint}; defining them here (not in lib/tts) keeps the types
+ * layer from importing upward into lib/tts
+ * (plan/overhaul/analysis/layering-deps.md LD-1). lib/tts/providers/types.ts
+ * re-exports {@link Timepoint} for its consumers.
  *
- * Extracted from types/db.ts in the Phase 1a type split
- * (plan/overhaul/README.md §Roadmap P1).
  * Layering rule: src/types/** imports nothing internal except other
  * src/types modules, and that graph stays acyclic.
  */

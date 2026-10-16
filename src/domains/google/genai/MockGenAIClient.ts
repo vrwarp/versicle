@@ -1,9 +1,8 @@
 /**
- * MockGenAIClient (Phase 7 §H — the mock-seam exit, GG-4/privacy D9).
+ * MockGenAIClient (GG-4/privacy D9) — the E2E/test GenAI double.
  *
- * Replaces the three `localStorage.getItem('mockGenAIResponse')` production
- * seams: this class lives OUTSIDE the production import graph (boundary
- * rule 9 — it is reachable only from `installTestApi()`'s
+ * It lives OUTSIDE the production import graph (boundary rule 9 — it is
+ * reachable only from `installTestApi()`'s
  * `window.__versicleTest.genai.setMock(...)`, which itself is installed
  * only under `import.meta.env.DEV || VITE_E2E`) and from test files.
  *
@@ -18,7 +17,7 @@ export interface MockGenAIFixture {
   response?: unknown;
   /** When set, every call rejects with this message. */
   error?: string;
-  /** Simulated latency; defaults to the legacy seam's 500ms. */
+  /** Simulated latency in ms; defaults to 500. */
   delayMs?: number;
 }
 

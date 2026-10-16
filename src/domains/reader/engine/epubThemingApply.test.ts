@@ -2,12 +2,12 @@
  * `epubTheming` — the three rendition-facing entry points.
  *
  * epubThemingPure.test.ts owns the arithmetic and CSS-building helpers;
- * epubTheming.test.ts owns the legacy characterization pins. This file
+ * epubTheming.test.ts owns the characterization pins. This file
  * covers what neither reaches: what `registerBaseThemes` / `applyReaderTheme`
  * actually push into epub.js, and the per-section normalization
  * `injectContentExtras` performs on a real (jsdom) document — including the
- * D5 rule that only a FLOW change reflows, since a spurious reflow per
- * settings tweak was the bug this contract exists to prevent.
+ * rule that only a FLOW change reflows, since a spurious reflow per
+ * settings tweak is what this contract exists to prevent.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Contents, Rendition } from 'epubjs';

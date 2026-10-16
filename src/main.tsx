@@ -11,11 +11,6 @@ import { useAnnotationStore } from './store/useAnnotationStore';
 import { useReaderUIStore } from './store/useReaderUIStore';
 import { markStandalonePlatform } from './app/boot/standaloneChrome';
 
-// The legacy `window.useTTSStore` shim (playback reads + play/pause for the
-// verification specs) met its named P9 deadline: the specs read
-// `useTTSPlaybackStore` directly and drive commands through the typed
-// `window.__versicleTest.tts` surface (src/test-api.ts).
-
 declare global {
   interface Window {
     useTTSSettingsStore: typeof useTTSSettingsStore;
@@ -41,7 +36,7 @@ declare global {
 // iPad status-bar clearance on the attribute this sets (no layout jump).
 markStandalonePlatform();
 
-// Typed E2E test API (window.__versicleTest): flushPersistence/resetApp.
+// Typed E2E test API (window.__versicleTest, src/test-api.ts).
 // DEV + E2E builds only (Dockerfile.verification sets VITE_E2E=true); the
 // gate keeps the module out of the production execution path.
 if (import.meta.env.DEV || import.meta.env.VITE_E2E === 'true') {
@@ -140,10 +135,6 @@ if (typeof window !== 'undefined') {
     };
   };
 }
-
-// SocialLogin initialization (and its re-init store subscription) used to run
-// here at module scope; it is now the `google/social-login` boot task
-// (src/app/boot/socialLogin.ts) sequenced by src/app/bootstrap.ts.
 
 // Boot milestone: everything above (the entire static import graph of the
 // entry chunk) has now fetched, parsed and evaluated. Duration is measured

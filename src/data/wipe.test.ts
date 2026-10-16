@@ -1,9 +1,9 @@
 /**
- * wipeAllData suite (moved from src/db/wipe.test.ts in the P3-12 carve;
- * test-absorption ledger). The writer-stopping module mocks became
- * registry hooks (D9): the suite registers its own ordering probes through
+ * wipeAllData suite. The writers a wipe must stop are registry hooks, not
+ * module mocks: the suite registers its own ordering probes through
  * registerWipeHook exactly the way the app composition manifest
- * (src/app/boot/registerBootTasks.ts) registers sync-stop/yjs-disconnect.
+ * (src/app/boot/registerBootTasks.ts) registers the sync-stop and
+ * Yjs-persistence-stop hooks.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { wipeAllData, registerWipeHook, clearWipeHooksForTests } from './wipe';

@@ -1,14 +1,13 @@
 /**
- * BYO-Firebase rules-lockout detection (the P0 hotfix graft): when the
- * user's deployed security rules are older than what the app expects,
- * Firestore / Cloud Storage start rejecting writes with permission-denied.
- * Moved here from FirestoreSyncManager (P4-3a) so presentation
- * (wireSyncEvents) and transports can share it without importing the
- * manager module.
+ * BYO-Firebase rules-lockout detection: when the user's deployed security
+ * rules are older than what the app expects, Firestore / Cloud Storage start
+ * rejecting writes with permission-denied. ProviderConnection tags failure
+ * events with this predicate's verdict; presentation (wireSyncEvents) turns it
+ * into the user-facing message.
  *
- * Phase 8 §D: the user-facing COPY left this module for the typed catalog
- * (kernel/locale/messages.ts key 'sync.rulesOutOfDate') — the transport
- * keeps only the detection predicate below.
+ * The user-facing COPY lives in the typed catalog (kernel/locale/messages.ts
+ * key 'sync.rulesOutOfDate') — the transport keeps only the detection
+ * predicate below.
  */
 
 /**

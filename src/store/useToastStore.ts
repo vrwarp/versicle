@@ -7,7 +7,7 @@ import { resolveMessage, isMessageKey, type MessageInput } from '@kernel/locale/
 export type ToastType = 'info' | 'error' | 'success';
 
 /**
- * An optional action button on a toast (Phase 8 §G: the SW update prompt's
+ * An optional action button on a toast (e.g. the SW update prompt's
  * persistent "Reload" toast). The label resolves through the catalog like
  * the message itself.
  */
@@ -34,7 +34,7 @@ export interface ToastEntry {
   action?: { label: string; onAction: () => void };
 }
 
-/** Queue cap (risk 7: per-file import errors must not flood the screen). */
+/** Queue cap: per-file import errors must not flood the screen. */
 const MAX_TOASTS = 5;
 
 let nextToastId = 1;
@@ -42,12 +42,11 @@ let nextToastId = 1;
 /**
  * State interface for the Toast notification store.
  *
- * Phase 8 §D: QUEUE-based — the legacy single-slot store overwrote the
- * visible toast on every call (a second toast lost the first, see the
- * regression block in useToastStore.test.ts). Toasts now stack, each with
- * its own timer (owned by the Toast component), and the container mounts
- * ABOVE the router gate so boot-time toasts render after mount instead of
- * being dropped.
+ * QUEUE-based: a second toast stacks instead of overwriting the first (see
+ * the regression block in useToastStore.test.ts). Each toast has its own
+ * timer (owned by the Toast component), and the container mounts ABOVE the
+ * router gate so boot-time toasts render after mount instead of being
+ * dropped.
  */
 interface ToastState {
   /** The visible toast stack, oldest first. */
@@ -57,8 +56,8 @@ interface ToastState {
    *
    * Content is a catalog key or `{ key, params }` per the i18n ADR.
    * Free-form prose remains accepted as a DEPRECATED overload while the
-   * 81 legacy call sites migrate opportunistically — new call sites use
-   * keys.
+   * remaining prose call sites migrate opportunistically — new call sites
+   * use keys.
    *
    * @param content - MessageKey, `{key, params}`, or (deprecated) prose.
    * @param type - The toast type (default: 'info').
@@ -73,7 +72,7 @@ interface ToastState {
   ) => void;
   /** Dismiss one toast by id. */
   dismissToast: (id: number) => void;
-  /** Dismiss everything (legacy `hideToast()` semantics, kept for tests). */
+  /** Dismiss everything (kept for tests). */
   hideToast: () => void;
 }
 
@@ -93,7 +92,7 @@ export const useToastStore = create<ToastState>((set) => ({
       ? { label: resolveMessage(action.label), onAction: action.onAction }
       : undefined;
     set((state) => {
-      // Dedupe (risk 7): an identical visible toast refreshes instead of
+      // Dedupe: an identical visible toast refreshes instead of
       // stacking — replace it with a fresh entry (new id restarts the
       // timer and re-announces).
       const kept = state.toasts.filter((t) => !(t.message === message && t.type === type));

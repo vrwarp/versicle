@@ -1,11 +1,9 @@
 /**
- * DictionaryService — the IDB-backed CC-CEDICT lookup service
- * (Phase 6 §7.4, prep/phase6-reader-engine.md PR-11).
+ * DictionaryService — the IDB-backed CC-CEDICT lookup service.
  *
- * Replaces the legacy `useChineseDictionary` module-global fetch: the
- * whole 14 MB cedict.json was parsed into ONE in-memory Record (~80 MB
- * retained) and re-fetched per session, triggered by ANY selection
- * containing a CJK character. Now:
+ * The whole 14 MB cedict.json is never parsed into ONE in-memory Record
+ * (~80 MB retained, re-fetched per session, triggered by ANY selection
+ * containing a CJK character). Instead:
  *
  *  - the compiled dictionary lives in the `versicle-dict` IndexedDB
  *    database (src/data/repos/dictionary — rebuildable static content,
@@ -13,13 +11,13 @@
  *  - the first use imports /dict/cedict.json into IDB IN A WORKER
  *    (src/workers/dictionaryImport.worker.ts, driven through the
  *    {@link DictionaryServiceDeps.runImport} port) with progress + a LOUD
- *    error surface (status: 'empty'|'importing'|'ready'|'error' — CH-13's
- *    silent failure dies);
+ *    error surface (status: 'empty'|'importing'|'ready'|'error' — a failed
+ *    import is never silent);
  *  - lookups are async and per-word ({@link getEntry}/{@link getEntries});
  *    nothing retains the full map. The import is gated on first triage
  *    open (the consumer), not on selection.
  *
- * What this class does NOT do any more: fetch, JSON.parse or write the
+ * What this class does NOT do: fetch, JSON.parse or write the
  * payload. `await response.json()` on the 15,154,650-byte artifact measured
  * 183 ms / ~104 MB of transient heap on desktop x86 — 1.2–2.4 s of frozen UI
  * on a mid-range Android WebView, right when the user is waiting for the
@@ -168,8 +166,8 @@ export class DictionaryService {
     try {
       // Everything heavy — the fetch, the 15 MB parse, clearAll(), the
       // chunked bulkPut transactions and the provenance sidecar — happens
-      // behind this one call. The port emits the same progress sequence the
-      // inline loop used to publish directly.
+      // behind this one call. The port reports progress back through the
+      // callback, which the service republishes to its subscribers.
       const total = await this.runImport((progress: DictionaryImportProgress) => {
         this.setProgress({ status: 'importing', imported: progress.imported, total: progress.total });
       });

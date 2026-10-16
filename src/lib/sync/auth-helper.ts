@@ -11,10 +11,10 @@ import { getGoogleAuthClient, GOOGLE_SERVICES, type GoogleServiceId } from '@dom
 import { useGoogleServicesStore } from '@store/useGoogleServicesStore';
 
 /**
- * Sign in with Google via the GoogleAuthClient's `connect('identity')`
- * (Phase 7 §G, GG-13): the client returns the FULL credential — idToken for
- * Firebase, accessToken as fallback — so this module no longer drives a
- * parallel SocialLogin.login flow with its own copy of the scope list.
+ * Sign in with Google via the GoogleAuthClient's `connect('identity')`: the
+ * client returns the FULL credential — idToken for Firebase, accessToken as
+ * fallback — so this module does not drive its own SocialLogin.login flow
+ * or keep its own copy of the scope list.
  */
 export const signInWithGoogle = async (): Promise<UserCredential | undefined | void> => {
     const auth = getFirebaseAuth();

@@ -4,15 +4,14 @@
  * sequencing, clean-sync routing, the §D5 quarantine layers 1+3 on the
  * connect path, and the status fan-out onto the typed SyncEvent bus.
  *
- * This is the decomposition of the deleted 1046→862-line
- * FirestoreSyncManager: AuthSession owns auth, ProviderConnection owns the
- * live attachment, WorkspaceService owns the workspace flows; this module
- * owns the order they run in. Everything stateful it touches arrives via
- * the injected deps (src/domains/sync/core/ports.ts) — no store imports in
- * here. Constructed ONCE by the composition root
- * (src/app/sync/createSync.ts), which the `syncInit` boot task drives.
+ * AuthSession owns auth, ProviderConnection owns the live attachment,
+ * WorkspaceService owns the workspace flows; this module owns the order they
+ * run in. Everything stateful it touches arrives via the injected deps
+ * (src/domains/sync/core/ports.ts) — no store imports in here. Constructed
+ * ONCE by the composition root (src/app/sync/createSync.ts), which the
+ * `syncInit` boot task drives.
  *
- * Architecture (unchanged from the legacy manager):
+ * Architecture:
  * - y-idb persistence: primary (always active, source of truth offline)
  * - the C3 SyncBackend connection: secondary cloud overlay, active only
  *   when authenticated.
@@ -106,10 +105,10 @@ export class SyncOrchestrator {
 
   /**
    * Start the orchestrator: evaluate the single enablement gate
-   * (`(firebaseEnabled && isConfigured) || mockEnabled` — §D2; the legacy
-   * boot path ignored the flag), then run the auth session, which drives
-   * connection through handleAuthStateChange. Re-runnable: the settings UI
-   * re-initializes after enabling/configuring Firebase without a reload.
+   * (`(firebaseEnabled && isConfigured) || mockEnabled` — §D2), then run the
+   * auth session, which drives connection through handleAuthStateChange.
+   * Re-runnable: the settings UI re-initializes after enabling/configuring
+   * Firebase without a reload.
    *
    * `bypassEnabledGate` exists for the explicit sign-in path: clicking
    * "Sign in" on a configured-but-not-yet-enabled client must be able to
@@ -161,7 +160,8 @@ export class SyncOrchestrator {
       }
 
       // Only connect if we have a defined destination.
-      // NOT awaited (legacy parity, pinned debt — prep doc item 17).
+      // NOT awaited: connect() can throw WorkspaceDeletedError, which is
+      // left unhandled on this path.
       this.connect(user.uid);
     } else {
       logger.info('User signed out');
@@ -171,10 +171,9 @@ export class SyncOrchestrator {
   }
 
   /**
-   * The connect sequence for an authenticated uid (was the manager's
-   * `connectFireProvider`): tombstone pre-flight, §D5 layer-1 pre-attach
-   * quarantine probe, pre-sync checkpoint, local hydration barrier, §D5
-   * layer-3 metadata stamp, then clean-sync routing.
+   * The connect sequence for an authenticated uid: tombstone pre-flight,
+   * §D5 layer-1 pre-attach quarantine probe, pre-sync checkpoint, local
+   * hydration barrier, §D5 layer-3 metadata stamp, then clean-sync routing.
    */
   async connect(uid: string): Promise<void> {
     const workspaceId = this.getActiveWorkspaceId();
@@ -292,8 +291,8 @@ export class SyncOrchestrator {
       logger.info('Cloud data found. Initiating temporary Y.Doc sync...');
       events.emit({ type: 'clean-sync', phase: 'started' });
 
-      // Legacy clean-sync behavior: a connect failure or timeout
-      // resolves with whatever synced (treated as "remote empty").
+      // Clean-sync behavior: a connect failure or timeout resolves with
+      // whatever synced (treated as "remote empty").
       const downloaded = await downloadWorkspaceState(backend, workspaceId, {
         maxWaitTimeMs: maxWaitTime,
         maxUpdatesThreshold: this.config.maxUpdatesThreshold,
@@ -341,7 +340,7 @@ export class SyncOrchestrator {
   /**
    * Quarantine severing (§D5): called by wireSyncEvents on the `obsolete`
    * SyncEvent. A real provider destroy — zero outbound writes afterwards —
-   * not the pre-P4 status-label flip. Idempotent.
+   * not just a status-label flip. Idempotent.
    */
   severObsoleteConnection(): void {
     if (this.provider.isAttached()) {
@@ -368,7 +367,7 @@ export class SyncOrchestrator {
     await this.auth.signOut();
   }
 
-  /** Stop the orchestrator and release every resource (was destroy()). */
+  /** Stop the orchestrator and release every resource. */
   stop(): void {
     this.provider.detach();
     this.auth.stop();
@@ -408,7 +407,7 @@ export class SyncOrchestrator {
     return this.workspaces.delete(this.getBackend(user.uid), workspaceId);
   }
 
-  /** The "Purge deleted workspaces" maintenance action (P4-6). */
+  /** The "Purge deleted workspaces" maintenance action. */
   async purgeDeletedWorkspaces(): Promise<PurgeReport> {
     const user = this.getCurrentUser();
     if (!user) throw new Error('Must be authenticated to purge workspaces');
@@ -605,7 +604,7 @@ export class SyncOrchestrator {
    * The null-gate is deliberate — it ensures the returned backend is bound to
    * the right uid and the path is scoped to the right workspace, so a lookup
    * can never read a cached embedding under the wrong account/workspace. Adds NO
-   * new backend method (the three sync contract suites stay green); it only
+   * new backend method (the sync backend contract suites stay green); it only
    * re-exposes the existing {@link getBackend} + {@link getActiveWorkspaceId}
    * the connect path already uses. (design: plan/shared-ai-cache-design.md)
    */
@@ -622,7 +621,7 @@ export class SyncOrchestrator {
 /**
  * Construct an orchestrator over the injected deps. No singleton here: the
  * composition root (src/app/sync/createSync.ts) owns the one production
- * instance (replacing the legacy `FirestoreSyncManager.getInstance()`).
+ * instance.
  */
 export function createSyncOrchestrator(deps: SyncOrchestratorDeps): SyncOrchestrator {
   return new SyncOrchestrator(deps);

@@ -1,20 +1,14 @@
 /**
- * LexiconService — main-thread lexicon facade (Phase 5c;
- * phase5-tts-strangler.md §5c.3): CRUD over the yjs-backed useLexiconStore
- * plus the {@link LexiconAssembler} that compiles rules into stable
- * {@link CompiledLexicon} value objects keyed by (bookId, language, store
- * version) and invalidated via `useLexiconStore.subscribe`.
- *
- * What died here (content debt S15/S16/D6/D12 — see the 5c design):
- *  - the early-return path that skipped the memo write for book lookups
- *    (the assembler is single-exit);
- *  - the per-call Bible rule re-mapping (frozen per-language compile in
- *    ./systemLexicon, loaded lazily from bible-lexicon.json);
- *  - `getRulesHash` (zero callers).
+ * LexiconService — main-thread lexicon facade: CRUD over the yjs-backed
+ * useLexiconStore plus the {@link LexiconAssembler} that compiles rules into
+ * stable {@link CompiledLexicon} value objects keyed by (bookId, language,
+ * store version) and invalidated via `useLexiconStore.subscribe`. System
+ * (Bible) rules are compiled once per language in ./systemLexicon, loaded
+ * lazily from bible-lexicon.json.
  *
  * The global Bible flag is PUSHED by the app layer (TtsController reads the
  * settings store and calls setGlobalBibleLexiconEnabled) — a direct
- * settings-store read here would regress the lib-not-to-store ratchet.
+ * settings-store read here would violate the lib-not-to-store boundary rule.
  *
  * Text transformation stays in the yjs-free LexiconApplier (worker-safe).
  */
@@ -63,7 +57,7 @@ export class LexiconService {
 
     /**
      * Retrieves all rules applicable to a specific book (Global + Book Specific).
-     * Back-compat array view over {@link getCompiled}.
+     * Array view over {@link getCompiled}.
      */
     async getRules(bookId?: string, language?: string): Promise<LexiconRule[]> {
         const compiled = await this.assembler.getCompiled(bookId, language);

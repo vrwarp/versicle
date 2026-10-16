@@ -1,9 +1,8 @@
 /**
  * `WorkspaceService` — create/switch/delete/list over the C3 `SyncBackend`
- * (phase4-sync-strangler.md §D2): absorbs FirestoreSyncManager's workspace
- * flows verbatim, over injected ports (no store imports — the
- * `activeWorkspaceId` reads/writes go through SyncStatePort, the connection
- * hooks come from the orchestrator).
+ * (phase4-sync-strangler.md §D2): the workspace flows run over injected
+ * ports (no store imports — the `activeWorkspaceId` reads/writes go through
+ * SyncStatePort, the connection hooks come from the orchestrator).
  *
  * `switchWorkspace` is the §D4 staged swap: pre-flight → protected backup →
  * download (pure read) → verify on scratch → durable staging → STAGED
@@ -40,8 +39,7 @@ export interface WorkspaceServiceDeps {
   /**
    * Sever the live provider connection — SCOPED, not a full manager
    * destroy (createWorkspace reconnect prep; delete-of-the-active
-   * workspace). The legacy real-path `stopAll` (full destroy on every
-   * delete) died with the P4-6 honest-delete unification.
+   * workspace).
    */
   disconnect: () => void;
   /** Re-run the connect sequence for the given uid (after create). */
@@ -83,10 +81,10 @@ export class WorkspaceService {
    * Switch to an existing workspace — the §D4 staged swap.
    *
    * Everything before the STAGED commit is a PURE READ of live state: no
-   * state-machine engagement, no `activeWorkspaceId` write, no wipe. (The
-   * legacy flow locked the state machine and flipped the id BEFORE the
-   * download — a crash during download left a dangling AWAITING state; the
-   * new ordering shrinks the pre-commit crash window to zero.) The
+   * state-machine engagement, no `activeWorkspaceId` write, no wipe.
+   * (Locking the state machine or flipping the id BEFORE the download would
+   * leave a dangling AWAITING state after a crash during download; this
+   * ordering shrinks the pre-commit crash window to zero.) The
    * destructive apply runs on the next boot, idempotently, from durable
    * staging (stagedSwap.applyStagedSwap).
    */
@@ -101,7 +99,7 @@ export class WorkspaceService {
 
     logger.info(`Switching workspace: ${currentWorkspaceId} → ${targetWorkspaceId}`);
 
-    // Step 1: Pre-flight validation (unchanged).
+    // Step 1: Pre-flight validation.
     const isAlive = await backend.isWorkspaceAlive(targetWorkspaceId);
     if (!isAlive) {
       events.emit({
@@ -113,7 +111,7 @@ export class WorkspaceService {
     }
 
     try {
-      // Step 2: Backup current state (unchanged).
+      // Step 2: Backup current state.
       // Protected: the rolling checkpoint prune must not delete the
       // rollback target while the migration state machine is unresolved.
       logger.info('Creating pre-migration checkpoint...');
@@ -122,8 +120,8 @@ export class WorkspaceService {
 
       // Step 3: Download — a pure read into a temp doc. A synchronous
       // connect failure rejects (routed to the non-destructive catch
-      // below); a timeout resolves with whatever synced (legacy behavior,
-      // pinned by the characterization suite).
+      // below); a timeout resolves with whatever synced
+      // (downloadWorkspaceState's default).
       logger.info('Downloading remote workspace state...');
       events.emit({ type: 'switch', phase: 'downloading' });
 
@@ -186,9 +184,9 @@ export class WorkspaceService {
   }
 
   /**
-   * The honest delete (P4-6): tombstone → purge → conditional sever.
+   * The honest delete: tombstone → purge → conditional sever.
    *
-   * Unified semantics (the legacy real/mock divergence is dead): deleting
+   * Real and mock backends share these semantics: deleting
    * the ACTIVE workspace first detaches the live provider (a connection
    * must not keep syncing into a workspace being tombstoned) and severs
    * the local tie afterwards; deleting a NON-active workspace touches
@@ -204,8 +202,8 @@ export class WorkspaceService {
     const wasActive = activeWorkspaceId === workspaceId;
 
     if (wasActive) {
-      // Scoped sever — NOT the legacy full destroy: only the live
-      // attachment to the workspace being deleted comes down.
+      // Scoped sever, not a full destroy: only the live attachment to the
+      // workspace being deleted comes down.
       this.deps.disconnect();
     }
 
@@ -224,11 +222,11 @@ export class WorkspaceService {
   }
 
   /**
-   * The one-time "Purge deleted workspaces" maintenance action (P4-6):
+   * The one-time "Purge deleted workspaces" maintenance action:
    * walk the full directory (tombstoned entries included) and purge the
-   * residuals every pre-P4-6 delete left behind — `history`/`maintenance`/
-   * `metadata` docs and Storage blobs survived the legacy updates-only
-   * purge. Re-asserts each tombstone first (idempotent; also closes any
+   * residuals that earlier deletes left behind — `history`/`maintenance`/
+   * `metadata` docs and Storage blobs survived an updates-only purge.
+   * Re-asserts each tombstone first (idempotent; also closes any
    * crash-mid-delete husk), then sweeps. Safe to run repeatedly.
    */
   async purgeDeleted(backend: SyncBackend): Promise<PurgeReport> {

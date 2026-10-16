@@ -7,7 +7,7 @@
  * thread; the engine obtains rules through the `EngineContext` lexicon port and applies them
  * with this module.
  *
- * Extracted from LexiconService so importing the engine no longer drags `useLexiconStore`
+ * Kept separate from LexiconService so importing the engine does not drag `useLexiconStore`
  * (and its Y.Doc + IndexedDB connection) into the worker bundle.
  */
 import type { LexiconRule } from '~types/user-data';
@@ -43,7 +43,7 @@ export function processInitialisms(text: string): string {
 
 /**
  * The VISIBLE system rule under which initialism processing appears in
- * applyLexiconWithTrace (Phase 5c, content D12). It is not a real regex rule
+ * applyLexiconWithTrace (phase5-tts-strangler.md, content D12). It is not a real regex rule
  * — processInitialisms runs as code — but giving it a rule identity makes the
  * step traceable in the lexicon preview UI and toggleable per call. Default
  * output stays byte-identical (the golden cache-key test pins it: audio cache
@@ -62,7 +62,7 @@ export const INITIALISMS_SYSTEM_RULE: LexiconRule = Object.freeze({
 
 /** Per-call options for the appliers. */
 interface ApplyLexiconOptions {
-    /** Run the initialisms system rule first (default true — legacy behavior). */
+    /** Run the initialisms system rule first (default true). */
     initialisms?: boolean;
 }
 

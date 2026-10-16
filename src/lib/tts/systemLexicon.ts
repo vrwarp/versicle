@@ -1,14 +1,12 @@
 /**
- * System lexicon providers (Phase 5c; phase5-tts-strangler.md §5c.3): rule
+ * System lexicon providers (design: phase5-tts-strangler.md §5c.3): rule
  * sets the APP ships (vs user CRUD rules), loaded lazily and compiled ONCE
  * per language into frozen arrays with stable identity — the assembler's
- * memoized output then keeps LexiconApplier's WeakMap compilation cache hot
- * (S15's rebuild-per-call dies).
+ * memoized output then keeps LexiconApplier's WeakMap compilation cache hot.
  *
- * Deviation from the doc's sketch, recorded: `appliesTo` takes the resolved
- * global flag (the provider composes resolveBiblePreference) and `load`
- * takes the language so the per-language filter can be memoized here —
- * intent (lazy JSON, frozen CompiledRules, single compile) unchanged.
+ * `appliesTo` takes the resolved global flag (the provider composes
+ * resolveBiblePreference) and `load` takes the language so the per-language
+ * filter can be memoized here.
  */
 import type { LexiconRule } from '~types/user-data';
 import { loadBibleLexicon } from './bible-lexicon';
@@ -29,9 +27,9 @@ async function compileBibleRules(language?: string): Promise<ReadonlyArray<Lexic
     const { rules } = await loadBibleLexicon();
     const totalCount = rules.length;
     const compiled: LexiconRule[] = rules
-        // Language semantics preserved verbatim from the legacy LexiconService:
-        // a rule without a language always applies; a request without a language
-        // matches everything; otherwise prefix-match (zh matches zh-TW).
+        // Language semantics: a rule without a language always applies;
+        // a request without a language matches everything; otherwise
+        // prefix-match (zh matches zh-TW).
         .filter(r => !r.language || !language || language.toLowerCase().startsWith(r.language.toLowerCase()))
         .map((r, i) => Object.freeze({
             id: `bible-${i}`,

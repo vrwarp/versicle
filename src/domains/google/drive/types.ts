@@ -1,4 +1,4 @@
-/** Drive v3 file/folder resource subset used by the app (Phase 7 §G). */
+/** Drive v3 file/folder resource subset used by the app. */
 export interface DriveFile {
   id: string;
   name: string;
@@ -22,11 +22,10 @@ export interface DriveFileIndex {
   mimeType: string;
   /**
    * Drive's content MD5 (blob files only; absent for Google-native docs).
-   * Fetched by listFiles today but historically dropped by the index mapper.
-   * Persisted now as the cache key for partial-fetch previews ({fileId, md5})
-   * — a re-uploaded file keeps its fileId but changes md5, so the pair detects
-   * a stale preview. Optional: rows scanned before this field existed lack it
-   * until the next scan.
+   * Fetched by listFiles and persisted as the cache key for partial-fetch
+   * previews ({fileId, md5}) — a re-uploaded file keeps its fileId but changes
+   * md5, so the pair detects a stale preview. Optional: rows scanned before
+   * this field existed lack it until the next scan.
    */
   md5Checksum?: string;
 }

@@ -1,7 +1,7 @@
 /**
- * Per-book AI consent policy suite (Phase 7 §H / PR-N3): the resolver the
- * NetworkGateway consent gate consults for gemini egress, plus the
- * end-to-end deny path through the gateway.
+ * Per-book AI consent policy suite: the resolver the NetworkGateway consent
+ * gate consults for gemini egress, plus the end-to-end deny path through the
+ * gateway.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeAiConsentResolver } from './aiConsent';
@@ -51,7 +51,7 @@ describe('makeAiConsentResolver', () => {
     expect(makeResolver({ b1: false })(gemini, { bookId: 'b1', interactive: true })).toBe(true);
   });
 
-  // ── Increment E §8.4.1 background grant path ──────────────────────────────
+  // ── Background grant path (plan/semantic-search-design.md §8.4.1) ─────────
 
   it('opt-in OFF: a background unread book (bookId, no interactive) is DENIED', () => {
     expect(makeResolver({})(gemini, { bookId: 'unread-book' })).toBe(false);

@@ -1,9 +1,8 @@
 /**
- * Data Management settings panel (Phase 8 §B): self-contained wiring for
- * the presentational DataManagementTab — reading-list CSV import/export,
+ * Data Management settings panel: self-contained wiring for the
+ * presentational DataManagementTab — reading-list CSV import/export,
  * backup/restore, DB repair, metadata regeneration, clear-all-data — plus
- * the CSV-import progress overlay and the ReadingListDialog. Handlers moved
- * verbatim from the deleted GlobalSettingsDialog.
+ * the CSV-import progress overlay and the ReadingListDialog.
  */
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -108,10 +107,9 @@ const DataPanel: React.FC = () => {
           // Pre-compute a mapping of sourceFilename -> bookId to avoid O(N*M) lookups in the loop
           const libraryBooks = useBookStore.getState().books;
           const filenameToBookId: Record<string, string> = {};
-          // Iterate over Object.values to match the original behavior exactly (finding the book object directly)
           for (const book of Object.values(libraryBooks)) {
             if (book && book.sourceFilename && !filenameToBookId[book.sourceFilename]) {
-              // Only set if not already set, to match original .find() behavior (first match wins)
+              // Only set if not already set (first match wins)
               filenameToBookId[book.sourceFilename] = book.bookId;
             }
           }
@@ -142,8 +140,8 @@ const DataPanel: React.FC = () => {
       setIsClearing(true);
       try {
         // Single owner of the wipe: stops sync + Yjs persistence, deletes
-        // both IndexedDB databases (EpubLibraryDB + versicle-yjs), clears
-        // Versicle localStorage keys and app caches, then reloads.
+        // every app IndexedDB database (EpubLibraryDB, versicle-yjs, …),
+        // clears Versicle localStorage keys and app caches, then reloads.
         await wipeAllData();
       } catch (e) {
         logger.error('Failed to clear data', e);

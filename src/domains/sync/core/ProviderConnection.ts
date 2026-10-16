@@ -4,9 +4,7 @@
  * onto the typed SyncEvent bus (no UX copy — wireSyncEvents presents) and
  * owns the §D5 layer-2 live quarantine observer on the `meta` map.
  *
- * Absorbed verbatim from FirestoreSyncManager.connectFireProviderNormal /
- * disconnectFireProvider; pinned by the orchestrator characterization and
- * quarantine suites.
+ * Pinned by the orchestrator characterization and quarantine suites.
  */
 import type { FirestoreSyncStatus } from '~types/sync';
 import type * as Y from 'yjs';
@@ -90,7 +88,6 @@ export class ProviderConnection {
         });
       });
 
-      // A committed save → lastSyncTime (the `flushed` semantics).
       connection.on('synced', () => {
         logger.info(`Initial sync complete for workspace: ${workspaceId}`);
       });
@@ -99,6 +96,7 @@ export class ProviderConnection {
         logger.error('Firestore reported a corrupted document (quarantined by the provider):', event);
       });
 
+      // A committed save → lastSyncTime (the `flushed` semantics).
       connection.on('saved', (at) => {
         events.emit({ type: 'flushed', at });
       });

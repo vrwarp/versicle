@@ -1,13 +1,12 @@
 /**
- * `deviceRegistration` boot phase (moved verbatim from App.tsx):
+ * `deviceRegistration` boot phase:
  *  1. wire the TTS controller to the engine + stores (must precede profile
- *     assembly — the device profile reads the TTS voice/rate/pitch),
+ *     assembly — the device profile reads the TTS voice/rate),
  *  2. assemble the device profile and register/touch this device.
  *
- * Since Phase 5b-PR1 the TTS wiring is TtsController.initialize() (engine→store
- * mirror, store→engine settings sync, rehydrated-settings replay) — the store
- * itself is pure state. It keeps its historical position right before device
- * registration.
+ * The TTS wiring is TtsController.initialize() (engine→store mirror,
+ * store→engine settings sync, rehydrated-settings replay); the settings store
+ * itself is pure state.
  */
 import type { BootTask } from '../bootstrap';
 import { getDeviceId } from '@lib/device-id';
@@ -40,8 +39,8 @@ export const deviceRegistrationTask: BootTask = {
       fontSize: prefs.fontSize,
       ttsVoiceURI: selectActiveVoiceId(tts),
       ttsRate: selectActiveRate(tts),
-      // Profile pitch was dropped in the 5b settings split (nothing applied it);
-      // the synced DeviceProfile shape keeps the field at its neutral value.
+      // Nothing applies a per-profile pitch; the synced DeviceProfile shape
+      // keeps the field at its neutral value.
       ttsPitch: 1.0,
     };
 

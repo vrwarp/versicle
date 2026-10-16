@@ -1,12 +1,11 @@
 /**
  * CSP rendering — the Content-Security-Policy is GENERATED from the egress
- * destination registry (Phase 7 §I). One renderer feeds every copy:
+ * destination registry. One renderer feeds every copy:
  *
  *  - nginx.conf            scripts/generate-csp.mjs (committed output)
  *  - vite preview headers  vite.config.ts imports renderCsp()
- *  - index.html meta       vite.config.ts injects it at BUILD time (covers
- *                          the Capacitor Android WebView, which had NO CSP
- *                          at all before this — privacy report D4). It is
+ *  - index.html meta       vite.config.ts injects it at BUILD time (this is
+ *                          what covers the Capacitor Android WebView). It is
  *                          not committed into index.html source because the
  *                          dev server needs the HMR websocket (ws:) which a
  *                          committed meta would block.
@@ -15,11 +14,10 @@
  * the rendered connect-src AND the committed nginx.conf carries exactly the
  * rendered policy. Editing the registry without regenerating fails CI.
  *
- * STRICTNESS (Phase 8 §H — the strict flip is DONE): the legacy `https:`
- * scheme wildcard is gone from connect-src AND img-src, so the policy now
- * ENFORCES the registry: only enumerated hosts can be contacted. Flipped
- * after (a) the §G runtime caching landed (Piper offline verified) and
- * (b) the sanitizer strips remote EPUB resources (src/lib/sanitizer.ts —
+ * STRICTNESS: there is no `https:` scheme wildcard in connect-src or
+ * img-src, so the policy ENFORCES the registry: only enumerated hosts can be
+ * contacted. This relies on (a) runtime caching, so Piper works offline, and
+ * (b) the sanitizer stripping remote EPUB resources (src/lib/sanitizer.ts —
  * the functional replacement for `img-src https:`; tracking pixels die).
  * Known limitation (documented in README §Self-hosting): a BYO-Firebase
  * custom authDomain contacted DIRECTLY is not enumerable here — web
@@ -40,8 +38,8 @@ const STATIC_DIRECTIVES: readonly (readonly [string, string])[] = [
     "'self' 'unsafe-inline' 'unsafe-eval' blob: https://apis.google.com https://*.firebaseapp.com",
   ],
   ['style-src', "'self' 'unsafe-inline' blob:"],
-  // Strict since Phase 8 §H: covers are blob:/SW-served same-origin;
-  // remote EPUB images are stripped by the sanitizer (no tracking pixels).
+  // Strict: covers are blob:/SW-served same-origin; remote EPUB images are
+  // stripped by the sanitizer (no tracking pixels).
   ['img-src', "'self' data: blob:"],
   ['font-src', "'self' data:"],
 ];
@@ -50,8 +48,8 @@ const STATIC_DIRECTIVES: readonly (readonly [string, string])[] = [
 export function connectSrcSources(): string[] {
   return [
     "'self'",
-    // The legacy `https:` scheme wildcard died at the P8 §H strict flip:
-    // from here, every fetch destination must be in the egress registry.
+    // No `https:` scheme wildcard: every fetch destination must be in the
+    // egress registry.
     'blob:',
     ...allRegistryHosts().map((h) => `https://${h}`),
   ];

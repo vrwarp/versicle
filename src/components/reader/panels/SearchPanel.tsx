@@ -1,13 +1,12 @@
 /**
- * SearchPanel — the reader's in-book search sidebar, on the Phase 7 §F
- * SearchSession (the post-merge reader adoption; the `searchClient` module
- * singleton died with it).
+ * SearchPanel — the reader's in-book search sidebar, driven by the
+ * reader-session SearchSession.
  *
  * Indexing feeds from the PERSISTED corpus (cache_search_text): no epubjs
  * Book, no spine walking, no DOM parsing here. Books imported before the
  * corpus store existed come back 'no-text' — the panel then runs ONE
- * reprocess through the ImportOrchestrator queue (mutex-guarded; the §F
- * "lazily on first search" population) and retries. Results are
+ * reprocess through the ImportOrchestrator queue (mutex-guarded, populating
+ * the corpus lazily on first search) and retries. Results are
  * per-occurrence (`DetailedSearchResult`): clicking one hands the full
  * result to `onNavigate`, which lands on the EXACT match with a temporary
  * highlight (app/reader/searchNavigation).
@@ -68,7 +67,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                     // Pre-corpus book (imported before the cache_search_text
                     // store existed): one reprocess through the orchestrator
                     // queue repopulates the persisted text, then indexing
-                    // retries — the §F "lazily on first search" path.
+                    // retries.
                     await importController.reprocessBook(bookId);
                     outcome = await session.index(bookId);
                 }
@@ -217,8 +216,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                             <span>Indexing book...</span>
                         </div>
                         {/* Indeterminate: corpus-fed indexing has no per-spine
-                            progress stream (the old % bar tracked DOM parsing
-                            the session no longer does). */}
+                            progress stream to report. */}
                         <div
                             className="h-1.5 bg-secondary rounded-full overflow-hidden w-full"
                             role="progressbar"
@@ -272,7 +270,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                 ) : activeSearchQuery ? (
                     <div className="text-center text-muted-foreground text-sm" role="status" aria-live="polite">No results found</div>
                 ) : (
-                    // Show embedding progress before any search starts (Scenario A or B)
+                    // Show embedding progress before any search starts
                     embedStatus && (
                         <div className="p-3 rounded-lg border border-border bg-card/50 text-xs space-y-2">
                             {embedStatus.embeddedSections === embedStatus.totalSections ? (

@@ -1,11 +1,11 @@
 /**
- * Lazy EmbeddingClient facade (Increment C §1; first-use splitting, mirrors
- * lazyClient.ts:17): implements the EmbeddingClient contract over a one-time
- * dynamic import of GeminiEmbeddingClient, so the composition root
- * (src/app/google/wireGoogle.ts) can install the client at boot WITHOUT
- * pulling the embedding implementation into the entry chunk — it loads on the
- * first actual embed call. Check 4 of scripts/check-worker-chunk.mjs asserts
- * GeminiEmbeddingClient stays out of the emitted entry closure.
+ * Lazy EmbeddingClient facade (first-use splitting; mirrors ../lazyClient.ts):
+ * implements the EmbeddingClient contract over a one-time dynamic import of
+ * GeminiEmbeddingClient, so the composition root (src/app/google/wireGoogle.ts)
+ * can install the client at boot WITHOUT pulling the embedding implementation
+ * into the entry chunk — it loads on the first actual embed call. Check 4 of
+ * scripts/check-worker-chunk.mjs asserts GeminiEmbeddingClient stays out of
+ * the emitted entry closure.
  *
  * `isConfigured()` is answered locally from the injected config provider (a
  * synchronous contract method must not wait for a chunk).

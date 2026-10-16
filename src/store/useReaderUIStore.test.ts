@@ -21,9 +21,9 @@ describe('useReaderUIStore', () => {
   });
 
   // The compass interaction state is ephemeral, device-local UI state. It
-  // deliberately lives in this non-synced, non-persisted store (popover-desync
-  // hotfix): its selection payload previously lived in the Yjs-wrapped
-  // useAnnotationStore and synced screen coordinates to other devices.
+  // deliberately lives in this non-synced, non-persisted store: its selection
+  // payload carries screen coordinates, which must not sync to other devices
+  // (as they would from a Yjs-wrapped store such as useAnnotationStore).
   describe('compass dispatch', () => {
     it('enters annotation mode with the selection payload on TEXT_SELECTED', () => {
       act(() => {

@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * AnnotationPill suite — absorbs (rule 8) the annotation assertions of the
- * deleted ui/CompassPill.test.tsx and the whole
- * ui/CompassPill_NoteRecall.test.tsx (Phase 8 §C dissolution).
+ * AnnotationPill suite — the annotation toolbar's actions plus the
+ * note-recall regression block.
  */
 import { render, screen, fireEvent } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';

@@ -13,8 +13,7 @@ import { formatReadingTime } from './readingTime';
  * Props for the BookCard component.
  */
 interface BookCardProps {
-  /** The metadata of the book to display. */
-  /** Library view row — `allProgress` is the typed per-device map (Phase 7: the `as unknown` casts died). */
+  /** The book to display — a library view row; `allProgress` is the typed per-device map. */
   book: BookMetadata & Pick<Partial<LibraryBook>, 'allProgress'>;
   /** Whether this is a Ghost Book (synced metadata but no local file) */
   isGhostBook?: boolean;
@@ -28,7 +27,8 @@ interface BookCardProps {
 
 /**
  * Displays a summary card for a book, including its cover, title, and author.
- * navigating to the reader view when clicked.
+ * Clicking the card opens the book, or starts a restore for an offloaded or
+ * ghost book.
  *
  * @param props - Component props containing the book metadata.
  * @returns A React component rendering the book card.

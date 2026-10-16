@@ -2,15 +2,13 @@
  * Write-gate contract suite — G.1–G.6
  * (plan/overhaul/prep/phase3-storage-gateway.md §Test plan "G").
  *
- * G.1–G.3 were written FIRST (P3-1), against the then-current
- * promise-chain serializer in src/lib/idb-write-lock.ts, pinning the exact
- * semantics the navigator.locks gate (src/data/write-gate.ts, P3-3) had to
- * be a drop-in for. P3-3 re-pointed the suite at the gate and runs the
- * SAME contract body against both of its implementations:
+ * The SAME contract body runs against both implementations of the gate
+ * (src/data/write-gate.ts): the promise-chain fallback and the
+ * navigator.locks path. It pins:
  *
  *   G.1  FIFO ordering + mutual exclusion (at most one work in flight)
  *   G.2  rejection isolation — a rejecting work rejects its own caller but
- *        never wedges the queue (pins the old idb-write-lock.ts:32–38)
+ *        never wedges the queue
  *   G.3  idbWriteLockIdle() resolves once the backlog (including
  *        rejections) drains
  *   G.4  write() rejects a thenable-returning populate and aborts the txn
@@ -52,7 +50,7 @@ export function describeWriteGateContract(
 ): void {
   describe(`write-gate contract: ${label}`, () => {
     beforeEach(() => {
-      // The P3-3 gate logs a DEV re-entrancy tripwire when a request is
+      // The gate logs a DEV re-entrancy tripwire when a request is
       // issued while the gate is held — G.1 does exactly that on purpose.
       vi.spyOn(console, 'error').mockImplementation(() => {});
     });
@@ -156,8 +154,7 @@ export function describeWriteGateContract(
 }
 
 // ── G.5: native jsdom has no navigator.locks → the gate selects the
-// promise-chain fallback. This invocation is byte-for-byte the P3-1 suite
-// that pinned src/lib/idb-write-lock.ts, now served by the gate's fallback.
+// promise-chain fallback, and the contract body runs against it below.
 describe('G.5 fallback selection (navigator.locks undefined under jsdom)', () => {
   it('jsdom really has no navigator.locks (the fallback path is what runs below)', () => {
     expect((navigator as { locks?: unknown }).locks).toBeUndefined();
@@ -283,7 +280,7 @@ describe('write(stores, populate)', () => {
   });
 });
 
-// ── DEV re-entrancy tripwire (D1). ──────────────────────────────────────────
+// ── DEV re-entrancy tripwire. ──────────────────────────────────────────
 describe('DEV re-entrancy tripwire', () => {
   it('logs when a request is issued while this context holds the gate', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});

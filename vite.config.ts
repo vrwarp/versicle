@@ -11,14 +11,13 @@ import { renderCsp } from './src/kernel/net/csp'
 import wasm from 'vite-plugin-wasm'
 
 /**
- * CSP injection (Phase 7 §I): the policy is GENERATED from the egress
+ * CSP injection: the policy is GENERATED from the egress
  * destination registry (src/kernel/net/destinations.ts) — renderCsp() is the
  * single renderer behind nginx.conf (scripts/generate-csp.mjs), the preview
  * headers below, and this build-time index.html <meta> tag. The meta tag is
  * what gives the Capacitor Android WebView a CSP at all (it serves dist/
- * without nginx; before Phase 7 it ran with none — privacy report D4).
- * Injected at BUILD only: the dev server needs the HMR websocket (ws:),
- * which a committed meta would block. The registry==CSP unit test
+ * without nginx). Injected at BUILD only: the dev server needs the HMR
+ * websocket (ws:), which a committed meta would block. The registry==CSP unit test
  * (src/kernel/net/csp.test.ts) pins all copies against the registry.
  */
 function cspMetaPlugin(): Plugin {
@@ -35,14 +34,12 @@ function cspMetaPlugin(): Plugin {
 }
 
 /**
- * Serve + ship the vendored Piper runtime (Phase 5a-PR3,
- * plan/overhaul/prep/phase5-tts-strangler.md §5a.2).
+ * Serve + ship the vendored Piper runtime.
  *
  * `third-party/piper/` is checked into git (patched worker as committed source,
- * local onnxruntime build, PROVENANCE.md) and replaces the install-time
- * `prepare-piper` postinstall that copied gitignored blobs into `public/piper/`.
- * The runtime URL layout is UNCHANGED (`/piper/piper_worker.js`,
- * `/piper/onnxruntime/…`), so existing user caches and download state survive:
+ * local onnxruntime build, PROVENANCE.md). The runtime URL layout is stable
+ * (`/piper/piper_worker.js`, `/piper/onnxruntime/…`), so existing user caches
+ * and download state survive:
  *  - dev/preview: a middleware serves `/piper/**` straight from the vendor dir;
  *  - build: the directory is copied into `dist/piper/` (PROVENANCE.md included —
  *    it is the GPL §6 provenance record for the shipped blobs).
@@ -97,7 +94,7 @@ function piperVendorPlugin(): Plugin {
   }
 }
 
-// Path aliases (Phase 1 path-alias codemod): one alias per top-level src/
+// Path aliases: one alias per top-level src/
 // root. MUST stay in sync with the `paths` map in tsconfig.app.json and the
 // copy of this object in vitest.config.ts (a root vitest.config.ts does NOT
 // merge this file, so vitest needs its own resolve.alias). Vite applies
@@ -205,28 +202,23 @@ export default defineConfig(({ mode }) => {
         strategies: 'injectManifest',
         srcDir: 'src',
         filename: 'sw.ts',
-        // Phase 8 §G: prompt-style updates. A new SW waits until the user
+        // Prompt-style updates. A new SW waits until the user
         // accepts the update toast (src/components/SWUpdatePrompt.tsx →
         // updateServiceWorker() → SKIP_WAITING message handled in src/sw.ts).
-        // The previously-fielded autoUpdate SW skipWaiting-s ITSELF out, so
-        // the transition to the first prompt-build is seamless (prep risk #1).
         registerType: 'prompt',
         injectManifest: {
           maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4MB
           // The vendored onnxruntime wasm builds (dist/piper/onnxruntime/, ~10MB
           // each — see piperVendorPlugin) are far beyond any sane precache budget;
           // they load on demand when Piper synthesizes (and are runtime-cached
-          // by the /piper/* CacheFirst route in src/sw.ts since Phase 8 §G).
+          // by the /piper/* CacheFirst route in src/sw.ts).
           globIgnores: ['**/piper/onnxruntime/*.wasm', '**/*tern_engine*.wasm'],
         },
-        // Reality-checked (Phase 8 §G, prep RC-11): favicon.ico was committed
-        // as `favico.ico` (typo, now renamed), apple-touch-icon.png is
-        // generated from pwa-512x512.png, and the phantom mask-icon.svg
-        // entry was trimmed — no such asset has ever existed.
+        // iOS home-screen icon (public/apple-touch-icon.png, linked from index.html).
         includeAssets: ['apple-touch-icon.png'],
         manifest: {
           // `id` pins app identity across start_url changes; lang/dir feed
-          // the OS shell (Phase 8 §F: UI locale is en until a second locale
+          // the OS shell (UI locale is en until a second locale
           // ships); display/start_url are the Lighthouse installability
           // requirements.
           id: '/',

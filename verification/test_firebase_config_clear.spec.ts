@@ -7,7 +7,7 @@ test('verify firebase config clear', async ({ page }) => {
   // Open Global Settings (Radix-Tabs SettingsShell over the library)
   await openSettings(page);
 
-  // Go to Sync tab (now a real Radix tab, not a role=button)
+  // Go to Sync tab
   await gotoSettingsTab(page, 'sync');
 
   // Verify Firebase Config section appears
@@ -34,7 +34,6 @@ const firebaseConfig = {
   await expect(clearBtn).toBeVisible();
 
   // Confirm via the in-app ConfirmDialog ("Clear Firebase configuration?")
-  // — the old window.confirm() became a Radix ConfirmDialog (Phase-10 overhaul).
   await clearBtn.click();
   await acceptConfirm(page);
 

@@ -82,7 +82,7 @@ test("journey visual reading", async ({ page }) => {
 
   console.log(`Reader Box: x=${readerX}, y=${readerY}, w=${readerW}, h=${readerH}`);
 
-  // --- Test Issue B: Tap Navigation Disabled in Standard Mode ---
+  // --- Test Tap Navigation Disabled in Standard Mode ---
   console.log("Testing Standard Mode Tap Restriction...");
   // Tap inside the reading column but clear of the PageTurnRails (40/56px
   // edge strips) — the central content area must never turn pages on tap.
@@ -128,9 +128,9 @@ test("journey visual reading", async ({ page }) => {
   );
 
   // --- Test Next Page (PageTurnRails) in Immersive Mode ---
-  // The compass pill is a pure audio transport since the Phase 1 rework
-  // (its arrows skip TTS chapters and are disabled while idle); page
-  // turning lives on the PageTurnRails at the reading column edges.
+  // The compass pill is a pure audio transport (its arrows skip TTS chapters
+  // and are disabled while idle); page turning lives on the PageTurnRails at
+  // the reading column edges.
   console.log("Clicking the right page-turn rail (Immersive)...");
 
   // Verify Compass Pill in compact mode is visible

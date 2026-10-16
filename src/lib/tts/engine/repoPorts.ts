@@ -1,7 +1,6 @@
 /**
- * Production implementations of the engine's storage ports (Phase 5b
- * decomposition; phase5-tts-strangler.md §5b.1), wrapping the worker-safe
- * `src/data` repos. Both threads use the same modules: the main-thread
+ * Production implementations of the engine's storage ports, wrapping the
+ * worker-safe `src/data` repos. Both threads use the same modules: the main-thread
  * context (createZustandEngineContext) and the worker context
  * (WorkerTtsEngine.connect) compose these defaults; tests inject in-memory
  * fakes instead — which is what lets the engine-dir `vi.mock` allowlist sit
@@ -20,13 +19,12 @@ export const repoBookContentPort: BookContentPort = bookContent;
 
 /**
  * The repo-backed {@link SessionStore} — the SINGLE owner of
- * `cache_session_state` traffic in the engine (the P3 dual-owner fix:
- * AudioPlayerService read sessions while the QueueModel wrote them; now one
- * object does both, per book, in order).
+ * `cache_session_state` traffic in the engine (one object does both the
+ * session reads and the queue writes, per book, in order).
  *
  * Every persist for a book is chained behind one `getSession` seed read, so
  * the first write of a session is ordered after the row it may have to
- * preserve (P13a). That memo is an ORDERING optimization, not the guarantee:
+ * preserve. That memo is an ORDERING optimization, not the guarantee:
  * the repo's mirror is a bounded LRU, so a book it seeded can be evicted
  * mid-session while this map still says "seeded". Cold-safety therefore lives
  * in the repo — `saveQueue` marks a record it had to build from scratch and

@@ -1,9 +1,8 @@
 /**
- * TTS content-preparation types (Phase 5c; phase5-tts-strangler.md §5c.1):
- * the consumption types shared between the ingestion-side sentence extractor
- * (src/lib/ingestion/sentence-extraction.ts) and the TTS engine/pipeline.
- * Living in the types layer (which imports nothing) kills the engine →
- * extractor reverse type-import.
+ * TTS content-preparation types: the consumption types shared between the
+ * ingestion-side sentence extractor (src/lib/ingestion/sentence-extraction.ts)
+ * and the TTS engine/pipeline. Living in the types layer (which imports
+ * nothing) keeps the engine from type-importing the extractor.
  */
 
 /**

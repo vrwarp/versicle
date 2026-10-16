@@ -20,11 +20,10 @@ export const DataRecoveryView: React.FC = () => {
         setRawData(null);
 
         try {
-            // P4-7/P9 retarget: read the persisted state through the data
-            // layer's snapshot primitive (one merged update via the
-            // exclusive write gate) instead of hand-rolling a third temp
-            // IndexeddbPersistence('versicle-yjs') dance — the layout
-            // knowledge lives in exactly one module (the y-idb fork).
+            // Read the persisted state through the data layer's snapshot
+            // primitive (one merged update via the exclusive write gate) —
+            // the storage-layout knowledge lives in exactly one module (the
+            // y-idb fork).
             const update = await readSnapshot();
             if (!update) {
                 throw new Error("The local 'versicle-yjs' database holds no data.");

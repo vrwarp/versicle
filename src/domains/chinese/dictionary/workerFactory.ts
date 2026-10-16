@@ -15,9 +15,9 @@
  * sit on `status: 'importing'` forever and the vocab card would spin for the
  * rest of the session. The worker's `error` / `messageerror` events are
  * therefore raced against the call, so a dead worker surfaces as
- * `status: 'error'` — the same loud surface CH-13 bought for every other
- * import failure. A `new Worker(…)` that throws outright needs no race: the
- * rejection already propagates.
+ * `status: 'error'` — the same loud surface every other import failure gets.
+ * A `new Worker(…)` that throws outright needs no race: the rejection already
+ * propagates.
  */
 import * as Comlink from 'comlink';
 import { installAppErrorTransferHandler } from '@lib/comlinkAppError';

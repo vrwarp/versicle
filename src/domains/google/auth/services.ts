@@ -1,8 +1,7 @@
 /**
- * Google service registry (Phase 7 §G) — which OAuth scopes each "service"
- * (drive, identity) needs. Replaces src/lib/google/config.ts; unlike its
- * predecessor, `getScopesForService` THROWS on unknown ids instead of
- * silently logging in with no scopes (GG-6).
+ * Google service registry — which OAuth scopes each "service"
+ * (drive, identity) needs. `getScopesForService` THROWS on unknown ids
+ * instead of silently logging in with no scopes (GG-6).
  */
 import { GoogleUnknownServiceError } from './errors';
 

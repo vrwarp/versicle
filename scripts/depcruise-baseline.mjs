@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * dependency-cruiser violation baseline — the Phase 0 boundary ratchet
+ * dependency-cruiser violation baseline — the boundary ratchet
  * (plan/overhaul/README.md §4 rule 3; C12 layering contract).
  *
- * All boundary rules in .dependency-cruiser.cjs are severity "warn"
- * because the repo currently violates them. This script freezes the
+ * Rules in .dependency-cruiser.cjs that the repo still violates are severity
+ * "warn"; the rest are "error" at zero. This script freezes the
  * per-rule violation counts in .dependency-cruiser-baseline.json so the
  * numbers can only go DOWN:
  *
@@ -31,7 +31,8 @@ const baselineFile = join(repoRoot, '.dependency-cruiser-baseline.json');
 const checkMode = process.argv.includes('--check');
 
 function cruise(config) {
-  // depcruise exits 0 here (all rules are "warn"); JSON goes to stdout.
+  // depcruise exits non-zero only on error-severity violations (those rules
+  // are at zero, so a throw here means a regression); JSON goes to stdout.
   const stdout = execFileSync(
     join(repoRoot, 'node_modules', '.bin', 'depcruise'),
     ['src', '--config', config, '--output-type', 'json'],

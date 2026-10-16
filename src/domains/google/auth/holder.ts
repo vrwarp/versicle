@@ -2,9 +2,9 @@
  * Composition holder for the GoogleAuthClient singleton. The REAL instance
  * (with platform options, login-hint provider, and store-backed connection
  * hooks) is constructed by src/app/google/wireGoogle.ts at composition time
- * (README §2 rule 8: only app/ constructs singletons); the lazy fallback
- * here is hook-free and exists so stray imports in unit tests cannot crash —
- * it never updates connection hints.
+ * (plan/overhaul/README.md §2 rule 8: only app/ constructs singletons); the
+ * lazy fallback here is hook-free and exists so stray imports in unit tests
+ * cannot crash — it never updates connection hints.
  */
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuthClient } from './GoogleAuthClient';

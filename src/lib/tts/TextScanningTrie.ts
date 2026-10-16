@@ -272,7 +272,7 @@ export class TextScanningTrie {
      * Optimized to avoid string allocations.
      *
      * @param text - The text to check.
-     * @returns The matching word if found, or null.
+     * @returns True if the text starts with a word in the Trie, false otherwise.
      */
     matchesStart(text: string): boolean {
         let i = 0;

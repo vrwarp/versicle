@@ -1,7 +1,7 @@
 /**
- * Diagnostics settings panel (Phase 8 §B): DiagnosticsTab was already the
- * self-contained model panel — this module adapts it to the registry's
- * default-export contract and puts the sync diagnostics export above it.
+ * Diagnostics settings panel: DiagnosticsTab is the self-contained model
+ * panel — this module adapts it to the registry's default-export contract and
+ * puts the sync diagnostics export above it.
  */
 import React from 'react';
 import { DiagnosticsTab } from '@components/settings';

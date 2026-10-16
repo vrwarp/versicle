@@ -1,6 +1,6 @@
 /**
- * useConfirm / ConfirmHost suite (Phase 8 §D) — the accessible replacement
- * for native confirm() (banned at lint ERROR with this PR).
+ * useConfirm / ConfirmHost suite — the accessible replacement for native
+ * confirm() (banned at lint ERROR).
  */
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, afterEach } from 'vitest';

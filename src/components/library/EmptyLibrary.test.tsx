@@ -18,7 +18,7 @@ vi.mock('./FileUploader', () => ({
   FileUploader: () => <div data-testid="file-uploader-mock">File Uploader Mock</div>
 }));
 
-// Phase 7: import workflows live on the shared controller, not the store.
+// Import workflows live on the shared controller, not the store.
 const { mockAddBook } = vi.hoisted(() => ({ mockAddBook: vi.fn() }));
 vi.mock('@app/library/useImportController', () => {
   const controller = { importFile: mockAddBook };

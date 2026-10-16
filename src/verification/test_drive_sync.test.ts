@@ -10,14 +10,13 @@ import {
 import { useDriveStore } from '@store/useDriveStore';
 import { useBookStore } from '@store/useBookStore';
 
-// Phase 7: Drive imports flow through the library port the composition root
-// wires to the ImportOrchestrator (app/google/wireGoogle.ts). The port is
-// captured here so the journeys assert the CONTRACT the scanner drives.
+// Drive imports flow through the library port the composition root wires to
+// the ImportOrchestrator (app/google/wireGoogle.ts). The port is captured here
+// so the journeys assert the CONTRACT the scanner drives.
 const mockLibraryAddBook = vi.fn<(file: File, options?: { overwrite?: boolean }) => Promise<unknown>>()
     .mockResolvedValue(undefined);
 
-// Phase 7/P9: the journeys drive the composed DriveLibrarySync (the
-// DriveScannerService facade is deleted) — wire one here over the
+// The journeys drive the composed DriveLibrarySync — wire one here over the
 // functional MockDriveService (the harness double is DriveClient-shaped)
 // + the REAL stores.
 function wireMockDriveSync(): void {
@@ -194,16 +193,17 @@ describe('Google Drive Sync & Import E2E', () => {
             }
         });
 
-        // 3. User clicks "Restore from Cloud" in the dialog
-        // This matches logic in ContentMissingDialog where it finds the file and calls importFile with overwrite: true
+        // 3. Find the cloud copy of the ghost book and re-import it over the
+        // existing entry with overwrite: true (the option the Drive shelf's
+        // Replace confirmation passes).
         const match = useDriveStore.getState().findFile(bookTitle, bookTitle);
         expect(match).toBeDefined();
 
         await getDriveLibrarySync().importFile(match!.id, match!.name, { overwrite: true }, { interactive: true });
 
-        // Since the book exists in store (matched by filename), and overwrite is
-        // true, the scanner asks the library port to replace in place — the
-        // orchestrator's replace flow preserves the existing id (ghostBookId).
+        // The book exists in the store (matched by filename) and overwrite is
+        // true, so the library port is asked to replace in place — in production
+        // the orchestrator's replace flow preserves the existing id (ghostBookId).
         expect(mockLibraryAddBook).toHaveBeenCalledWith(
             expect.objectContaining({ name: bookTitle }),
             expect.objectContaining({ overwrite: true })

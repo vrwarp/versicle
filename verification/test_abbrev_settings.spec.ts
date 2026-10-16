@@ -26,7 +26,7 @@ test('Abbreviation Settings Verification', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Always Merge', exact: true })).toBeVisible({ timeout: 5000 });
   await expect(page.getByRole('heading', { name: 'Sentence Starters', exact: true })).toBeVisible({ timeout: 5000 });
 
-  // Check for Export/Import buttons (we have 3 sets now)
+  // Check for Export/Import buttons (one pair per set: the 3 headings above)
   await expect(page.locator("button[title='Download CSV']")).toHaveCount(3, { timeout: 5000 });
   await expect(page.locator("button[title='Upload CSV']")).toHaveCount(3, { timeout: 5000 });
 

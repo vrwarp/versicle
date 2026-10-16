@@ -1,11 +1,11 @@
 /**
  * `openDB` boot phase: open the EpubLibraryDB IndexedDB connection and run
- * the one-time, non-fatal cover-blob repair (moved verbatim from App.tsx).
+ * the one-time, non-fatal cover-blob repair.
  *
  * This is also where the data layer's connection-lifecycle callbacks get
- * their UI wiring (P3-4, design D2): src/data/connection.ts handles
- * blocked/blocking/terminated itself (closing/reopening as needed) but
- * never imports UI — the app layer decides how to tell the user.
+ * their UI wiring: src/data/connection.ts handles blocked/blocking/terminated
+ * itself (closing/reopening as needed) but never imports UI — the app layer
+ * decides how to tell the user.
  */
 import type { BootTask } from '../bootstrap';
 import { getConnection } from '@data/connection';

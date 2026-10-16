@@ -1,9 +1,9 @@
 /**
- * tts-storage → tts-settings migration ACCEPTANCE suite (5b-PR3; the Phase 5
+ * tts-storage → tts-settings migration ACCEPTANCE suite (the Phase 5
  * user-data format change — phase5-tts-strangler.md §5b.4 steps 1–3).
  *
  * Loads each committed localStorage blob (v1/v2 hand-derived era variants, v3
- * captured from the live pre-split store at the gate PR), boots the CURRENT
+ * captured from the live store before the split), boots the CURRENT
  * `useTTSSettingsStore` against it and pins the full chain — legacy migrate
  * (v1→v2→v3) followed by the split mapping (v3 → `tts-settings` v1):
  *
@@ -14,12 +14,12 @@
  *  - dropped fields are ABSENT from the new key (`enableCostWarning`, the flat
  *    rate/pitch/voice/minSentenceLength mirrors, profile `pitch`/`volume`),
  *  - the `tts-settings` v1 envelope is written,
- *  - the legacy `tts-storage` key is NEVER deleted (one-release rollback path;
- *    P9 retires it).
+ *  - the legacy `tts-storage` key is NEVER deleted (rollback path; retiring it
+ *    is a pending release-engineering item, see plan/overhaul/README.md).
  *
  * The fixtures are CHECKED IN AND REVIEWED artifacts — never regenerated in CI
- * (the capture script ran at the gate PR against the pre-split store and was
- * deleted with it; provenance in README.md).
+ * (the capture script ran against the pre-split store and was deleted with
+ * it; provenance in README.md).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import v1Blob from './tts-storage.v1.json';

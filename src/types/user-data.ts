@@ -1,10 +1,8 @@
 /**
- * User-data domain types: mutable, user-authored state (the V18 "user"
+ * User-data domain types: mutable, user-authored state (the "user"
  * domain rows synced via Yjs), reading history/session shapes, lexicon
- * rules, and the legacy annotation/reading-list rows.
+ * rules, and the annotation/reading-list rows.
  *
- * Extracted from types/db.ts in the Phase 1a type split
- * (plan/overhaul/README.md §Roadmap P1; layering-deps.md LD-1).
  * Layering rule: src/types/** imports nothing internal except other
  * src/types modules, and that graph stays acyclic.
  */
@@ -14,9 +12,7 @@ import type { PerceptualPalette } from './book';
 
 /**
  * Existence of book in library and user-customizable metadata.
- * Store: 'user_inventory' (Key: bookId)
- *
- * Note: In Phase 2+ (Yjs migration), this is synced via zustand-middleware-yjs.
+ * Synced via zustand-middleware-yjs: Y.Map 'library' (Key: bookId), see useBookStore.
  * The title and author fields are "Ghost Book" metadata snapshots that allow
  * displaying books on devices that have synced inventory but not the actual
  * EPUB file from static_resources.
@@ -70,7 +66,8 @@ export interface UserInventoryItem {
 
 /**
  * The "Bookmark" and progress state.
- * Store: 'user_progress' (Key: bookId)
+ * Synced via zustand-middleware-yjs: Y.Map 'progress' (Key: bookId, then device ID),
+ * see useReadingStateStore.
  */
 export interface UserProgress {
   /** The unique identifier of the book. */
@@ -95,7 +92,7 @@ export interface UserProgress {
 
 /**
  * Highlights and notes.
- * Store: 'user_annotations' (Key: id)
+ * Synced via zustand-middleware-yjs: Y.Map 'annotations' (Key: id), see useAnnotationStore.
  */
 export interface UserAnnotation {
   /** Unique identifier (UUID). */
@@ -118,7 +115,7 @@ export interface UserAnnotation {
 
 /**
  * Book-specific settings and rules.
- * Store: 'user_overrides' (Key: bookId | 'global')
+ * Key: bookId | 'global'
  */
 export interface UserOverrides {
   /** The book ID or 'global'. */
@@ -240,13 +237,12 @@ export interface ReadingListEntry {
   /** The filename of the book (Primary Key). */
   filename: string;
   /**
-   * FK to the library inventory (`UserInventoryItem.bookId`) — Phase 7 §D.
-   * ADDITIVE + OPTIONAL: written at import/registration time for new
-   * entries; existing entries are linked by the one-time linker
-   * (`src/app/migrations.linkReadingList.ts`), which is authored but NOT
-   * yet registered — the CRDT version bump that protects it from old
-   * clients (whole-entry rebuilds drop unknown fields,
-   * useReadingListStore.ts) lands post-merge as the next migration step.
+   * FK to the library inventory (`UserInventoryItem.bookId`).
+   * OPTIONAL: written at import/registration time for new entries; existing
+   * entries are linked by the one-time CRDT v7 → v8 migration
+   * (`src/app/migrations.linkReadingList.ts`). The version bump quarantines
+   * older clients, whose whole-entry rebuilds would drop the unknown field
+   * (useReadingListStore.ts).
    * INTERNAL: excluded from CSV export (filename stays the portable key).
    */
   bookId?: string;

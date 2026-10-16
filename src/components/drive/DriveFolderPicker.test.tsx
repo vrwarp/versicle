@@ -13,9 +13,6 @@ vi.mock('./useDriveBrowser', () => ({
     useDriveBrowser: vi.fn()
 }));
 
-// Mock Lucide icons to avoid render issues in test env (optional, but sometimes needed)
-// Usually not needed if setup is correct, but safe to do if icons cause noise.
-
 describe('DriveFolderPicker', () => {
     const mockOpenFolder = vi.fn();
     const mockNavigateUp = vi.fn();
@@ -83,10 +80,8 @@ describe('DriveFolderPicker', () => {
 
         render(<DriveFolderPicker onSelect={mockOnSelect} onCancel={mockOnCancel} />);
 
-        // Check for skeleton elements (we can check for specific class or just absence of text)
+        // The skeleton is purely visual (no text), so assert the absence of folder rows.
         expect(screen.queryByText('Folder 1')).not.toBeInTheDocument();
-        // Maybe check for "Loading folders..." text if we have it visually hidden or visible
-        // The implementation has no text for skeleton, just visual blocks.
     });
 
     it('shows empty state', () => {

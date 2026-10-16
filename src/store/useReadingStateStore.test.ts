@@ -6,7 +6,7 @@ vi.mock('@lib/device-id', () => ({
 }));
 
 // Mock the kernel's mergeCfiRanges to avoid real epub.js interactions
-// (P6: the store imports @kernel/cfi directly — the cfi-utils shim is gone).
+// (the store imports @kernel/cfi directly).
 // importOriginal keeps the rest of the kernel surface real for any other
 // module loaded in this test graph.
 vi.mock('@kernel/cfi', async (importOriginal) => ({
@@ -84,7 +84,7 @@ describe('useReadingStateStore - Per-Device Progress', () => {
             expect(deviceProgress.percentage).toBe(0.75);
             expect(deviceProgress.currentCfi).toBe('epubcfi(/6/6)');
 
-            // Check History Appended (now merged into a single session)
+            // Check History Appended (merged into a single session)
             expect(deviceProgress.readingSessions).toBeDefined();
             expect(deviceProgress.readingSessions!).toHaveLength(1);
             expect(deviceProgress.readingSessions![0].cfiRange).toBe('epubcfi(/6/2)');
@@ -527,10 +527,10 @@ describe('useReadingStateStore - Per-Device Progress', () => {
     /**
      * perf: the Yjs scoped diff Object.is-SKIPS an array whose identity is
      * unchanged but DEEP-diffs a new identity (toJSON + per-element compare)
-     * — and `readingSessions` grows to MAX_READING_SESSIONS (500). The store
-     * used to rebuild both arrays on every write (`mergeCfiRanges` always
-     * returns a fresh array; the session list was copied eagerly), so every
-     * page turn paid that diff even when nothing was appended.
+     * — and `readingSessions` grows to MAX_READING_SESSIONS (500). A store
+     * that rebuilt both arrays on every write (`mergeCfiRanges` always
+     * returns a fresh array; an eager copy of the session list) would make
+     * every page turn pay that diff even when nothing was appended.
      */
     describe('regression: updateReadingSession keeps array identity when nothing changed', () => {
         const seed = (bookId: string) => {
@@ -618,10 +618,10 @@ describe('useReadingStateStore - Per-Device Progress', () => {
     });
 
     /**
-     * perf + FK: the reading-list mirror ran on EVERY page turn — `upsertEntry`
+     * perf + FK: the reading-list mirror runs on EVERY page turn — `upsertEntry`
      * spreads the whole entries map and opens a second Yjs transaction, and
      * libraryViewStore subscribes to both stores — and the whole-entry rebuild
-     * dropped the `bookId` FK the v8 linker wrote.
+     * must not drop the `bookId` FK the v8 linker wrote.
      */
     describe('regression: the reading-list mirror is skipped when nothing visible changed', () => {
         const BOOK_ID = 'book-reading-list';
@@ -694,7 +694,7 @@ describe('useReadingStateStore - Per-Device Progress', () => {
      *    it (src/components/ReadingListDialog.tsx, src/lib/csv.ts).
      *  - `percentage` is compared rounded, and the CSV export serializes
      *    `percentage.toFixed(4)` (src/lib/csv.ts) — four decimals, so rounding
-     *    the comparison to whole percents let the exported column trail
+     *    the comparison to whole percents would let the exported column trail
      *    visibly.
      */
     describe('regression: the reading-list mirror skip is bounded in time and precision', () => {

@@ -1,5 +1,5 @@
 /**
- * Vitest stand-in for `virtual:pwa-register/react` (Phase 8 §G).
+ * Vitest stand-in for `virtual:pwa-register/react`.
  *
  * The real module is a vite-plugin-pwa VIRTUAL module — it only exists
  * inside a Vite build with the plugin active, so vitest cannot resolve it.

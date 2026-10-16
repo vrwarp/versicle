@@ -193,16 +193,16 @@ describe('GenAIPanel quota meters (wired §10.7)', () => {
 });
 
 /**
- * F7c: the panel used to call `useGenAIStore()` with NO selector, subscribing
- * to the whole state object — so ANY write to the GenAI store (the embedding
- * model, the boot-time background-budget providers, a log line) re-rendered it
- * and the heavy settings tab underneath. It now subscribes to the fields it
- * actually renders.
+ * The panel must not call `useGenAIStore()` with NO selector (subscribing to
+ * the whole state object): ANY write to the GenAI store (the embedding model,
+ * the boot-time background-budget providers, a log line) would then re-render
+ * it and the heavy settings tab underneath. It subscribes only to the fields
+ * it actually renders.
  *
  * NOTE for the reader: an `addLog` still re-renders the panel, and must —
  * GenAISettingsTab renders the Debug Logs list unconditionally from the `logs`
- * prop, so the panel has to pass the new array down. What is gone is the
- * re-render for everything the panel does NOT display.
+ * prop, so the panel has to pass the new array down. Everything the panel does
+ * NOT display must not re-render it.
  */
 describe('regression: GenAI state the panel does not render does not re-render it', () => {
   // GenAISettingsTab polls a 1s `setTick` interval of its own; frozen timers

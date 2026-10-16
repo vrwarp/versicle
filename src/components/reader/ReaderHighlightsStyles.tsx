@@ -7,8 +7,8 @@ interface ReaderHighlightsStylesProps {
 
 /**
  * Parent-document styling for the epub.js SVG highlight layers. The CSS
- * itself comes from the ONE highlight styles registry (Phase 6 §4,
- * src/domains/reader/engine/highlightStyles.ts) — these rules are the ones
+ * itself comes from the ONE highlight styles registry
+ * (src/domains/reader/engine/highlightStyles.ts) — these rules are the ones
  * that actually win for SVG `fill`/`fill-opacity`/`mix-blend-mode`, since
  * epub.js draws annotation SVGs in the parent document.
  */

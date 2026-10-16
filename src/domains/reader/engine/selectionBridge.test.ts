@@ -1,10 +1,9 @@
 /**
  * The selection bridge turns a user's text selection into a CFI range. It
- * had no test at all, yet it is full of platform scar tissue: Android
- * swallows mouseup, the native selection commits after touchend, and the
- * app's own programmatic selections fire selectionchange exactly like a
- * user gesture. Each guard here exists because one of those broke the
- * highlight flow.
+ * is full of platform-specific guards: Android swallows mouseup, the native
+ * selection commits after touchend, and the app's own programmatic
+ * selections fire selectionchange exactly like a user gesture. Each guard
+ * here exists because one of those breaks the highlight flow.
  */
 import type { Contents } from 'epubjs';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';

@@ -1,7 +1,6 @@
 /**
- * IDB schema fixtures for the v25 migration suite (`src/data/migrations.test.ts`,
- * the M.* tests) — Phase 3 P3-13, design D7 in
- * plan/overhaul/prep/phase3-storage-gateway.md.
+ * IDB schema fixtures for the upgrade suite (`src/data/migrations.test.ts`,
+ * the M.* tests).
  *
  * PROVENANCE (master plan §3 fixture strategy — "v18 and v24 IDB fixtures"):
  * committed as BUILDER CODE, not binary dumps. fake-indexeddb is
@@ -9,11 +8,11 @@
  * version is equivalent to restoring a dump — and reviewable. Layouts are
  * reconstructed from:
  *
- *  - **v24**: the v24 upgrade callback moved verbatim from `src/db/db.ts`
- *    into `src/data/schema.ts` (P3-4, commit fe54bb0a; verified against the
- *    prep doc's HEAD read at fb3dcd3f). Store set, keyPaths and indexes are
- *    copied literally from that callback.
- *  - **v18**: the deprecated-store list in that same callback (its
+ *  - **v24**: the v24 upgrade callback, whose baseline now lives in
+ *    `ensureBaselineStores` in `src/data/schema.ts` (minus the stores later
+ *    migrations added). Store set, keyPaths and indexes are copied literally
+ *    from that callback.
+ *  - **v18**: the `DEPRECATED_STORES` list in `src/data/schema.ts` (its
  *    "Legacy v17 stores" block + "v18 user stores (now in Yjs)" block) plus
  *    the v18 static architecture the SW read contract documents
  *    (`src/data/sw-contract.ts`: "V18 Architecture" reads covers from
@@ -27,8 +26,8 @@
  *
  * Lives INSIDE src/data (not src/test/fixtures) on purpose: raw `idb`
  * access and readwrite transactions are the data layer's exclusive lint
- * privilege (D8) -- old-layout knowledge is data-layer property, and the
- * "zero exceptions" posture of the Phase 3 exit bans stays intact.
+ * privilege -- old-layout knowledge is data-layer property, and the
+ * "zero exceptions" posture of those bans stays intact.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any -- the old layouts are
  * deliberately outside the current EpubLibraryDB type map. */
@@ -45,7 +44,7 @@ function bytes(...values: number[]): ArrayBuffer {
 const T0 = 1_700_000_000_000;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// v24 fixture — the current production layout, every store populated.
+// v24 fixture — the last pre-registry layout, every store populated.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const v24Rows = {
@@ -82,7 +81,7 @@ export const v24Rows = {
     createdAt: T0,
     lastAccessed: T0 + 1_000,
   },
-  /** Modern row: canonical `alignment` + the additive `size` stamp (P3-6). */
+  /** Modern row: canonical `alignment` + the additive `size` stamp. */
   modernAudio: {
     key: 'seg-modern',
     audio: bytes(40, 41, 42),
@@ -103,7 +102,7 @@ export const v24Rows = {
     sectionId: 'ch1',
     sentences: [{ text: 'Hello world.', cfi: 'epubcfi(/6/2!/4/2/1:0)' }],
   },
-  /** `protected` pins the supersede/prune semantics (prep ▲9). */
+  /** `protected` pins the supersede/prune semantics. */
   checkpoint: {
     timestamp: T0 + 4_000,
     blob: Uint8Array.from([50, 51, 52]),
@@ -111,7 +110,7 @@ export const v24Rows = {
     trigger: 'pre-migration',
     protected: true,
   },
-  /** sync_log is a dead store frozen as-is (prep ▲16) — but rows must survive. */
+  /** sync_log is a dead store frozen as-is — but rows must survive. */
   syncLog: { timestamp: T0 + 5_000, level: 'info', message: 'frozen dead-store row' },
   flightSnapshot: {
     id: 'snap-1',
@@ -183,7 +182,7 @@ export async function buildV24Fixture(): Promise<void> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // v18 fixture — pre-Yjs straggler: static architecture + populated legacy
-// user-data stores (the rows today's upgrade silently destroys, P9).
+// user-data stores (the rows the v25 straggler guard must capture before deleting).
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const v18UserRows = {

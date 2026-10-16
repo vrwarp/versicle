@@ -1,8 +1,6 @@
 /**
  * Axe smoke assertions on presentational primitives — proves the harness's
- * vitest-axe integration runs and demonstrates the opt-in usage pattern
- * (gap-accessibility report, debt #6 layer 2). Deeper per-component audits
- * land with each component's Phase 1+ rewrite.
+ * vitest-axe integration runs and demonstrates the opt-in usage pattern.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';

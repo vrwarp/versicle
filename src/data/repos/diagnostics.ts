@@ -1,7 +1,6 @@
 /**
  * `flight_snapshots` repository — persisted TTS flight-recorder ring-buffer
- * snapshots (Phase 3, D5.4 in plan/overhaul/prep/phase3-storage-gateway.md;
- * carved from lib/tts/TTSFlightRecorder.ts's raw getDB() CRUD).
+ * snapshots (persisted via lib/tts/TTSFlightRecorder.ts).
  *
  * Worker-safe (the flight recorder lives on the playback hot path in the
  * TTS worker). Zero contention with other repos: this store is touched by
@@ -18,7 +17,7 @@ class DiagnosticsRepo {
   /**
    * Persist one snapshot, pruning the oldest rows down to MAX_SNAPSHOTS in
    * the SAME gated transaction. The createdAt scan happens outside the gate
-   * (D1 recipe — only ids/timestamps are read, never eventsJSON payloads).
+   * (only ids/timestamps are retained, never eventsJSON payloads).
    */
   async saveSnapshot(snap: FlightSnapshotRow): Promise<void> {
     const db = await getConnection();

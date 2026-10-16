@@ -1,6 +1,6 @@
 /**
- * Window-level unhandled-rejection handler (moved verbatim from App.tsx):
- * surfaces storage-full conditions as toasts instead of silent console noise.
+ * Window-level unhandled-rejection handler: surfaces storage-full conditions
+ * as toasts instead of silent console noise.
  */
 import { useToastStore } from '@store/useToastStore';
 import { StorageFullError } from '~types/errors';

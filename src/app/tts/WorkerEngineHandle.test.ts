@@ -1,6 +1,6 @@
 /**
  * Unit tests for WorkerEngineHandle — the app-facing adapter over the async worker client.
- * Covers the boot-buffering contract, whenReady, snapshot replay/fan-out (5b-PR2: the single
+ * Covers the boot-buffering contract, whenReady, snapshot replay/fan-out (the single
  * PlaybackSnapshot channel — seq ordering, queue re-attachment, TTS_COMMAND_FAILED), command
  * routing, and the jsdom/SSR `disabled` no-op mode.
  */
@@ -11,7 +11,7 @@ const { clientState } = vi.hoisted(() => ({
     clientState: {
         // Deferred so tests control when the "worker" finishes booting.
         // The promise + resolve/reject are (re)created in beforeEach so they
-        // exist BEFORE the factory runs: WorkerEngineHandle now DYNAMICALLY
+        // exist BEFORE the factory runs: WorkerEngineHandle DYNAMICALLY
         // imports createWorkerEngineClient (perf — keeps the TTS backend graph
         // out of the entry chunk), so the factory is invoked a microtask after
         // construction. Capturing resolve inside the factory would leave

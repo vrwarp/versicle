@@ -151,7 +151,7 @@ export class PlatformIntegration implements MediaPlatform {
         // shouldRunInForeground stay true and the notification does not flicker or tear
         // down (and the legacy session stops thrashing, which is what the Bluetooth/AVRCP
         // "metadata to sync" timeout was reacting to). This intentionally mirrors the
-        // BackgroundAudio fold immediately below. Do NOT narrow this back toward 'none'.
+        // BackgroundAudio fold immediately below. Do NOT narrow this toward 'none'.
         // On web it is the cosmetic navigator.mediaSession.playbackState enum (no
         // timeline/foreground gate); scrubber motion is driven by setPositionState, not
         // this line. 'none' is reserved for a genuine stop.

@@ -1,10 +1,8 @@
 /**
- * domains/search — public surface (Phase 7 §F).
+ * domains/search — public surface.
  *
  * Consumed by the reader controller (one SearchSession per open reader,
- * SearchPanel fed through props) since the post-merge reader adoption — the
- * `searchClient` singleton, `scrollToText` and the legacy result shape died
- * with it.
+ * SearchPanel fed through props).
  */
 export {
   SearchSession,

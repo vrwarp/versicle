@@ -1,5 +1,5 @@
 /**
- * Screen-reader announcement channel (Phase 8 §D, a11y item 2/10).
+ * Screen-reader announcement channel.
  *
  * Plain TS pub/sub — no React, no DOM — so stores, services and the TTS
  * adapter can `announce()` from anywhere. The ONE subscriber that matters

@@ -1,7 +1,6 @@
 /**
- * CfiGrouper suite (Phase 5c; phase5-tts-strangler.md §5c.2). Carries the
- * surviving assertions of the deleted AudioContentPipeline grouping/
- * attribution suites as named regression blocks (absorption ledger row 17):
+ * CfiGrouper suite. Carries the grouping/attribution assertions absorbed from
+ * the deleted AudioContentPipeline suites as named regression blocks:
  * AudioContentPipeline_Grouping, AudioContentPipeline_StructuralAnomaly,
  * AudioContentPipeline_MarkerAttribution.
  *
@@ -44,10 +43,9 @@ describe('regression: AudioContentPipeline_Grouping', () => {
     });
 
     describe('regression: AudioPlayerService.test (grouping)', () => {
-        // Carried from the deleted AudioPlayerService.test.ts grouping block
-        // (absorption ledger row 1): the pure grouping pins lived there for
-        // historical reasons; the colliding-parent skip-mask case is covered
-        // end-to-end by parity P14 (sourceIndices-keyed masks).
+        // Absorbed from the deleted AudioPlayerService.test.ts grouping block;
+        // the colliding-parent skip-mask case is covered end-to-end by
+        // parity P14 (sourceIndices-keyed masks).
         it('groups sentences by parent and generates Range CFIs for rootCfi', () => {
             const sentences = [
                 { text: 'A', cfi: 'epubcfi(/6/14!/4/2/1:0)' },
@@ -117,11 +115,10 @@ describe('regression: AudioContentPipeline_Grouping', () => {
     });
 
     describe('characterization: kernel cfiContains separator fix (5c-PR1, content D9/S17)', () => {
-        // The inline isDescendant/isAncestor copies used ['/', '!', ':'] — missing
-        // '[' and ',' from THE canonical set. An assertion-bracket child parent
-        // (e.g. /4/10[note] under /4/10) therefore failed the boundary check and
-        // split the group. Strictly a fix: separator-free fixtures group exactly
-        // as before (the suites above), and the bracket fixture now coalesces.
+        // The boundary check uses THE canonical separator set, which includes
+        // '[' and ','. An assertion-bracket child parent (e.g. /4/10[note] under
+        // /4/10) must therefore pass the boundary check instead of splitting
+        // the group.
         it('groups assertion-bracket children with their unbracketed ancestor', () => {
             const sentences = [
                 // Parent CFI of the first sentence: /4/10
@@ -132,7 +129,7 @@ describe('regression: AudioContentPipeline_Grouping', () => {
 
             const groups = groupSegmentsByRoot(sentences);
 
-            // Pre-fix behavior: 2 groups (the '[' boundary was rejected).
+            // A separator set lacking '[' would reject this boundary and yield 2 groups.
             expect(groups).toHaveLength(1);
             expect(groups[0].segments).toHaveLength(2);
         });
@@ -261,7 +258,7 @@ describe('regression: AudioContentPipeline_MarkerAttribution', () => {
 
     it('still orphans a marker that falls past the last segment (out of scope for this fix)', () => {
         // The fn2 body ref is the final child of its paragraph, after the last spoken sentence.
-        // Fix #2 widens the window to the last segment END, not beyond it, so this stays orphaned.
+        // The window extends to the last segment END, not beyond it, so this stays orphaned.
         expect(attributeMarkersToGroups([GROUP_34], [MARK_FN2_BODY])).toEqual([-1]);
     });
 

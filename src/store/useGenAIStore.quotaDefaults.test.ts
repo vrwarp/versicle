@@ -3,7 +3,7 @@
  * the governor enforces whatever is in it: a pool that is missing gets the far
  * looser `default` ceiling and overruns the model's real free tier, while a
  * pool carrying a stale figure either strands quota or collects 429s. This
- * suite pins the rows the dashboard refresh added or moved.
+ * suite pins the rows mirrored from the dashboard.
  */
 import { describe, expect, it } from 'vitest';
 

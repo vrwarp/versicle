@@ -1,11 +1,12 @@
 /**
- * `backgroundTasks` boot phase (moved from App.tsx):
- *  - the device heartbeat interval (now started AFTER device registration —
- *    pre-C11 it raced registration from a parallel effect),
+ * `backgroundTasks` boot phase:
+ *  - the device heartbeat interval (started AFTER device registration),
  *  - the weekly background Drive scan policy,
- *  - the audio-cache LRU eviction sweep (Phase 3 D5.1), preceded by the
- *    one-time v25 `size` backfill (P3-13 D7 — "post-open idle": this phase
- *    runs after boot completes, off the critical path).
+ *  - the audio-cache LRU eviction sweep, preceded by the one-time v25 `size`
+ *    backfill ("post-open idle": this phase runs after boot completes, off
+ *    the critical path),
+ *  - the embedding-cache eviction sweep, the Drive preview trickle, and the
+ *    NFKD/extraction re-ingest wave.
  */
 import type { BootTask } from '../bootstrap';
 import { getDeviceId } from '@lib/device-id';
@@ -44,7 +45,7 @@ export function startDeviceHeartbeat(): void {
 /**
  * Stop the heartbeat. Called by boot cleanup AND by wireSyncEvents on the
  * `obsolete` quarantine event (phase4-sync-strangler.md §D5 layer 3): an
- * obsolete client must stop announcing itself — pre-P4 it kept writing the
+ * obsolete client must stop announcing itself rather than keep writing the
  * device doc from behind the lock screen.
  */
 export function stopDeviceHeartbeat(): void {
@@ -95,20 +96,20 @@ export interface ProtectedBookIdsDeps {
   /**
    * The connected artifact backend handle, or null (sync off / not connected).
    * A null handle means there is no cloud to confirm against → nothing to
-   * protect (eviction proceeds as today).
+   * protect (eviction proceeds unprotected).
    */
   getBackend(): { backend: SyncBackend; workspaceId: string } | null;
   /** Candidate book ids (the eviction set — the recency map keys). */
   bookIds: string[];
-  /** Resolve bookId → contentHash via the manifest (absent on pre-P7 books). */
+  /** Resolve bookId → contentHash via the manifest (absent on manifests that predate content hashing). */
   getContentHash(bookId: string): Promise<string | undefined>;
   /** The live embedding-space stamp ({model,dims} fresh from the GenAI store). */
   getStamp(): { model: string; dims: number };
 }
 
 /**
- * Build the never-evict-unconfirmed-upload protected set (Phase D, GUARDRAILS).
- * EMPTY when shareAiCaches is OFF (evict exactly as today) or no backend is
+ * Build the never-evict-unconfirmed-upload protected set.
+ * EMPTY when shareAiCaches is OFF (evict unprotected) or no backend is
  * connected. When ON + connected, for each book it derives the contentKey and
  * HEAD-probes the backend; a HEAD MISS means the upload is NOT yet confirmed,
  * so the book is PROTECTED (eviction must never destroy the only copy of a
@@ -132,8 +133,9 @@ export async function computeProtectedBookIds(
   for (const bookId of deps.bookIds) {
     try {
       const contentHash = await deps.getContentHash(bookId);
-      // No content identity (pre-P7) → no content-addressed key → nothing the
-      // publisher could have uploaded; not a candidate for protection.
+      // No content identity (manifest predates content hashing) → no
+      // content-addressed key → nothing the publisher could have uploaded;
+      // not a candidate for protection.
       if (!contentHash) continue;
       const key = await contentKey({
         contentHash,
@@ -179,7 +181,7 @@ export const embeddingCacheEvictionTask: BootTask = {
 
     // Shape the never-evict-unconfirmed-upload protected set at the TASK level
     // (the repo stays pure). shareAiCaches OFF / no backend → empty set → zero
-    // added cost (no HEAD probes) and eviction runs exactly as today.
+    // added cost (no HEAD probes) and eviction runs unprotected.
     void computeProtectedBookIds({
       isShareEnabled: () => useGenAIStore.getState().shareAiCaches,
       getBackend: () => peekSyncOrchestrator()?.getConnectedArtifactBackend() ?? null,
@@ -221,7 +223,7 @@ export const driveAutoScanTask: BootTask = {
     getDriveLibrarySync().scanAndIndex().catch(err => {
       if (err instanceof GoogleAuthRequiredError) {
         // Silent path: no cached token. Never pops UI, never disconnects —
-        // the user reconnects from settings (GG-2 reversal).
+        // the user reconnects from settings.
         logger.info(`Background Drive Scan skipped: ${err.message}`);
       } else {
         logger.warn('Background Drive Scan failed:', err);
@@ -312,7 +314,7 @@ export const driveTrickleTask: BootTask = {
   },
 };
 
-// ── Phase 7 §E: the NFKD/extraction re-ingest wave ─────────────────────────
+// ── the NFKD/extraction re-ingest wave ─────────────────────────────────────
 
 /** localStorage flag: the settings "defer re-ingestion" toggle (device-local). */
 const REINGEST_DEFER_KEY = 'versicle_reingest_defer';

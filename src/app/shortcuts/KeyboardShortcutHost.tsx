@@ -5,7 +5,7 @@ import { useShortcut } from './useShortcut';
 import { ShortcutHelpSheet } from './ShortcutHelpSheet';
 
 /**
- * KeyboardShortcutHost (Phase 8 §E) — mounts THE single window keydown
+ * KeyboardShortcutHost — mounts THE single window keydown
  * listener (eslint bans `addEventListener('keydown')` everywhere outside
  * src/app/shortcuts/) and the global `?` help-sheet shortcut. Mounted
  * once by the shell (RootLayout).

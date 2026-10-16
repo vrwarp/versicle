@@ -138,9 +138,9 @@ describe('LibraryView Search', () => {
         // Initially matches "Brave New World"
         expect(screen.getByTestId('book-card-3')).toBeInTheDocument();
 
-        // Add a new book that matches. Awaited: the library projection now
-        // rebuilds on a microtask (one flush per task) rather than inline on
-        // every input-store notification.
+        // Add a new book that matches. Awaited: the library projection
+        // rebuilds on a microtask (one flush per task), not inline on every
+        // input-store notification.
         await act(async () => {
             useBookStore.setState((state) => ({
                 books: {

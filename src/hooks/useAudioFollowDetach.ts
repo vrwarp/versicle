@@ -23,10 +23,9 @@ function breakAudioFollowOnUserScroll() {
  * 'scrolled-doc'). A finger or wheel over the book text dispatches its
  * wheel/touchmove events to the IFRAME's document, which never bubble to the
  * parent wrapper — so the wrapper-level listener in useReaderNavigation only
- * catches scrolls over the surrounding margin (the "sometimes it works"
- * the user saw). This hook attaches the same detach signal directly to every
- * rendered iframe document via the engine's contentRendered seam, so a swipe
- * on the text itself drops follow mode too.
+ * catches scrolls over the surrounding margin. This hook attaches the same
+ * detach signal directly to every rendered iframe document via the engine's
+ * contentRendered seam, so a swipe on the text itself drops follow mode too.
  *
  * Why wheel + touchmove (not the native 'scroll' event): those two are purely
  * user-initiated. The audio-follow `engine.display()` scrolls the iframe

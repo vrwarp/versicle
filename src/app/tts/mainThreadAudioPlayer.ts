@@ -4,11 +4,10 @@
  * Production runs the engine in a Web Worker: {@link getAudioPlayer} returns a
  * {@link WorkerEngineHandle} that drives a worker-resident {@link PlaybackController} (see
  * createWorkerEngineClient / tts.worker.ts). The handle satisfies the {@link TtsEngine}
- * interface, so TtsController/useAudioCommands call sites are unchanged.
+ * interface that TtsController consumes.
  *
- * (The in-process builder that lived here for unit tests died in the P9 knip
- * sweep: engine suites construct PlaybackController through the
- * FakeEngineContext / parityHostDb ports directly.)
+ * There is no in-process engine builder: engine suites construct PlaybackController through
+ * the FakeEngineContext / parityHostDb ports directly.
  */
 import type { TtsEngine } from '@lib/tts/engine/TtsEngine';
 import { WorkerEngineHandle } from './WorkerEngineHandle';

@@ -1,7 +1,5 @@
-// Absorbed from src/sw-utils.test.ts in the same PR that absorbed
-// src/sw-utils.ts into src/data/sw-contract.ts (P3-4; test-absorption
-// ledger, master plan §4 rule 8). The covers.ts suite below pins the
-// app↔SW cover-route contract that used to be five copy-pasted literals.
+// The covers.ts suite below pins the app↔SW cover-route contract; the
+// remaining suites pin sw-contract.ts's cover read and cover response.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getCoverFromDB, createCoverResponse, closeCoverConnection, STATIC_MANIFESTS_STORE, BOOKS_STORE, DB_NAME } from './sw-contract';
 import { COVERS_ENDPOINT_PREFIX, coverUrl, parseCoverPath } from './covers';
@@ -45,7 +43,7 @@ describe('Service Worker Database Utils', () => {
     };
 
     beforeEach(async () => {
-        // The cover connection is shared across calls now — drop it so each
+        // The cover connection is shared across calls — drop it so each
         // test starts from a cold open.
         await closeCoverConnection();
         vi.clearAllMocks();
@@ -100,30 +98,11 @@ describe('Service Worker Database Utils', () => {
     it('returns 200 response with correct blob when found', async () => {
         mockDb.objectStoreNames.contains.mockImplementation((name) => name === STATIC_MANIFESTS_STORE);
 
-        // Use Blob and expect success. If node fails to stream Blob, we mock Response.
-        // However, we are testing logic, not Response implementation.
-        // But createCoverResponse uses new Response(blob).
-        // If "undici" (node fetch polyfill) fails with "object.stream is not a function", it means
-        // the Blob implementation in Vitest environment is not fully compatible with undici Response.
-
-        // We can pass a buffer/string to Response constructor in test to bypass blob stream issue?
-        // But the code passes the blob.
-
-        // Workaround: Mock Response global if needed?
-        // Or construct a Blob that works.
-        // Node 22 Blob should work.
-
         const blob = new Blob(['image-data'], { type: 'image/png' });
         mockDb.get.mockResolvedValue({ coverBlob: blob });
 
-        // If this throws, it's environment issue.
-        // Let's spy on Response to avoid actual construction failure?
-        // But Response is global.
-
-        // Let's assume the previous failure was due to Blob handling.
-        // We can try to cast blob to any and ensure it has stream method?
-        // Or mock global.Response?
-
+        // The assertions are about status and headers, not body streaming, so
+        // a minimal header-recording Response stands in (restored in the finally).
         const originalResponse = global.Response;
         global.Response = class MockResponse {
              body: unknown;

@@ -1,10 +1,9 @@
 /**
  * The shared provider contract (describeProviderContract.ts), run against ALL SIX
- * providers through per-provider harnesses (5a-PR2 brought five; PiperProvider
- * joined at 5a-PR3 when the injectable `PiperRuntime` replaced the module-global
- * piper-utils worker).
+ * providers through per-provider harnesses (PiperProvider runs on an injected
+ * `FakePiperRuntime`).
  *
- * vi.mock appears exactly once: for the Capacitor NATIVE plugin module — the one
+ * vi.mock appears exactly once here: for the Capacitor NATIVE plugin module — the one
  * boundary with no injection seam (allowlisted in eslint.config.js, mirroring the
  * engine-dir PlatformIntegration entry). Everything else is injected fakes:
  * FakeAudioSink + InMemoryTTSCache + FakePiperRuntime + stubbed
@@ -129,7 +128,7 @@ describe('TTS provider contract (5a-PR2)', () => {
     ));
 
     // -----------------------------------------------------------------------
-    // Piper (5a-PR3): injected FakePiperRuntime; catalog served from the fake's
+    // Piper: injected FakePiperRuntime; catalog served from the fake's
     // cache with the network stubbed offline (the SWR background refresh must
     // never leave the test).
     // -----------------------------------------------------------------------

@@ -1,13 +1,5 @@
 import DOMPurify from 'dompurify';
 
-/**
- * Sanitizes HTML content to prevent XSS attacks while preserving book formatting.
- * Uses DOMPurify to strip dangerous tags (scripts, objects) and attributes (event handlers).
- *
- * @param html - The raw HTML string.
- * @returns The sanitized HTML string.
- */
-
 /** http:, https:, or protocol-relative — anything that leaves the origin. */
 const REMOTE_URL_RE = /^\s*(?:https?:|\/\/)/i;
 
@@ -21,8 +13,7 @@ const srcsetHasRemote = (value: string): boolean =>
 // Configure DOMPurify hooks once. DOMPurify only binds its API (addHook/sanitize) when a DOM
 // is present; in a Web Worker there is no `window`, so it's a no-op shell. Guard the init so
 // this module can be imported in a worker (e.g. transitively via the worker engine's data-repo
-// imports) — TTS
-// orchestration never sanitizes HTML off the main thread.
+// imports) — TTS orchestration never sanitizes HTML off the main thread.
 if (typeof DOMPurify.addHook === 'function') {
   DOMPurify.addHook('afterSanitizeAttributes', (node) => {
     // Fix Reverse Tabnabbing Vulnerability
@@ -47,8 +38,7 @@ if (typeof DOMPurify.addHook === 'function') {
       }
     }
 
-    // Privacy hardening (Phase 8 §H, the `img-src https:` strict-flip
-    // replacement): EPUB content must never trigger remote fetches —
+    // Privacy hardening: EPUB content must never trigger remote fetches —
     // a 1×1 remote image is a read-tracking beacon. Strip remote
     // references from resource-loading elements; legitimate EPUB images
     // are zip-internal and arrive as blob:/data: URLs (untouched). The
@@ -67,6 +57,13 @@ if (typeof DOMPurify.addHook === 'function') {
   });
 }
 
+/**
+ * Sanitizes HTML content to prevent XSS attacks while preserving book formatting.
+ * Uses DOMPurify to strip dangerous tags (scripts, objects) and attributes (event handlers).
+ *
+ * @param html - The raw HTML string.
+ * @returns The sanitized HTML string.
+ */
 export function sanitizeContent(html: string): string {
   return DOMPurify.sanitize(html, {
     // Allow standard HTML tags and attributes

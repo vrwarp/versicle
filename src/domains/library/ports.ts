@@ -1,7 +1,7 @@
 /**
- * Injected ports for the library domain (Phase 7 §B/§C; master plan §2
- * rule 3: domains never import state/ — `src/app/library/createLibrary.ts`
- * is the composition root that wires these to the zustand stores, the
+ * Injected ports for the library domain (master plan §2 rule 3: domains
+ * never import state/ — `src/app/library/createLibrary.ts` is the
+ * composition root that wires these to the zustand stores, the
  * EngineContext pattern generalized).
  */
 import type { BookMetadata } from '~types/book';
@@ -19,7 +19,7 @@ export interface InventoryPort {
   upsertMany(items: UserInventoryItem[]): void;
   update(bookId: string, updates: Partial<UserInventoryItem>): void;
   remove(bookId: string): void;
-  /** Fires on every inventory change (the D16 delta subscription). */
+  /** Fires on every inventory change (the delta subscription). */
   subscribe(listener: (books: Record<string, UserInventoryItem>) => void): () => void;
 }
 
@@ -30,7 +30,7 @@ export interface ReadingListPort {
   update(filename: string, updates: Partial<ReadingListEntry>): void;
 }
 
-/** Per-file outcome summary of a batch import (shape preserved from P0). */
+/** Per-file outcome summary of a batch import. */
 export interface BatchImportSummary {
   imported: number;
   skipped: string[];
@@ -38,7 +38,7 @@ export interface BatchImportSummary {
 }
 
 /**
- * The transient UI projection (the shrunk useLibraryStore behind the seam).
+ * The transient UI projection (useLibraryStore behind the seam).
  * NOTE the I-5 discipline is structural here: the offloaded set only has
  * per-key add/remove — wholesale replacement is not expressible.
  */
@@ -94,5 +94,5 @@ export interface LibraryPersistence {
   reprocess(bookId: string, opts: ReprocessOptions): Promise<ReprocessResult>;
 }
 
-/** Settings captured PER JOB (severs the useTTSSettingsStore reach-ins, coupling #2). */
+/** Settings captured PER JOB (extraction never reads a settings store directly). */
 export type ExtractionOptionsProvider = () => ExtractionOptions;

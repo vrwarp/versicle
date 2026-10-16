@@ -1,6 +1,6 @@
 /**
- * LibraryService — owner of the delete/offload/restore/hydrate workflows
- * (Phase 7 §C). Carries the five lifted invariants:
+ * LibraryService — owner of the delete/offload/restore/hydrate workflows.
+ * Carries five invariants:
  *
  *   I-1 hydrate is a per-key merge (a book written after hydrate's read
  *       snapshot is never clobbered);
@@ -13,9 +13,7 @@
  *   I-5 the offloaded set is updated per-key (structural: the projection
  *       port has no wholesale setter).
  *
- * The suite that proves them is LibraryService.invariants.test.ts — written
- * at the phase entry gate against the legacy store, swapped to this service
- * at the PR-L4 cutover with its assertions unchanged.
+ * The suite that proves them is LibraryService.invariants.test.ts.
  */
 import { createLogger } from '@lib/logger';
 import type { BookMetadata } from '~types/book';
@@ -62,9 +60,8 @@ export class LibraryService {
   constructor(private readonly deps: LibraryServiceDeps) {}
 
   /**
-   * Subscribe to inventory deltas: new books trigger a hydration pass
-   * (finishes D16 — replaces BOTH the boot-task call-through and
-   * LibraryView's prevBookCountRef heuristic). Returns an unsubscribe.
+   * Subscribe to inventory deltas: new books trigger a hydration pass.
+   * Returns an unsubscribe.
    */
   start(): () => void {
     if (this.unsubscribeInventory) return this.unsubscribeInventory;
@@ -119,8 +116,8 @@ export class LibraryService {
       const staticIds = projection.staticIds();
       // Collected, then written ONCE (boot critical path): a per-book write
       // re-derives the whole library view per book, so hydrating an N-book
-      // shelf cost N rebuilds + N sorts. The per-key merge semantics below
-      // are unchanged — only the number of projection writes is.
+      // shelf would cost N rebuilds + N sorts. The per-key merge semantics
+      // below are per book; only the projection write is batched.
       const hydrated: Array<readonly [string, BookMetadata]> = [];
       for (const manifest of manifests) {
         if (!manifest || !manifest.id) continue;
@@ -158,9 +155,8 @@ export class LibraryService {
           if (!inventory.get(id)) continue;
           if (!current.has(id)) toMark.push(id);
         }
-        // One write (see setStaticMany above). `current` is the pre-loop set
-        // instance either way — the per-key form replaced it on each add, so
-        // its membership checks were already reading the pre-loop state.
+        // One write (see setStaticMany above). `current` is the pre-loop set,
+        // so the membership checks above read the pre-loop state.
         if (toMark.length > 0) projection.addOffloadedMany(toMark);
       } catch (e) {
         logger.error('Failed to hydrate offload status:', e);

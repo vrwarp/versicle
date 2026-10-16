@@ -24,7 +24,7 @@ test("smart delete journey", async ({ page }) => {
   // Open menu (hover to show button, then click)
   await bookCard.hover();
   await page.getByTestId("book-context-menu-trigger").click();
-  // Wait for menu animation: the item stops moving (was a fixed 1s sleep)
+  // Wait for menu animation: the item stops moving
   await page
     .getByTestId("menu-offload")
     .elementHandle({ timeout: 5000 })
@@ -36,7 +36,7 @@ test("smart delete journey", async ({ page }) => {
   // Let the menu finish closing before the dialog it opened is confirmed. If
   // the dialog closes while the menu's exit animation still holds its layer,
   // Radix restores <body> to the menu's `pointer-events: none` and every later
-  // click is swallowed (the old fixed 1s sleep here hid this).
+  // click is swallowed.
   await page.getByTestId("menu-offload").waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
 
   // Confirm Offload
@@ -49,7 +49,7 @@ test("smart delete journey", async ({ page }) => {
   await expect(page.getByTestId("offloaded-overlay")).toBeVisible({ timeout: 5000 });
 
   // Wait a moment for state update: the offload dialog closes once the offload
-  // resolves, after the overlay shows (was a fixed 1s sleep)
+  // resolves, after the overlay shows
   await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 5000 }).catch(() => {});
   await captureScreenshot(page, "library_smart_delete_offloaded");
 
@@ -75,7 +75,7 @@ test("smart delete journey", async ({ page }) => {
   // 6. Verify Book Opens
   console.log("Opening book...");
   // Let the restored cover settle before the img probe below: its <img> renders
-  // once the new cover URL resolves (was a fixed 3s sleep)
+  // once the new cover URL resolves
   await page
     .waitForFunction(() => {
       const img = document.querySelector("[data-testid^='book-card-'] img") as HTMLImageElement | null;

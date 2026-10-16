@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { FireProvider } from 'y-cinder';
 import * as Y from 'yjs';
 
-// Mock dependencie to avoid full initialization
+// Mock dependencies to avoid full initialization
 vi.mock('firebase/app', () => ({
     initializeApp: vi.fn(),
 }));

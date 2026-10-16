@@ -31,15 +31,13 @@ describe('Yjs Provider', () => {
 });
 
 /**
- * durability regression — the reading-session recorder now merges up to
- * COMMIT_WINDOW_MS of relocations into ONE CRDT write, so the user's position
- * lives in memory for seconds at a time and the backgrounding handlers are
- * what make it durable. Writing the merged commit into the store is only half
- * of that: it hands the bytes to y-idb, which sits on them for
- * `writeDebounceMs` (200ms) — a timer a frozen or killed page may never run.
- * `flushYjsPersistence` is the half that ends on disk, and before it existed
- * the only code that bypassed the debounce was the DEV/E2E-gated
- * `window.__versicleTest.flushPersistence`, wired to no lifecycle event at all.
+ * Durability — the reading-session recorder merges up to COMMIT_WINDOW_MS of
+ * relocations into ONE CRDT write, so the user's position lives in memory for
+ * seconds at a time and the backgrounding handlers are what make it durable.
+ * Writing the merged commit into the store is only half of that: it hands the
+ * bytes to y-idb, which sits on them for `writeDebounceMs` (200ms) — a timer a
+ * frozen or killed page may never run. `flushYjsPersistence` is the half that
+ * ends on disk.
  */
 describe('regression: flushYjsPersistence ends the durability drain on disk', () => {
     afterEach(async () => {

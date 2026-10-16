@@ -8,13 +8,12 @@ import { BackNavigationManager } from '@components/BackNavigationManager';
 import { SyncToastPropagator } from '@components/sync/SyncToastPropagator';
 import { KeyboardShortcutHost } from '@app/shortcuts/KeyboardShortcutHost';
 
-// Phase 8 §B: GlobalSettingsDialog left this layout — settings are the
-// /settings/:tab route (SettingsShell). The shell no longer subscribes to
-// ten stores while settings are closed.
-// Phase 8 §D: the toast stack moved ABOVE the router gate (ToastHost in
-// App.tsx — boot-time toasts no longer drop). This layout mounts the
-// screen-reader announcement outlet (LiveAnnouncer) and the TTS
-// transition adapter that feeds it.
+// Settings are the /settings/:tab route (SettingsShell), not mounted here, so
+// the shell does not subscribe to settings stores while settings are closed.
+// The toast stack lives ABOVE the router gate (ToastHost in App.tsx), so
+// boot-time toasts are not dropped. This layout mounts the screen-reader
+// announcement outlet (LiveAnnouncer) and the TTS transition adapter that
+// feeds it.
 export function RootLayout() {
     return (
         <>

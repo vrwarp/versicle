@@ -1,5 +1,5 @@
 /**
- * ColdOpenResumeGuard — the owning suite for the cold-open resume race fix.
+ * ColdOpenResumeGuard — the owning suite for the cold-open resume race guard.
  *
  * The guard's job: when the reader opened without a saved CFI, no recorder
  * write may reach the store until the Yjs IDB load has settled, and the

@@ -17,9 +17,9 @@ describe('Sanitizer Link Safety', () => {
 });
 
 describe('regression: remote-resource stripping (Phase 8 §H — tracking pixels)', () => {
-    // The strict CSP flip dropped `img-src https:`; the sanitizer is the
-    // FUNCTIONAL replacement: EPUB HTML must never reference remote
-    // resources, so opening a book cannot beacon the reader's activity.
+    // The strict CSP has no `img-src https:`; the sanitizer is the FUNCTIONAL
+    // guard: EPUB HTML must never reference remote resources, so opening a
+    // book cannot beacon the reader's activity.
     it('strips the classic 1x1 remote tracking pixel (keeps the element + alt)', () => {
         const dirty = '<p>text</p><img src="https://tracker.example/p.gif" width="1" height="1" alt="cover" />';
         const clean = sanitizeContent(dirty);

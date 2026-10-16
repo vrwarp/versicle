@@ -19,7 +19,7 @@
  * click time by app/reader/searchNavigation.ts (resolveResultCfi against the
  * live view), so no live-reader plumbing enters the session. The indexer cannot
  * compute CFIs at index time, so this maps a hit to char offsets now and defers
- * the CFI to click time, WITHOUT an IDB format change.
+ * the CFI to click time.
  *
  * Guards: returns nothing for a section/book whose stored vectors no longer
  * describe the current text, so the caller falls back to regex-only —

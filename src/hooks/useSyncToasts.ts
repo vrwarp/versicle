@@ -8,15 +8,10 @@ import { useBookStore } from '@store/useBookStore';
  * Hook to show toast notifications when reading progress arrives from OTHER
  * devices (mounted once via SyncToastPropagator).
  *
- * P9 rewrite (the P4 §Follow-ups item 5 the Phase 8 shell work left open):
- * the legacy implementation re-serialized the ENTIRE per-device progress map
- * with JSON.stringify on every store change (any progress write on any book,
- * including local ones) and diffed strings. Zustand's vanilla subscribe
- * already hands over `(state, prevState)`; the synced-store middleware
- * replaces changed branches immutably, so reference comparison per
- * book/device finds remote updates without serializing anything. It also
- * imported `useBookStore` through the `useLibraryStore` re-export alias —
- * now the real module.
+ * Zustand's vanilla subscribe hands over `(state, prevState)`; the
+ * synced-store middleware replaces changed branches immutably, so reference
+ * comparison per book/device finds remote updates without serializing the
+ * per-device progress map on every store change.
  */
 export function useSyncToasts() {
     const showToast = useToastStore(state => state.showToast);

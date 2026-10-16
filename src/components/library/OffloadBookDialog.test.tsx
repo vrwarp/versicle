@@ -38,7 +38,7 @@ vi.mock('@store/useToastStore', () => ({
   useToastStore: vi.fn(),
 }));
 
-// Phase 7: offload moved off the store onto the shared controller.
+// Offload runs on the shared controller, not the store.
 const { mockOffloadBook } = vi.hoisted(() => ({ mockOffloadBook: vi.fn() }));
 vi.mock('@app/library/useImportController', () => {
     const controller = { offloadBook: mockOffloadBook };

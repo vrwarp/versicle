@@ -1,12 +1,11 @@
 /**
- * GenAI feature-module fuzz suite (Phase 7 §H, PR-A3 entry gate — runs
- * BEFORE any consumer migrates): seeded malformed/out-of-contract responses
+ * GenAI feature-module fuzz suite: seeded malformed/out-of-contract responses
  * per feature; clamp + membership assertions; "validation failure ⇒ typed
  * error, nothing silently accepted" (GG-5).
  *
- * Includes the named regression for the verified GG-5 critical: a model
- * returning referenceStartIndex -2 used to classify EVERY group as
- * 'reference' and poison the synced contentAnalysis map.
+ * Includes the named regression for the GG-5 critical: a model returning
+ * referenceStartIndex -2 must not classify EVERY group as 'reference' and
+ * poison the synced contentAnalysis map.
  */
 import { describe, expect, it } from 'vitest';
 import { SeededRandom } from '@test/fuzz-utils';
@@ -63,8 +62,8 @@ describe('referenceDetection validation', () => {
   });
 
   it('early-chapter indices are ACCEPTED: the 40% positional guard is gone', () => {
-    // Every rejection the guard produced on the Jul–Sep 2026 export was a
-    // correct answer. The five observed cases, reconstructed from the prompts:
+    // Realistic early-start cases, each a correct answer that a positional
+    // guard would wrongly reject:
     //  - "End Notes." heading + six numbered citations (index 0 of 7)
     //  - a chapter whose 158 numbered endnotes start at group 84 of 242 (35%)
     //  - "Further Reading." + a 78-entry bibliography (index 0 of 79)
@@ -80,7 +79,7 @@ describe('referenceDetection validation', () => {
     expect(validateReferenceDetection({ ...base, referenceStartIndex: 84 }, mkNodes(242)).referenceStartIndex).toBe(84);
     expect(validateReferenceDetection({ ...base, referenceStartIndex: 0 }, mkNodes(79)).referenceStartIndex).toBe(0);
     expect(validateReferenceDetection({ ...base, referenceStartIndex: 0 }, mkNodes(878)).referenceStartIndex).toBe(0);
-    // The former guard's own "bug case" (index 4 of 29) is now the model's call.
+    // An early index like 4 of 29 is the model's call, not rejected.
     expect(validateReferenceDetection({ ...base, referenceStartIndex: 4 }, mkNodes(29)).referenceStartIndex).toBe(4);
   });
 
@@ -283,8 +282,8 @@ describe('libraryMapping validation', () => {
 
 /**
  * HINT B carries the detector's linked-note-tail run when that run began too
- * early in the section to be decided locally (the Oct 2026 export's fix set):
- * the model must say whether the section is all notes or all linked verses.
+ * early in the section to be decided locally: the model must say whether the
+ * section is all notes or all linked verses.
  */
 describe('regression: referenceDetection HINT B (linked note block)', () => {
   const base = { justification: 'because', agreedWithHeuristic: true };

@@ -41,9 +41,9 @@ vi.mock('@data/repos/searchText', () => ({
     searchTextRepo: { put: vi.fn() },
 }));
 
-// Phase 7: BookImportService died — regeneration runs extract → retarget →
-// overwrite ingest. The legacy mock seam is preserved by adapting its
-// {title, author, coverPalette} payloads into extraction shapes.
+// Regeneration runs extract → retarget → overwrite ingest. `mockImportBookWithId`
+// supplies {title, author, coverPalette} manifests, which the extractBook stub
+// adapts into extraction shapes.
 vi.mock('@domains/library', () => ({
     extractBook: async (...args: unknown[]) => {
         const manifest = await mockImportBookWithId(...args);

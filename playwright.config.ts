@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './verification',
   /* Maximum time one test can run for.
-   * 90s (was 30s): the multi-device sync journeys (two browser contexts, mock
+   * 90s: the multi-device sync journeys (two browser contexts, mock
    * Firestore, staged workspace switch with its own 60s in-test waits) legitimately
    * run >30s under full-suite parallel load. A real hang still fails — just later. */
   timeout: 90000,
@@ -19,10 +19,9 @@ export default defineConfig({
   /* Parallel on CI too (run_verification.sh sets CI=1, so this covers every
    * Docker run). Tests share nothing: each gets a fresh browser context — the
    * multi-device sync journeys carry state between their own contexts — and
-   * the preview server only serves static files. The suite used to run
-   * serially here (1 worker, ~17 min per Chromium project); 3 workers suits
-   * the 4-vCPU ubuntu-latest runners. --workers overrides; WebKit caps
-   * itself per project below. */
+   * the preview server only serves static files. 3 workers suits the
+   * 4-vCPU ubuntu-latest runners. --workers overrides; WebKit caps itself
+   * per project below. */
   workers: process.env.CI ? 3 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/reporters */
   reporter: 'dot',
@@ -81,8 +80,7 @@ export default defineConfig({
       // test at a time even when the run's other projects go parallel.
       workers: 1,
       // Slowest WebKit test under full parallel load is ~58s (the multi-device
-      // seamless-handoff journey); 120s leaves ~2x headroom. This used to be 180s
-      // to absorb the now-removed per-load 3s service-worker timeout (see above).
+      // seamless-handoff journey); 120s leaves ~2x headroom.
       timeout: 120000,
       // WebKit reuses one long-lived browser instance per worker across the whole
       // run; that instance degrades over its ~25-test lifetime (memory/disk/IO),

@@ -1,23 +1,18 @@
 /**
  * epubSecurity — the ONE security module for BOTH epub.js render paths
- * (Phase 6, prep/phase6-reader-engine.md §3; contract C7/C8 boundary).
+ * (contract C7/C8 boundary): the live reader (useEpubReader) and the
+ * offscreen ingestion renderer (engine/offscreen/offscreen-renderer) share
+ * the sanitize-at-serialize hook and the iframe-sandbox MutationObserver
+ * patch. One implementation makes the CFI-agreement invariant ("ingested
+ * sentence CFIs must resolve against the live DOM") structural: the two
+ * pipelines cannot drift on what HTML they sanitize or how the iframe is
+ * sandboxed.
  *
- * Before this module, the sanitize-at-serialize hook and the iframe-sandbox
- * MutationObserver patch were duplicated between the live reader
- * (useEpubReader) and the offscreen ingestion renderer
- * (engine/offscreen/offscreen-renderer) — and only the live copy honored the
- * `__VERSICLE_SANITIZATION_DISABLED__` E2E kill-switch, UNCONDITIONALLY
- * (reachable in prod builds: boundary rule 9 violation, prep doc Reality
- * #10). One implementation now serves both paths, which makes the
- * CFI-agreement invariant ("ingested sentence CFIs must resolve against the
- * live DOM") structural: the two pipelines cannot drift on what HTML they
- * sanitize or how the iframe is sandboxed.
- *
- * The bypass is honored ONLY when (import.meta.env.DEV || VITE_E2E) AND the
- * caller opts in (`allowTestBypass: true` — the live reader). Production
- * builds ignore the flag entirely — a deliberate, tiny behavior change in
- * prod only, pinned by epubSecurity.test.ts. The offscreen path passes
- * `false`, preserving its existing no-bypass behavior.
+ * The `__VERSICLE_SANITIZATION_DISABLED__` E2E kill-switch is honored ONLY
+ * when (import.meta.env.DEV || VITE_E2E) AND the caller opts in
+ * (`allowTestBypass: true` — the live reader). Production builds ignore the
+ * flag entirely (pinned by epubSecurity.test.ts). The offscreen path passes
+ * `false`: ingestion always sanitizes.
  */
 import { sanitizeContent } from '@lib/sanitizer';
 import { isSanitizationDisabled } from '../../../test-flags';
@@ -58,7 +53,7 @@ export interface RegisterSanitizeHookOptions {
 /**
  * Registers the XSS sanitize-at-serialize hook on an epub.js Book.
  * Every byte of EPUB HTML passes through `sanitizeContent` before epub.js
- * renders it (the preserved keeper boundary: sanitize-at-serialize).
+ * renders it (the sanitize-at-serialize boundary).
  */
 export function registerSanitizeHook(
   book: EpubJsBookLike,
@@ -83,8 +78,7 @@ export function registerSanitizeHook(
 /**
  * Patches an iframe's sandbox attribute to ensure allow-scripts and
  * allow-same-origin are present. Required for event handling in strict
- * environments like WebKit (provenance: the pre-P6 copies in
- * useEpubReader.ts:24-36 and offscreen-renderer.ts:15-27, verbatim).
+ * environments like WebKit.
  */
 export function patchIframeSandbox(iframe: HTMLIFrameElement): void {
   const sandbox = iframe.getAttribute('sandbox') || '';

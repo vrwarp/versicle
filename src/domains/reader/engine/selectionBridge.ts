@@ -1,15 +1,13 @@
 /**
- * selectionBridge — THE selection pipeline (Phase 6 §2b "Selection
- * semantics", prep/phase6-reader-engine.md PR-4 / D3).
+ * selectionBridge — THE selection pipeline for the reader.
  *
- * Extracted verbatim from useEpubReader's `attachListeners`: a per-document
- * listener that re-checks the selection after a 10ms delay (click races),
- * resolves the CFI via `contents.cfiFromRange`, and reports ONE selection per
- * gesture. This path exists because epub.js's own debounced `selected` event
- * is unreliable on WebKit, and it is the SINGLE source of selection events —
- * the parallel epub.js `selected` listener was dropped in the same change that
- * landed this module (D3: "selections can fire twice"), pinned by
- * useEpubReader_Selection.test.tsx.
+ * A per-document listener that re-checks the selection after a 10ms delay
+ * (click races), resolves the CFI via `contents.cfiFromRange`, and reports ONE
+ * selection per gesture. This path exists because epub.js's own debounced
+ * `selected` event is unreliable on WebKit, and it is the SINGLE source of
+ * selection events — useEpubReader deliberately does not consume the engine's
+ * `selected` event for selections, since a parallel listener made selections
+ * fire twice. Pinned by useEpubReader_Selection.test.tsx.
  *
  * The gesture ends on `mouseup` for desktop drag-selection, but on Android
  * (Capacitor WebView) a long-press selection is a TOUCH gesture and the native
@@ -17,15 +15,16 @@
  * delivered to JS while the selection handles are up. The only signal that
  * reliably fires when the native selection is created/adjusted is the
  * document's `selectionchange` (debounced so handle-dragging settles first).
- * That is the same signal epub.js's `selected` pipeline used before D3 dropped
- * it — which is exactly why long-press selection stopped opening the compass on
- * Android. So we listen for all three: `mouseup` + `touchend` (fast desktop /
- * delivered-touch path) and `selectionchange` (the Android path). They funnel
- * through ONE resolver with a per-gesture CFI de-dupe, so "one selection per
- * gesture" still holds when a platform emits several of them.
+ * It is the same signal epub.js's own `selected` pipeline is driven by, so a
+ * mouseup/touchend-only listener never sees an Android long-press selection
+ * and the compass never opens. So we listen for all three: `mouseup` +
+ * `touchend` (fast desktop / delivered-touch path) and `selectionchange` (the
+ * Android path). They funnel through ONE resolver with a per-gesture CFI
+ * de-dupe, so "one selection per gesture" still holds when a platform emits
+ * several of them.
  *
- * Also owns the contextmenu suppression (Android long-press) that shared the
- * legacy listener-attachment guard.
+ * Also owns the contextmenu suppression (Android long-press), which shares the
+ * per-Contents attachment guard.
  */
 import type { Contents } from 'epubjs';
 
@@ -60,8 +59,8 @@ function isProgrammaticSelection(win: Window): boolean {
 
 /**
  * Attaches the bridge to one section document. Idempotent per Contents
- * instance (the legacy `_listenersAttached` guard, verbatim — epub.js
- * re-fires content hooks on re-render of the same Contents).
+ * instance (epub.js re-fires content hooks on re-render of the same
+ * Contents).
  */
 export function attachSelectionBridge(contents: Contents, onSelection: SelectionHandler): void {
   const doc = contents.document;
@@ -87,7 +86,7 @@ export function attachSelectionBridge(contents: Contents, onSelection: Selection
   const emitSelection = () => {
     // The Contents (and its window) can be torn down before a pending
     // debounce / re-check fires (section change, book close) — bail rather
-    // than throw (review H2).
+    // than throw.
     const win = contents.window as Window | undefined;
     if (!win || !contents.document) return;
 

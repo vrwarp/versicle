@@ -1,11 +1,12 @@
 /**
  * useAudioCommands — the ONE way UI components issue TTS engine commands
- * (Phase 5b-PR1; plan/overhaul/prep/phase5-tts-strangler.md §5b.4).
+ * (plan/overhaul/prep/phase5-tts-strangler.md §5b.4).
  *
  * Returns the bound command functions of the app-wide {@link TtsController}.
- * Components READ playback/settings state from `useTTSStore` (selectors) and
- * WRITE commands through this hook — store actions no longer wrap the engine,
- * and `@app/tts/mainThreadAudioPlayer` is import-banned outside src/app/tts/
+ * Components READ playback/settings state from the stores
+ * (`useTTSPlaybackStore` / `useTTSSettingsStore` selectors) and WRITE commands
+ * through this hook — store actions do not wrap the engine, and
+ * `@app/tts/mainThreadAudioPlayer` is import-banned outside src/app/tts/
  * (eslint no-restricted-imports).
  *
  * The returned object is stable for the lifetime of the app (the controller is

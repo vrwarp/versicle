@@ -1,9 +1,9 @@
 /**
- * Boot integration tests — the ENTRY GATE for the Phase 1b boot-sequencing
- * refactor (plan/overhaul/README.md §5 P1, contract-first.md C11).
+ * Boot integration tests — the entry gate for the boot contract (C11, see
+ * architecture.md §5).
  *
- * These pin the CURRENT observable boot behavior so the bootstrap.ts
- * extraction cannot silently change it:
+ * These pin the observable boot behavior so changes to the bootstrap.ts
+ * sequencer cannot silently alter it:
  *
  *  1. Post-wipe first boot (empty library) reaches the library view, runs the
  *     one-time cover-blob repair, hydrates static metadata, registers the
@@ -52,7 +52,7 @@ const h = vi.hoisted(() => {
   };
 });
 
-// ── Boot collaborators (the storage layer, src/data — Phase 3) ──
+// ── Boot collaborators (the storage layer, src/data) ──
 vi.mock('./data/connection', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./data/connection')>()),
   getConnection: vi.fn().mockResolvedValue({}),
@@ -74,12 +74,12 @@ vi.mock('./lib/MaintenanceService', () => ({
   },
 }));
 
-// The sync composition root (P4-3: the orchestrator replaced
-// FirestoreSyncManager; boot drives it through these exports).
+// The sync composition root (boot drives the orchestrator through these
+// exports).
 vi.mock('./app/sync/createSync', () => ({
   getSyncOrchestratorAsync: vi.fn(async () => ({ start: h.syncInitialize })),
   peekSyncOrchestrator: vi.fn(() => null),
-  // P8 first-use gate: boot only composes (downloads the firebase chunk)
+  // First-use gate: boot only composes (downloads the firebase chunk)
   // when sync could run — the boot pins below run with the gate OPEN.
   isSyncEnabled: vi.fn(() => true),
   configureSyncBackendSelection: vi.fn(async () => undefined),
@@ -95,7 +95,7 @@ vi.mock('./domains/sync/checkpoints/CheckpointService', () => ({
   },
 }));
 
-// The staged swap (P4-5): the boot interceptor's STAGED arm delegates here.
+// The staged swap: the boot interceptor's STAGED arm delegates here.
 vi.mock('./domains/sync/workspaces/stagedSwap', () => ({
   applyStagedSwap: h.applyStagedSwap,
   clearStagedState: vi.fn(async () => undefined),
@@ -104,8 +104,7 @@ vi.mock('./domains/sync/workspaces/stagedSwap', () => ({
   withSwapLock: vi.fn((work: () => Promise<unknown>) => work()),
 }));
 
-// P9: the DriveScannerService façade is deleted — backgroundTasks talks the
-// domain holder (getDriveLibrarySync) directly.
+// backgroundTasks talks to the domain holder (getDriveLibrarySync) directly.
 vi.mock('./domains/google/drive/holder', () => ({
   getDriveClient: vi.fn(),
   setDriveClient: vi.fn(),
@@ -143,9 +142,9 @@ vi.mock('./store/useDeviceStore', () => ({
   },
 }));
 
-// Phase 7: the boot task drives hydration through the library composition
+// The boot task drives hydration through the library composition
 // (service.start() + service.hydrate()) — mock the composition root so the
-// existing hydrate-call pins keep their meaning.
+// hydrate-call pins keep their meaning.
 vi.mock('./app/library/createLibrary', () => ({
   getLibrary: () => ({
     service: {
@@ -367,8 +366,8 @@ describe('boot: migration interceptor — RESTORING_BACKUP', () => {
     render(<App />);
 
     await waitFor(() => {
-      // The second arg carries the §D7 pauseSync shutdown handle and the
-      // P4-5 active-workspace revert hook.
+      // The second arg carries the pauseSync shutdown handle and the
+      // active-workspace revert hook.
       expect(h.restoreCheckpoint).toHaveBeenCalledWith(
         42,
         expect.objectContaining({

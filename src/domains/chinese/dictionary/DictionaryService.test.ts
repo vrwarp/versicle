@@ -1,12 +1,11 @@
 /**
- * DictionaryService suite (Phase 6 §7.4, PR-11): chunked IDB import with a
- * status surface (CH-13's silent failure dies), idempotent re-entry,
+ * DictionaryService suite: chunked IDB import with a
+ * status surface (a failed import is never silent), idempotent re-entry,
  * retryable errors, async lookups. Runs against fake-indexeddb (the global
  * test setup) through the real data/repos/dictionary repo.
  *
- * Since the import moved into a worker, the fetch seam is no longer a
- * constructor dep: the service takes a `runImport` PORT whose production
- * default spawns `src/workers/dictionaryImport.worker.ts`. These suites
+ * The fetch seam is not a constructor dep: the service takes a `runImport`
+ * PORT whose production default spawns `src/workers/dictionaryImport.worker.ts`. These suites
  * inject `createInProcessDictionaryImport(fetch)`, which runs the very same
  * `runDictionaryImport` the worker runs — so every assertion below still
  * exercises the real import logic, not a double.
@@ -237,10 +236,10 @@ describe('DictionaryService', () => {
   });
 
   /**
-   * The import ran `Object.entries(data)` over ~198 000 headwords on the MAIN
-   * thread — one two-element array per entry, ~100 MB of transient heap, all of
-   * it built BEFORE the first row was written. The pairs for a chunk are now
-   * built inside the write loop, so at most one chunk is materialized at a time.
+   * The import must not run `Object.entries(data)` over ~198 000 headwords —
+   * one two-element array per entry, ~100 MB of transient heap, all of it built
+   * BEFORE the first row is written. The pairs for a chunk are built inside the
+   * write loop, so at most one chunk is materialized at a time.
    */
   describe('regression: dictionary import does not build a full entries array', () => {
     it('materializes at most one chunk of pairs before the first write', async () => {
@@ -273,10 +272,10 @@ describe('DictionaryService', () => {
 
       await service.ensureReady();
 
-      // Before: every one of the 12 000 values was read (and paired) up front.
+      // An up-front Object.entries would have read (and paired) all 12 000 values.
       expect(readsAtFirstWrite).not.toBeNull();
       expect(readsAtFirstWrite).toBeLessThanOrEqual(5000);
-      // The import itself is unchanged: every entry landed, exactly once.
+      // Every entry still landed, exactly once.
       expect(service.getProgress()).toMatchObject({ status: 'ready', total: ENTRY_COUNT });
       expect(valueReads).toBe(ENTRY_COUNT);
       expect(await service.getEntry('w11999')).toEqual(['p11999', 'd11999']);
@@ -286,12 +285,12 @@ describe('DictionaryService', () => {
 
   /**
    * `await response.json()` on /dict/cedict.json — 15,154,650 bytes, 197,828
-   * keys — ran on the MAIN THREAD: 183 ms and ~104 MB of transient heap on a
-   * desktop x86 node build, i.e. 1.2–2.4 s of a completely frozen UI and a
-   * ~100 MB spike on a mid-range Android WebView, landing exactly when the
-   * user has tapped a Chinese word and is waiting for the vocab card. The
-   * fetch, the parse and the chunked write now live behind the `runImport`
-   * port, whose production default is the Comlink-wrapped
+   * keys — must not run on the MAIN THREAD: it costs 183 ms and ~104 MB of
+   * transient heap on a desktop x86 node build, i.e. 1.2–2.4 s of a completely
+   * frozen UI and a ~100 MB spike on a mid-range Android WebView, landing
+   * exactly when the user has tapped a Chinese word and is waiting for the
+   * vocab card. The fetch, the parse and the chunked write live behind the
+   * `runImport` port, whose production default is the Comlink-wrapped
    * src/workers/dictionaryImport.worker.ts.
    */
   describe('regression: the 15 MB dictionary parse runs in a worker, not on the main thread', () => {
@@ -301,8 +300,7 @@ describe('DictionaryService', () => {
     });
 
     it('delegates the whole import to the runImport port — the service never fetches or parses', async () => {
-      // Anything the service fetched itself would land here. Before the port
-      // existed it called localFetch('/dict/cedict.json') directly.
+      // Anything the service fetched itself would land here.
       const mainThreadFetches: string[] = [];
       vi.stubGlobal('fetch', async (input: unknown) => {
         mainThreadFetches.push(String(input));
@@ -368,7 +366,7 @@ describe('DictionaryService', () => {
    * precache, a chunk 404 after a deploy, a worker-src CSP refusal) leaves the
    * Comlink call unanswered forever: without the error race below the service
    * would sit on 'importing' and the vocab card would spin for the rest of the
-   * session. It must fail as loudly as every other import failure (CH-13).
+   * session. It must fail as loudly as every other import failure.
    */
   describe('regression: a dictionary-import worker that never runs fails loudly', () => {
     afterEach(() => {

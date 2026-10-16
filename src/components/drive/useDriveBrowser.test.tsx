@@ -4,8 +4,8 @@ import { getDriveClient } from '@domains/google';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { DriveClient } from '@domains/google';
 
-// P9: the DriveService façade is deleted — the hook calls the domain client
-// (holder-resolved) with explicit interactive options.
+// The hook calls the domain client (holder-resolved) with explicit interactive
+// options.
 const listFolders = vi.fn();
 vi.mock('@domains/google/drive/holder', () => ({
     getDriveClient: vi.fn(),
@@ -61,9 +61,7 @@ describe('useDriveBrowser race condition', () => {
     });
 });
 
-// Absorbed from the deleted DriveLogic.test.ts §useDriveBrowser (Phase 7
-// test-absorption ledger): basic navigation semantics over the mocked
-// domain DriveClient.
+// Basic navigation semantics over the mocked domain DriveClient.
 describe('regression: useDriveBrowser navigation (ex-DriveLogic.test.ts)', () => {
     beforeEach(() => {
         vi.clearAllMocks();

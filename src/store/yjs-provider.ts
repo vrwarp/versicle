@@ -17,18 +17,17 @@ const logger = createLogger('YjsProvider');
 // v6: popover residual key deleted, `meta` map dual-write (N+1 staged),
 // preferences folded to one keyed map (copy-without-clear) — see
 // plan/overhaul/prep/phase2-fork-surgery.md §5.3.
-// v7: vocabulary simplified-key canonicalization (Phase 6 §7.5, CH-6) —
-// traditional knownCharacters keys merge into their simplified form
-// (min-timestamp).
-// v8: reading-list bookId FK (Phase 7 §D) — the one-time linker joins
-// existing entries to the inventory (exact filename, then fuzzy
+// v7: vocabulary simplified-key canonicalization (phase7-library-google.md
+// §7.5, CH-6) — traditional knownCharacters keys merge into their
+// simplified form (min-timestamp).
+// v8: reading-list bookId FK (phase7-library-google.md §D) — the one-time
+// linker joins existing entries to the inventory (exact filename, then fuzzy
 // title+author); pre-v8 clients would drop the unknown field on their
 // whole-entry rebuilds, so the bump quarantines them.
-// v9 (Phase 9 — the program's LAST format change): preferences
-// husk-clearing, library.__schemaVersion dual-write retirement (meta is
-// the sole version authority; library stays FROZEN at 8 as the pre-meta
-// poison-pill tripwire), activeContext Y.Map husk pruning. Fleet-safety
-// reasoning documented on clearHusksAndRetireDualWrite in
+// v9: preferences husk-clearing, library.__schemaVersion dual-write
+// retirement (meta is the sole version authority; library stays FROZEN at 8
+// as the pre-meta poison-pill tripwire), activeContext Y.Map husk pruning.
+// Fleet-safety reasoning documented on clearHusksAndRetireDualWrite in
 // src/app/migrations.ts.
 export const CURRENT_SCHEMA_VERSION = 9;
 
@@ -53,9 +52,9 @@ let persistenceStarted = false;
  * Start the y-idb persistence binding for the shared Y.Doc. Idempotent.
  *
  * Called EXCLUSIVELY by the bootstrap `startYjsPersistence` phase
- * (src/app/boot/yjsPersistence.ts) — persistence used to boot here at import
- * time as a module-scope side effect (any store import started IndexedDB
- * writes before React rendered); now boot owns the moment explicitly.
+ * (src/app/boot/yjsPersistence.ts). It is deliberately not a module-scope
+ * side effect: importing any store would otherwise start IndexedDB writes
+ * before React renders, so boot owns the moment explicitly.
  */
 export function startYjsPersistence(): void {
     if (persistenceStarted) return;
@@ -111,12 +110,12 @@ export function getYjsPersistence(): IndexeddbPersistence | null {
  * that flush user state on those events must therefore call this after
  * writing to the store; otherwise the write is durable only in memory.
  *
- * The drain itself is the vendored fork's first-class `flush()`
- * (packages/y-idb/PROVENANCE.md surgery 1): it runs the pending batch
- * immediately, awaits the transaction commit, and loops until quiescent,
- * including updates that arrive mid-flush. It retries a failing transaction
- * forever (mirroring the internal machinery), so a caller that needs a bound
- * must race it against its own deadline — `src/test-api.ts` does.
+ * The drain itself is the y-idb fork's first-class `flush()`: it runs the
+ * pending batch immediately, awaits the transaction commit, and loops until
+ * quiescent, including updates that arrive mid-flush. It retries a failing
+ * transaction forever (mirroring the internal machinery), so a caller that
+ * needs a bound must race it against its own deadline — `src/test-api.ts`
+ * does.
  */
 export function flushYjsPersistence(): Promise<void> {
     const binding = persistence;
@@ -128,15 +127,14 @@ export function flushYjsPersistence(): Promise<void> {
 /**
  * Fires when any quarantine layer sees a document from a newer schema
  * version: the middleware poison pill (defense in depth, maps carrying
- * `__schemaVersion`) and the P4 §D5 doc-level layers (pre-attach metadata
- * probe, pre-apply scratch check, live `meta` observer).
+ * `__schemaVersion`) and the doc-level layers (phase4-sync-strangler.md §D5:
+ * pre-attach metadata probe, pre-apply scratch check, live `meta` observer).
  *
  * This function owns the UI-LOCK half and ANNOUNCES the quarantine on the
  * typed SyncEvent bus; severing is delegated to the subscribers
  * (src/app/sync/wireSyncEvents.ts destroys the live provider connection via
- * the sync manager and stops the device heartbeat — pre-P4 the heartbeat
- * kept writing from behind the lock screen and the provider was never
- * destroyed; the old dynamic-import status flip only changed a label).
+ * the sync orchestrator and stops the device heartbeat, so nothing keeps
+ * writing from behind the lock screen).
  */
 export function handleObsoleteClient(incomingVersion: number): void {
     logger.error(
@@ -188,24 +186,23 @@ export interface SyncedStoreDef<K extends string = string> {
     readonly syncedKeys: readonly K[];
     /**
      * Inbound semantics for top-level keys absent from the map.
-     * 'merge-defaults' suppresses top-level deletes of declared defaults (the
-     * D2 fix: new fields survive hydration from older docs); 'replace' is the
-     * legacy wipe. Flipped per store in the phase2-fork-surgery.md §2.6 order.
+     * 'merge-defaults' suppresses top-level deletes of declared defaults (new
+     * fields survive hydration from older docs); 'replace' wipes them
+     * (phase2-fork-surgery.md §2.6).
      */
     readonly hydration: 'replace' | 'merge-defaults';
-    /** Per-top-level-key diffing (the D13 write-amplification fix). */
+    /** Per-top-level-key diffing (avoids write amplification). */
     readonly scopedDiff: boolean;
     /** Bind to a nested Y.Map at `getMap(name).get(scope.key)` (preferences fold). */
     readonly scope?: { readonly key: string };
 }
 
 /**
- * The single seam wiring a synced store to the shared Y.Doc (replaces the
- * legacy `getYjsOptions()`): every synced store consistently gets the
- * schema-version poison pill, the obsolete-client handler, and plain-string
- * encoding (`disableYText` — the v4 format), plus its declared replication
- * options. This is the ONLY production `yjs()` call site (lint-enforced via
- * no-restricted-imports).
+ * The single seam wiring a synced store to the shared Y.Doc: every synced
+ * store consistently gets the schema-version poison pill, the
+ * obsolete-client handler, and plain-string encoding (`disableYText` — the
+ * v4 format), plus its declared replication options. This is the ONLY
+ * production `yjs()` call site (lint-enforced via no-restricted-imports).
  *
  * Schema migrations do not hang off `onLoaded`: the migration coordinator
  * (src/app/migrations.ts) runs ONCE from the bootstrap 'migrations' phase

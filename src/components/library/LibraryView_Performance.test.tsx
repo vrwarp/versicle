@@ -5,8 +5,9 @@ import { LibraryView } from './LibraryView';
 import { useLibraryStore } from '@store/useLibraryStore';
 import { MemoryRouter } from 'react-router-dom';
 
-// NOTE: Even though LibraryView doesn't currently use react-window,
-// this test is kept to guard against regression if virtualization is re-introduced.
+// NOTE: LibraryView does not use react-window (it is not a dependency), so
+// the mocked Grid below is never rendered. This test is kept to guard against
+// regression if virtualization is introduced.
 // It also verifies that the component hierarchy is stable.
 
 // Mock Grid

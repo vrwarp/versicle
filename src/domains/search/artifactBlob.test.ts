@@ -1,16 +1,17 @@
 /**
- * artifactBlob codec suite (Artifact Lane Phase B, shared-ai-cache-design.md
- * §2.2/§2.6): the PURE content-key + blob-header PARSE side.
+ * artifactBlob codec suite (shared-ai-cache-design.md §2.2/§2.4): the PURE
+ * content-key + blob-header PARSE and SERIALIZE sides.
  *
  *  - contentKey: deterministic (same stamp → same hex digest) and sensitive to
  *    EVERY stamp field (a change in any field → a different key → a structural
  *    miss, never a converted stale-space blob);
  *  - parseArtifactBlob: round-trips a hand-built header-format blob (the
- *    serialize side is Phase C, so the fixture is hand-laid to the documented
- *    byte layout the codec reads);
+ *    fixture is hand-laid to the documented byte layout the codec reads);
  *  - corruption guard: re-deriving the key from a TAMPERED stamp yields a key
  *    that does NOT match the requested one (the §2.4 bit-rot rejection the
- *    consult enforces).
+ *    consult enforces);
+ *  - serializeArtifactBlob: the exact inverse of the parse side, byte-equal to
+ *    the hand-laid fixture.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -35,7 +36,7 @@ const STAMP: ArtifactStamp = {
  * (`[headerLen u32 LE][JSON header][packed body]`). Each section's slice is the
  * int8 vectors followed by the float32 scales; the header's byteOffset/byteLen/
  * vectorsByteLen address that slice within the packed body. This mirrors the
- * Phase-C serializer the codec is the read half of.
+ * serializer the parse side is the read half of.
  */
 function buildBlob(
   stamp: ArtifactStamp,
@@ -155,8 +156,7 @@ describe('parseArtifactBlob', () => {
     const headerJson = new TextDecoder().decode(new Uint8Array(bytes, 4, headerLen));
     const bad = headerJson.replace('"headerVersion":1', '"headerVersion":99');
     const badHeader = new TextEncoder().encode(bad);
-    // Same length so the offsets still line up (replace is digit-for-digit-ish);
-    // if length changed, rebuild the prefix length too.
+    // The replacement is one byte longer, so rebuild the length prefix to match.
     const out = new Uint8Array(4 + badHeader.byteLength + (bytes.byteLength - 4 - headerLen));
     new DataView(out.buffer).setUint32(0, badHeader.byteLength, true);
     out.set(badHeader, 4);

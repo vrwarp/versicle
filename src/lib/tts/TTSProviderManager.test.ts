@@ -1,11 +1,11 @@
 /**
- * TTSProviderManager suite (Phase 5a-PR2) — the manager as a dumb holder:
+ * TTSProviderManager suite — the manager as a dumb holder:
  * event normalization, swap hygiene (detach + dispose + shared sink), and the
  * single failure path (typed rethrow, no self-swap, no synthetic 'fallback').
  *
- * Absorbs the pre-5a `TTSProviderManager.test.ts` per the absorption ledger
+ * Absorbs the earlier version of this suite per the absorption ledger
  * (plan/overhaul/prep/phase5-absorption-ledger.md row 16): the surviving
- * assertions live in the named regression block below; the legacy
+ * assertions live in the named regression block below; the old
  * fallback-double-fire case is superseded by the single-path tests here plus
  * the engine-level P21 parity scenario (both transports). No module mocks —
  * providers are injected `FakeTTSProvider` doubles via the setProvider seam
@@ -74,8 +74,8 @@ describe('TTSProviderManager', () => {
 
             expect(events.onError).toHaveBeenCalledTimes(1);
             expect(events.onError).toHaveBeenCalledWith(payload);
-            // The pre-5a manager re-shaped this into {type:'fallback'} and self-swapped;
-            // both behaviors are dead (the engine owns recovery).
+            // The manager neither re-shapes this into {type:'fallback'} nor
+            // self-swaps (the engine owns recovery).
             expect(events.onError).not.toHaveBeenCalledWith(
                 expect.objectContaining({ type: 'fallback' }));
             expect(manager.providerId).toBe('fake');

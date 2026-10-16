@@ -38,10 +38,10 @@ import { compareTitles } from '@kernel/locale/format';
  * Displays the user's collection of books in a responsive grid or list and allows importing new books.
  * Handles fetching books from the store.
  *
- * Phase 8 §A/§J: the view context is ROUTE state, not a synced preference —
- * `/` renders the library, `/notes` renders this same shell in notes
- * context (the header Select navigates). The notes view itself is lazy so
- * it stays out of the boot-surface chunk.
+ * The view context is ROUTE state, not a synced preference — `/` renders
+ * the library, `/notes` renders this same shell in notes context (the
+ * header Select navigates). The notes view itself is lazy so it stays out
+ * of the boot-surface chunk.
  *
  * @returns A React component rendering the library interface.
  */
@@ -116,7 +116,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
     setLibrarySortOrder: state.setLibrarySortOrder
   })));
 
-  // Alias for backward compatibility in component
+  // Local aliases for the persisted layout preference (grid by default)
   const viewMode = libraryLayout || 'grid';
   const setViewMode = setLibraryLayout;
   const showToast = useToastStore(state => state.showToast);
@@ -169,10 +169,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
     offloadedBookIds: state.offloadedBookIds
   })));
 
-  // Phase 7 (D16 paid): static-metadata hydration has ONE owner — the
-  // LibraryService inventory-delta subscription started by the boot task
-  // (src/app/boot/whenHydrated.ts). The prevBookCountRef heuristic that
-  // duplicated it here is gone.
+  // Static-metadata hydration has ONE owner — the LibraryService
+  // inventory-delta subscription started by the boot task
+  // (src/app/boot/whenHydrated.ts); this view does not hydrate it.
 
   const [isImportSourceOpen, setIsImportSourceOpen] = useState(false);
   const [isContentMissingOpen, setIsContentMissingOpen] = useState(false);
@@ -181,10 +180,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
   // can proceed anyway from the mismatch warning.
   const [restoreMismatchFile, setRestoreMismatchFile] = useState<File | null>(null);
 
-  // The import dialog's "Google Drive" choice no longer opens a dialog — it
-  // switches to the Drive shelf route. The token is still acquired here, from
-  // the user's gesture, so the shelf can hydrate previews without a popup of
-  // its own (a popup outside a gesture is what gets a user force-disconnected).
+  // The import dialog's "Google Drive" choice switches to the Drive shelf
+  // route (no dialog). The token is acquired here, from the user's gesture,
+  // so the shelf can hydrate previews without a popup of its own (a popup
+  // outside a gesture is what gets a user force-disconnected).
   const handleBrowseDrive = async () => {
     try {
       // User gesture: silent token when cached, interactive connect otherwise.
@@ -254,7 +253,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
     }
 
     // Do NOT auto-update location. Let the Reader View's Smart Resume Toast handle the prompt.
-    // updateLocation(book.id, cfi, 0); 
     handleBookOpen(book);
   }, [handleBookOpen, staticMetadata, offloadedBookIds]);
 
@@ -374,10 +372,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
       }
 
       if (isMatch) {
-        // A book is downloaded if it's in staticMetadata OR it's been offloaded (technically offloaded means NOT on device,
-        // but for this filter we usually mean "File Present".
-        // Ghost Book = !staticMetadata && !offloaded.
-        // So "On Device" = staticMetadata[book.id] exists.
+        // The "On Device" filter keeps only books whose file is present, i.e.
+        // that have a staticMetadata entry; ghost and offloaded books are dropped.
         if (isDownloadedFilter && !staticMetadata[book.id]) {
           continue;
         }
@@ -411,9 +407,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
   // OPTIMIZATION: Memoize rendered VDOM items to prevent O(N) allocation on every keystroke in the search bar.
   // When `searchQuery` updates (keystroke), LibraryView re-renders immediately, but `debouncedSearchQuery`
   // (and thus `filteredAndSortedBooks`) stays the same until the debounce delay elapses.
-  // Only the ACTIVE layout's item array is built (jank fix): both used to be
-  // computed on every library change, allocating two full element trees for
-  // an N-book library when exactly one of them is ever rendered.
+  // Only the ACTIVE layout's item array is built: computing both on every
+  // library change would allocate two full element trees for an N-book
+  // library when exactly one of them is ever rendered.
   // Both are consumed ONLY under `context === 'library'`, so the other three
   // contexts skip the whole element tree too (the Drive shelf is a separate
   // lazy component and builds its own rows).

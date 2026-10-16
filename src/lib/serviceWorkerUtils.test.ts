@@ -102,7 +102,7 @@ describe('waitForServiceWorkerController', () => {
         const resolved = vi.fn();
         const promise = waitForServiceWorkerController(window.navigator).then(resolved);
 
-        // Still waiting (would previously wait the full 3s timeout).
+        // Still waiting (without the failure signal this would wait the full 3s timeout).
         await vi.advanceTimersByTimeAsync(50);
         expect(resolved).not.toHaveBeenCalled();
 

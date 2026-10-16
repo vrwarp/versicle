@@ -4,9 +4,9 @@ import { getDeviceId } from '@lib/device-id';
 
 /**
  * Preferences store state.
- * 
- * Phase 2 (Yjs Migration): This store is wrapped with yjs() middleware.
- * All preferences are synced across devices automatically.
+ *
+ * This store is wrapped with yjs() middleware (see PREFERENCES_STORE_DEF);
+ * every device's preferences replicate under its own device-ID key.
  */
 interface FontProfile {
     fontSize: number;
@@ -25,10 +25,10 @@ interface PreferencesState {
     libraryLayout: 'grid' | 'list';
     libraryFilterMode: 'all' | 'downloaded';
     librarySortOrder: 'recent' | 'last_read' | 'author' | 'title';
-    // `activeContext` left the store in Phase 8 §J: the library/notes
-    // switch is ROUTE state now (/ vs /notes). The Y.Map husk old clients
-    // keep writing is inert here (absent from syncedKeys = never written,
-    // never hydrated) and is pruned by the v9 husk-clear migration (P9).
+    // There is no `activeContext` key: the library/notes switch is ROUTE
+    // state (/ vs /notes). The Y.Map husk old clients keep writing is inert
+    // here (absent from syncedKeys = never written, never hydrated) and is
+    // pruned by the v9 husk-clear migration.
 
     // === LANGUAGE SCOPED FONT RENDERING ===
     fontProfiles: Record<string, FontProfile>;
@@ -38,15 +38,17 @@ interface PreferencesState {
     showPinyin: boolean;
     pinyinSize: number;
 
-    // === PER-BOOK AI CONSENT (Phase 7 §H, privacy D2) ===
+    // === PER-BOOK AI CONSENT ===
     /**
      * bookId → whether book content/derived data may be sent to GenAI by
      * NON-interactive flows (the NetworkGateway consent gate consults this
-     * through the resolver wired in src/app/google/wireGoogle.ts).
-     * Additive optional field — safe post-P2 merge-defaults. Absent entries
-     * fall back to grandfathering (books with existing contentAnalysis
-     * records) and then to the global feature flags (observe mode until the
-     * per-book consent prompt ships with the TTS UI work).
+     * through the resolver wired in src/app/google/wireGoogle.ts; policy in
+     * src/app/google/aiConsent.ts). Additive field — safe under
+     * merge-defaults. Absent entries fall back to grandfathering (books with
+     * existing contentAnalysis records) and are otherwise denied until the
+     * user answers the per-book consent prompt
+     * (src/app/google/aiConsentPrompt.ts) — except that the library-wide
+     * pre-embed opt-in grants bulk background embedding.
      */
     aiConsent: Record<string, boolean>;
 
@@ -97,14 +99,13 @@ const defaultPreferences = {
 
 /**
  * Replication declaration (aggregated by src/store/registry.ts).
- * Flipped in flip wave 3 (phase2-fork-surgery.md §2.6 #6, §5.3): bound to
- * the v6-folded keyed map — the unchanged flat PreferencesState lives in the
- * nested Y.Map `preferences.<deviceId>`, so zero consumer call sites change.
- * The legacy top-level `preferences/<deviceId>` shares are dead husks from
- * here on (v6 copied them in, copy-without-clear; v7 clears them) and no
- * new ones are ever created (a new device starts from declared defaults and
- * lazily writes its sub-map). merge-defaults retires the fontProfiles wipe
- * class (D2) this store's v4→v5 migration existed for.
+ * Bound to the keyed map: the flat PreferencesState lives in the nested Y.Map
+ * `preferences.<deviceId>`, so consumers read plain store fields.
+ * The legacy top-level `preferences/<deviceId>` shares are dead husks (the v6
+ * migration copied them in without clearing; v9 empties them) and no new ones
+ * are ever created (a new device starts from declared defaults and lazily
+ * writes its sub-map). merge-defaults keeps newly added default fields (e.g.
+ * fontProfiles) from being wiped when an older doc is hydrated.
  */
 export const PREFERENCES_STORE_DEF: SyncedStoreDef<keyof typeof defaultPreferences> = {
     name: 'preferences',

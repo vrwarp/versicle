@@ -9,11 +9,12 @@ import { test, expect } from './utils';
  * Root cause: the compiled CC-CEDICT artifact (public/dict/cedict.json) is
  * git-ignored — it is built by `npm run compile-dict`, in CI, and the Docker
  * images. When it is absent, both the Vite dev server and GitHub Pages' 404.html
- * serve the app's index.html with a 200, so DictionaryService's `response.ok`
- * check passes and the subsequent JSON.parse dies on "<!doctype html>".
+ * serve the app's index.html with a 200, so the import's `response.ok` check
+ * (src/domains/chinese/dictionary/importDictionary.ts) passes and the subsequent
+ * JSON.parse dies on "<!doctype html>".
  *
  * This test asserts the asset is actually served as JSON (not the app shell) and
- * that the DictionaryService can import it end-to-end, so a build that ships
+ * that it parses to the dictionary the import consumes, so a build that ships
  * without the dictionary fails here instead of silently in front of a reader.
  */
 test('dictionary artifact is served as JSON, not the SPA shell', async ({ page }) => {
@@ -22,7 +23,7 @@ test('dictionary artifact is served as JSON, not the SPA shell', async ({ page }
   const probe = await page.evaluate(async () => {
     const res = await fetch('/dict/cedict.json');
     const contentType = res.headers.get('content-type') ?? '';
-    // Read just the head — the real artifact is ~15 MB; we only need to prove
+    // Return just the head — the real artifact is ~15 MB; we only need to prove
     // it is JSON, not "<!doctype html>".
     const text = await res.text();
     return {
@@ -50,9 +51,9 @@ test('dictionary artifact is served as JSON, not the SPA shell', async ({ page }
 
 test('dictionary artifact parses to real CC-CEDICT entries the service can consume', async ({ page }) => {
   // The asset probe above stops at the head of the file; this parses the whole
-  // artifact exactly as DictionaryService does (`(await response.json()) as
-  // Record<string, DictEntryTuple>`) and asserts it is a real, non-trivial
-  // dictionary — not the 11-entry mock and not a truncated export. Runs over
+  // artifact exactly as the dictionary import (importDictionary.ts) does
+  // (`(await response.json()) as Record<string, DictEntryTuple>`) and asserts it
+  // is a real, non-trivial dictionary — not the 11-entry mock and not a truncated export. Runs over
   // fetch so it holds against both the dev server and the built preview the
   // Docker harness serves (npm run preview); a `/src/**` import would not.
   await page.goto('/');

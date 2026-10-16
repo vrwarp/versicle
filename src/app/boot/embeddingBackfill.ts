@@ -7,7 +7,7 @@
  * per-section resume-skip makes re-visiting an already-embedded book free, so
  * the two lanes never duplicate spend.)
  *
- * Privacy posture (the load-bearing gates — see GUARDRAILS):
+ * Privacy posture (the load-bearing gates):
  *  - it runs ONLY when the user turned the library-wide opt-in ON
  *    (useGenAIStore.preEmbedLibrary) AND the embedding client isConfigured();
  *  - every embed is `{ interactive: false, lane: 'bg' }` — NEVER interactive
@@ -200,8 +200,7 @@ export async function runEmbeddingBackfill(
 /**
  * Schedule `cb` on the next idle slot (requestIdleCallback), falling back to a
  * macrotask when the API is unavailable (Safari history, jsdom). Returns a
- * cancel fn the boot cleanup calls. Exported as a default seam; tests inject
- * their own deterministic scheduler.
+ * cancel fn the boot cleanup calls.
  */
 function scheduleIdle(cb: () => void): () => void {
   if (typeof requestIdleCallback === 'function') {

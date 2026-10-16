@@ -1,7 +1,6 @@
 /**
- * Dictionary settings panel (Phase 8 §B): pronunciation lexicon +
- * segmentation/abbreviation rules, formerly inline JSX in the deleted
- * GlobalSettingsDialog.
+ * Dictionary settings panel: pronunciation lexicon +
+ * segmentation/abbreviation rules.
  */
 import React, { useState } from 'react';
 import { Button } from '@components/ui/Button';

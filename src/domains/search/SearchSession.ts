@@ -1,20 +1,18 @@
 /**
- * SearchSession — reader-session-scoped search (Phase 7 §F, PR-S1).
+ * SearchSession — reader-session-scoped search.
  *
- * Replaced the module singleton `searchClient` (`src/lib/search.ts`, DELETED
- * with the post-merge reader adoption): created per reading session (the
- * reader controller owns one), owns its engine lifecycle (`index()` /
- * `search()` / `dispose()`), and is constructor-injected with an
- * `engineFactory` so tests run the REAL engine in-process while production
- * wires the Comlink worker (`createWorkerSearchEngineFactory`).
+ * Created per reading session (the reader controller owns one), owns its
+ * engine lifecycle (`index()` / `search()` / `dispose()`), and is
+ * constructor-injected with an `engineFactory` so tests run the REAL engine
+ * in-process while production wires the Comlink worker
+ * (`createWorkerSearchEngineFactory`).
  *
- * Failure semantics (search.md #6 — dead worker left `isIndexed:true` and
- * promises that never settled):
+ * Failure semantics (a dead worker must not leave `isIndexed:true` or
+ * promises that never settle):
  *  - an engine error RESETS the session: caches cleared, handle disposed,
  *    pending index promises rejected, `onError` notified (UI maps it);
  *  - `dispose()` invalidates in-flight indexing via a generation counter and
- *    rejects pending promises (the old `terminate()` leaked them), and
- *    clears caches unconditionally.
+ *    rejects pending promises, and clears caches unconditionally.
  */
 import { AppError, NetRateLimitedError } from '~types/errors';
 import type {
@@ -41,9 +39,9 @@ import type {
   SemanticConfigPort,
 } from './embeddingPort';
 
-// Re-exported so the published domain surface (index.ts) and existing importers
-// of these contracts from './SearchSession' are unchanged — the declarations
-// moved to ./protocol to break the SearchSession↔semanticRank import cycle.
+// Re-exported so the published domain surface (index.ts) and importers of these
+// contracts from './SearchSession' keep working — the declarations live in
+// ./protocol to avoid a SearchSession↔semanticRank import cycle.
 export type {
   SearchEngineProtocol,
   SearchEngineHandle,
@@ -55,7 +53,7 @@ export type IndexOutcome = 'indexed' | 'no-text';
 
 const BATCH_SIZE = 50;
 
-/** Top-k chunk rows kept per section before RRF fusion (Increment D §2). */
+/** Top-k chunk rows kept per section before RRF fusion. */
 const SEMANTIC_SECTION_LIMIT = 50;
 
 /** The corpus row shape `textSource.get` resolves (mirrors {@link SearchTextSource}). */
@@ -72,13 +70,13 @@ export class SearchSession {
   /** Bumped on dispose()/engine failure; in-flight work from older generations is void. */
   private generation = 0;
   /**
-   * One query-embedding cache per session (Increment D §1): a repeated query
-   * reuses the cached vector with NO second embed call, protecting the shared
-   * daily RPD budget (design §5.2/§8.1).
+   * One query-embedding cache per session: a repeated query reuses the cached
+   * vector with NO second embed call, protecting the shared daily RPD budget
+   * (plan/semantic-search-design.md §5.2/§8.1).
    */
   private readonly queryEmbeddingCache = new QueryEmbeddingCache();
   /**
-   * Per-session corpus cache (cleanup #10c): promise-memoizes the full-corpus
+   * Per-session corpus cache: promise-memoizes the full-corpus
    * read (`textSource.get`) per bookId so repeated semantic queries in one
    * reading session don't re-load the entire book text on every keystroke.
    * Insertion-ordered (FIFO eviction); cleared on {@link reset} so a
@@ -97,7 +95,7 @@ export class SearchSession {
       /** Notified once per engine failure AFTER the session has reset itself. */
       onError?: (error: unknown) => void;
       /**
-       * The foreground document-embedding indexer (Increment C §4), wired by
+       * The foreground document-embedding indexer, wired by
        * the app reader controller from the @domains/google embedding facade +
        * repos. Optional — absent in the regex-only/test paths, where
        * {@link enqueueEmbedding} is a no-op. Preserves the engineFactory /
@@ -105,13 +103,13 @@ export class SearchSession {
        */
       embeddingIndexer?: { enqueue(bookId: string, currentCfi?: string): Promise<void> };
       /**
-       * Increment D — hybrid semantic query ports, ALL optional so the
-       * regex-only/test constructions are untouched. When all are present AND
+       * Hybrid semantic query ports, ALL optional so the
+       * regex-only/test constructions need none. When all are present AND
        * semantic is enabled+configured+embedded, {@link search} fuses a
        * semantic-cosine ranking into the regex result (RRF). On ANY miss or
        * thrown error the regex result is returned UNCHANGED (regex is the
        * DEFAULT). Wired by the app reader controller from the @domains/google
-       * embedding facade + the embeddings repo + the B3 quantizer; semantic
+       * embedding facade + the embeddings repo + the int8 quantizer; semantic
        * on/off + {model,dims} arrive via {@link getSemanticConfig}, never a
        * store import inside the domain.
        */
@@ -132,7 +130,7 @@ export class SearchSession {
 
   /**
    * A {@link SearchTextSource} that promise-memoizes the per-bookId corpus read
-   * against {@link corpusCache} (cleanup #10c), so a stream of semantic queries
+   * against {@link corpusCache}, so a stream of semantic queries
    * in one session reads the full corpus at most once per book. A rejected read
    * is evicted (a retry re-calls); the cache is FIFO-bounded and cleared on
    * {@link reset}. `base` is the real injected source.
@@ -167,7 +165,7 @@ export class SearchSession {
   /**
    * Index a book. `sections` (e.g. fresh extraction output) wins; otherwise
    * the persisted corpus is loaded. Returns 'no-text' when neither exists —
-   * the caller decides whether to extract (reader-side, post-merge).
+   * the caller decides whether to extract (reader-side).
    * Concurrent calls for the same book share one task.
    */
   index(bookId: string, sections?: SearchSection[]): Promise<IndexOutcome> {
@@ -214,10 +212,10 @@ export class SearchSession {
   /**
    * Per-occurrence results with an honest truncation flag.
    *
-   * Regex full-text is the DEFAULT (Increment D §4): the regex `searchDetailed`
-   * always runs. The semantic branch is entered ONLY when ALL hold — the
-   * semantic ports were injected, semantic search is ON, the embedding client
-   * reports configured, and the book has a non-empty embedded row. When it
+   * Regex full-text is the DEFAULT: the regex `searchDetailed` always runs.
+   * The semantic branch is entered ONLY when ALL hold — the semantic ports
+   * were injected, semantic search is ON, the embedding client reports
+   * configured, and the book has a non-empty embedded row. When it
    * succeeds the semantic ranking is FUSED into the regex result via RRF
    * (regex never disappears). On ANY miss (off / unconfigured / not-embedded)
    * or ANY thrown error (quota-exhausted NET_RATE_LIMITED/429, network
@@ -243,8 +241,8 @@ export class SearchSession {
         engine,
         embeddingClient,
         embeddingsSource,
-        // Memoize the full-corpus read per book for this session (cleanup #10c):
-        // repeated queries reuse the loaded corpus instead of re-reading it.
+        // Memoize the full-corpus read per book for this session: repeated
+        // queries reuse the loaded corpus instead of re-reading it.
         textSource: this.memoizingTextSource(textSource),
         quantize,
         queryCache: this.queryEmbeddingCache,
@@ -270,7 +268,7 @@ export class SearchSession {
 
   /**
    * Trigger the foreground document-embedding pass for `bookId`, outward from
-   * `currentCfi` (Increment C §4). No-op when no indexer was injected. bookId
+   * `currentCfi`. No-op when no indexer was injected. bookId
    * and CFI are ARGUMENTS — the trigger context comes from the app reader
    * controller, never a store.
    */
@@ -373,8 +371,8 @@ export class SearchSession {
     this.handle = null;
     this.indexedBooks.clear();
     this.pendingIndexes.clear();
-    // Drop the per-session corpus cache (cleanup #10c) so a disposed/failed
-    // session re-loads the corpus on its next semantic query.
+    // Drop the per-session corpus cache so a disposed/failed session re-loads
+    // the corpus on its next semantic query.
     this.corpusCache.clear();
   }
 
@@ -395,11 +393,11 @@ export class SearchSession {
  * order (per-section top-k, sections concatenated front to back) so its
  * concurrent per-section `rankInt8` calls stay byte-identical to a sequential
  * pass. `fuseRrf` derives each row's rank from its ARRAY INDEX, so handing that
- * list over unchanged made a hit's reciprocal-rank contribution a function of
- * WHICH CHAPTER it came from rather than how well it matched: on a 30-section
+ * list over unchanged would make a hit's reciprocal-rank contribution a function
+ * of WHICH CHAPTER it came from rather than how well it matched: on a 30-section
  * book a 0.91-cosine passage in section 24 sits at index ~460 and scores below
- * every weak section-0 row. That only mis-ordered an uncapped fused list; with
- * the fused cap it costs RESULTS — the strong late hit is dropped outright.
+ * every weak section-0 row. With the fused cap that costs RESULTS, not just
+ * ordering — the strong late hit is dropped outright.
  *
  * The sort is stable, so equal-similarity rows keep their section order and the
  * fused output stays deterministic. The REGEX list's ordering (the engine's own

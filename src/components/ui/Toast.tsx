@@ -12,7 +12,7 @@ export interface ToastProps {
   /** Auto-dismiss after this many ms; <= 0 or Infinity = persistent. */
   duration?: number;
   /**
-   * Optional action button (Phase 8 §G: the SW update prompt's "Reload").
+   * Optional action button (e.g. the SW update prompt's "Reload").
    * The toast closes itself after the action runs.
    */
   action?: { label: string; onAction: () => void };
@@ -20,7 +20,7 @@ export interface ToastProps {
 }
 
 /**
- * One toast in the stack (Phase 8 §D) — pure presentation, no store
+ * One toast in the stack — pure presentation, no store
  * import (`ui/` is kernel-only; the queue subscription lives in
  * src/components/ToastHost.tsx).
  *

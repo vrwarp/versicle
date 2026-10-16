@@ -5,8 +5,8 @@
  * Builds era-shaped Y.Doc snapshots from the shared seed dataset
  * (src/test/fixtures/ydoc/seed.ts) and writes:
  *
- *   src/test/fixtures/ydoc/v{1,2,4,5}.update.bin   (Y update encoding)
- *   src/test/fixtures/ydoc/manifest.json           (era, method, sha256, …)
+ *   src/test/fixtures/ydoc/v{1,2,4,5,6,7,8}.update.bin   (Y update encoding)
+ *   src/test/fixtures/ydoc/manifest.json                 (era, method, sha256, …)
  *
  * Run manually (Node ≥25 runs TypeScript directly):
  *
@@ -20,9 +20,9 @@
  * regeneration procedures (historical git worktree / real-device import).
  *
  * Method notes (recorded per fixture in the manifest):
- *  - v4/v5 ("writer-current-mapping"): plain-string encoding via the vendored
- *    middleware's own objectToYMap with { disableYText: true } — the exact
- *    mapping code v4+ clients write with, so fidelity is full.
+ *  - v4+ ("writer-current-mapping"): plain-string encoding via the
+ *    middleware's objectToYMap (inlined below) with { disableYText: true } —
+ *    the exact mapping code v4+ clients write with, so fidelity is full.
  *  - v1/v2 ("writer-ytext-fallback"): Y.Text encoding via the same mapping
  *    with default options (strings → Y.Text), built with the CURRENT yjs
  *    library. This is the design doc's documented fallback: lower fidelity
@@ -44,8 +44,8 @@ import * as Y from 'yjs';
 import { seedFor, FIXTURE_ERAS, type FixtureEra } from '../src/test/fixtures/ydoc/seed.ts';
 
 // objectToYMap + helpers, inlined verbatim from zustand-middleware-yjs's
-// internal src/mapping.ts. The package now ships only its built dist, so this
-// internal mapping is no longer importable; v4+ fixture encoding must match the
+// internal src/mapping.ts. The package ships only its built dist, so this
+// internal mapping is not importable; v4+ fixture encoding must match the
 // middleware's plain-string mapping exactly, so we keep a faithful copy here.
 type MappingOptions = { atomicKeys?: string[]; disableYText?: boolean; yTextKeys?: string[] };
 const isObject = (value: unknown): value is Record<string, unknown> =>

@@ -14,7 +14,7 @@ interface ReaderTTSControllerProps {
 
 /**
  * Component to handle TTS-related side effects that update frequently.
- * This isolates these updates from the main ReaderView to prevent expensive re-renders
+ * This isolates these updates from the ReaderShell to prevent expensive re-renders
  * of the entire reader interface (and its children) on every sentence change.
  *
  * Handles:
@@ -26,8 +26,8 @@ interface ReaderTTSControllerProps {
 export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
   viewMode
 }) => {
-  // The live engine rides the ReaderCommands context (Phase 6 §5a) —
-  // null while the book loads, exactly like the prop it replaced.
+  // The live engine rides the ReaderCommands context — null while the book
+  // loads.
   const engine = useReaderEngine();
   // We subscribe to these changing values here, so the shell doesn't have to.
   // Use shallow comparison for primitive values to avoid unnecessary re-renders
@@ -79,8 +79,8 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
         });
       }
 
-      // Add via the manager: it runs the (formerly triplicated) orphaned-SVG
-      // sweep first, then adds exactly one 'tts' highlight for the CFI.
+      // Add via the manager: it runs the orphaned-SVG sweep first, then adds
+      // exactly one 'tts' highlight for the CFI.
       highlights.add('tts', activeCfi, {
         onClick: () => {
           // Click handler for TTS highlight
@@ -159,12 +159,11 @@ export const ReaderTTSController: React.FC<ReaderTTSControllerProps> = ({
     };
   }, [engine]);
 
-  // --- Keyboard Navigation (Phase 8 §E) ---
-  // The window keydown registry + interim gating predicate died here: the
-  // sentence jumps / Space play-pause / Escape stop are 'tts-active'-scope
+  // --- Keyboard Navigation ---
+  // The sentence jumps / Space play-pause / Escape stop are 'tts-active'-scope
   // registrations on the KeyboardShortcutService (live while
   // playing|paused). The repeat/input/Space-on-control/Escape-overlay
-  // policies are the service's built-ins, byte-identical to the hotfix.
+  // policies are the service's built-ins.
   useTtsPlaybackShortcuts({ play, pause, stop, jumpTo });
 
   return null;

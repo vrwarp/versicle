@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * types/db.ts shim-retirement codemod (Phase 9, plan/overhaul/README.md
- * §Roadmap P9; master plan §4 rule 2 — the shim's named deletion deadline).
+ * types/db.ts shim-retirement codemod. The shim has been deleted, so there
+ * are no importers left to rewrite; the script is kept as a record of the
+ * migration.
  *
- * `src/types/db.ts` is the Phase 1a re-export shim over the six domain type
- * modules the 934-line god hub was dissolved into. This script rewrites
- * every remaining importer to the OWNING module so the shim can be deleted:
+ * `src/types/db.ts` was a re-export shim over the six domain type modules
+ * (book, user-data, tts, cache, flight-recorder, sync). This script rewrote
+ * every importer to the OWNING module so the shim could be deleted:
  *
  *   import type { BookMetadata, Annotation } from '~types/db';
  *     -> import type { BookMetadata } from '~types/book';

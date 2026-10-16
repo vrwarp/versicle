@@ -1,6 +1,5 @@
 /**
- * Devices settings panel (Phase 8 §B): the DeviceManager surface, formerly
- * inline JSX in the deleted GlobalSettingsDialog.
+ * Devices settings panel: the DeviceManager surface.
  */
 import React from 'react';
 import { DeviceManager } from '@components/devices/DeviceManager';

@@ -1,14 +1,12 @@
 /**
- * Y.1–Y.7 — characterization contract for the vendored y-idb fork
- * (plan/overhaul/prep/phase3-storage-gateway.md §Test plan "Y", PR P3-2).
+ * Y.1–Y.7 — characterization contract for the baseline semantics of the
+ * y-idb fork (plan/overhaul/prep/phase3-storage-gateway.md §Test plan "Y").
  *
- * Written against the UNMODIFIED vendored source (fork SHA e2a21f45…, see
- * PROVENANCE.md) and required green BEFORE any §D6 surgery: these cases pin
- * the semantics the app's persistence path (src/store/yjs-provider.ts) and
- * the temp-provider dances (CheckpointService, DataRecoveryView) rely on
- * today. The §D6 surgery (flush()/writeSnapshot/'synced' durability) lands
- * behind its own Y.8–Y.10 cases in surgery.test.ts and must keep every case
- * here green — that is the "zero behavior diff" exit criterion.
+ * These cases pin the semantics the app's persistence path
+ * (src/store/yjs-provider.ts) relies on. The fork's additions over upstream
+ * (flush()/writeSnapshot/readSnapshot/'synced' durability) are pinned by
+ * Y.8–Y.11 in surgery.test.ts, and every case here must stay green alongside
+ * them.
  *
  * Runs on fake-indexeddb (root vitest setup imports 'fake-indexeddb/auto').
  * Every case uses a unique database name: the fake IDB instance is global

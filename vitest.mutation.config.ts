@@ -2,8 +2,8 @@
  * Vitest config for mutation testing (see stryker.config.json).
  *
  * A mutation run executes tests once per surviving mutant, and the full
- * suite is 3,300+ tests over ~136s, so it narrows the test set to the sync
- * domain. `include` is set by REPLACING it rather than via mergeConfig —
+ * suite is 3,300+ tests over ~136s, so it narrows the test set to the domains
+ * named under Scope. `include` is set by REPLACING it rather than via mergeConfig —
  * mergeConfig concatenates arrays, which silently keeps the base config's
  * globs and runs everything.
  *

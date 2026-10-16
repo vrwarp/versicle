@@ -1,9 +1,9 @@
 /**
- * epubSecurity unit suite (Phase 6 §3): the ONE security module both render
- * paths consume. The critical pin is the bypass gate — the
+ * epubSecurity unit suite: the ONE security module both render paths
+ * consume. The critical pin is the bypass gate — the
  * `__VERSICLE_SANITIZATION_DISABLED__` kill-switch is honored ONLY when
  * (DEV || VITE_E2E) AND the caller opted in. Production builds ignore it
- * (this closed the prod-reachable bypass, prep doc Reality #10).
+ * (the bypass is not reachable in production).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {

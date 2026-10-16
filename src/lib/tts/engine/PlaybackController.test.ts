@@ -1,15 +1,12 @@
 /**
- * PlaybackController unit suite (Phase 5b decomposition; phase5-tts-strangler.md
- * §5b.1) — fake-driven, ZERO vi.mock (the engine-dir allowlist is empty since
- * 5b-PR4): FakeEngineContext + FakePlaybackBackend + a recorded platform fake.
+ * PlaybackController unit suite — fake-driven, ZERO vi.mock (banned in the
+ * engine dir): FakeEngineContext + FakePlaybackBackend + a recorded platform fake.
  *
- * Carries the named regression blocks for the per-bug files deleted in this
- * commit (absorption ledger rows 1/10/12):
+ * Carries the named regression blocks absorbed from per-bug files:
  *  - AudioPlayerService.test.ts      → describe('regression: AudioPlayerService.test')
  *  - AudioPlayerService_LanguageSync → describe('regression: AudioPlayerService_LanguageSync')
  *  - AudioPlayerService_StateProtection → describe('regression: AudioPlayerService_StateProtection')
- * plus the session-persistence dedupe block that moved here from
- * QueueModel.test.ts when the model went pure.
+ * plus the session-persistence dedupe block.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { PlaybackController } from './PlaybackController';
@@ -183,7 +180,7 @@ describe('PlaybackController', () => {
             expect(ctx.persistedQueues.length).toBe(1);
 
             // A content change (mask) stamps a new queueId — saved again, with
-            // the masked flag included (the S4 bug's surviving pin).
+            // the masked flag included.
             await sequenced(svc, () => {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (svc as any).stateManager.applySkippedMask(new Set([1]));

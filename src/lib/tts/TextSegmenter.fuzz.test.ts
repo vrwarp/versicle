@@ -53,7 +53,7 @@ describe('TextSegmenter Fuzzing', () => {
 
                 // Reconstructed text from segments should match original
                 const reconstructed = segments.map(s => s.text).join('');
-                // Normalize to handle whitespace differences
+                // Segment text is NFKD-normalized, so compare against the NFKD form of the original
                 expect(text.normalize('NFKD')).toBe(reconstructed);
             }
         });
@@ -223,7 +223,7 @@ describe('TextSegmenter Fuzzing', () => {
     describe('fallback regex segmentation', () => {
         it('survives edge case inputs', () => {
             const rng = new SeededRandom(SEED);
-            // Create segmenter that might use fallback
+            // Uses Intl.Segmenter when the runtime provides it, else the regex fallback
             const segmenter = new TextSegmenter('en');
 
             const edgeCases = [

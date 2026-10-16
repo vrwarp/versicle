@@ -8,9 +8,8 @@
  * cycle may get reported only with the tainted cycle, which the rule's
  * viaOnly filter then discards — so the runtime-cycle count UNDERCOUNTS,
  * and unrelated type-graph cleanups "create" runtime violations by
- * unmasking them (observed in the Phase 1a types/db.ts split: the full-graph
- * count jumped 6 -> 13 from type-only edits while the runtime graph was
- * bit-for-bit unchanged at 33 cycles). Cruising with
+ * unmasking them (the full-graph count can jump from type-only edits while
+ * the runtime graph is bit-for-bit unchanged). Cruising with
  * tsPreCompilationDeps: false measures cycles on the runtime graph
  * directly, immune to that artifact; the viaOnly filter is then a no-op
  * (every edge in this graph is non-type-only) but is kept so the rule name

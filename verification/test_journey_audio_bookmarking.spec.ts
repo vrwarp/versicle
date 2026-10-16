@@ -2,11 +2,11 @@ import { test, expect } from './utils';
 import * as utils from './utils';
 
 test('Journey Audio Bookmarking Test', async ({ page }) => {
-  // Previously WebKit-skipped. Now passes after: (1) the main-thread mock TTS
-  // (verification/tts-polyfill.js) — WebKit dropped worker postMessages, so the 'start'
-  // event was lost and the play→pause sequencer wedged; and (2) navigate('/', {flushSync:true})
-  // on the reader back button — React Router 7's default startTransition was starved on
-  // WebKit, so the reader→library route never re-rendered.
+  // WebKit constraints this journey relies on: (1) the main-thread mock TTS
+  // (verification/tts-polyfill.js) — WebKit drops worker postMessages, which would lose the
+  // 'start' event and wedge the play→pause sequencer; and (2) navigate('/', {flushSync:true})
+  // on the reader back button — React Router 7's default startTransition is starved on
+  // WebKit, so the reader→library route would never re-render.
   // Drive playback off the TTS store state rather than UI-render timing, which
   // lags the store on WebKit. waitForFunction(fn, arg, options) — the timeout is
   // the THIRD positional arg, so pass `undefined` for arg or it is ignored.
@@ -53,7 +53,7 @@ test('Journey Audio Bookmarking Test', async ({ page }) => {
   await waitPaused();
   await expect(page.getByTestId('compass-pill-active').getByLabel('Play')).toBeVisible({ timeout: 5000 });
 
-  // Play again within 2 seconds (triggers Dragnet capture)
+  // Play again within the Dragnet capture window (5s) to capture the bookmark
   await page.getByTestId('compass-pill-active').getByLabel('Play').click();
 
   // Wait for the async capture to complete in store

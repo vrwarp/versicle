@@ -1,7 +1,6 @@
 /**
- * PiperProvider unit suite (rewritten at 5a-PR3): the module-global piper-utils
- * died with the vendoring — the provider now drives an injectable PiperRuntime,
- * so this suite injects {@link FakePiperRuntime} instead of vi.mock (banned in
+ * PiperProvider unit suite: the provider drives an injectable PiperRuntime, so
+ * this suite injects {@link FakePiperRuntime} instead of vi.mock (banned in
  * providers/). Covers voice filtering, the stale-while-revalidate catalog, the
  * OFFLINE voices enumeration (catalog unreachable + downloaded model ⇒ voice
  * listed and synthesizable), the transactional download, and the speed policy.
@@ -133,7 +132,7 @@ describe('PiperProvider', () => {
             expect(voice).toBeDefined();
             expect(voice!.lang).toBe('en-US');
 
-            // …and 'Voice not found' can no longer hit a downloaded voice:
+            // …and 'Voice not found' cannot hit a downloaded voice:
             // @ts-expect-error - accessing protected
             const segment = await provider.fetchAudioData('Hello offline.', { voiceId: 'piper:en_US-ryan-high', speed: 1.0 });
             expect(segment.audio).toBeInstanceOf(Blob);
@@ -214,10 +213,10 @@ describe('PiperProvider', () => {
 
     describe('regression: idle teardown (PiperRuntime)', () => {
         // `PiperRuntime.dispose()` is only reached from `PiperProvider.dispose()` on a
-        // PROVIDER SWAP, so stopping playback used to leave the nested Piper worker — the ort
-        // WASM heap (~10 MB), the loaded model and the espeak MEMFS image (~18 MB) — alive
-        // for the rest of the session. An idle timer now tears it down; the next request
-        // rebuilds the worker and re-reads the model pair from the Cache API.
+        // PROVIDER SWAP, so without an idle timer stopping playback would leave the nested Piper
+        // worker — the ort WASM heap (~10 MB), the loaded model and the espeak MEMFS image
+        // (~18 MB) — alive for the rest of the session. The idle timer tears it down; the next
+        // request rebuilds the worker and re-reads the model pair from the Cache API.
         const MODEL_URL = 'https://example.test/voice.onnx';
         const CONFIG_URL = 'https://example.test/voice.onnx.json';
         const IDLE_MS = 60_000;

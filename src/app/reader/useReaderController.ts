@@ -1,17 +1,16 @@
 /**
- * useReaderController — the app-layer reader controller (Phase 6 §5,
- * prep/phase6-reader-engine.md PR-9: "route param → engine construction
- * (via an app/ controller)").
+ * useReaderController — the app-layer reader controller (route param →
+ * engine construction, via an app/ controller; see
+ * prep/phase6-reader-engine.md).
  *
  * Owns everything about the OPEN reader that is not presentation:
  *  - engine construction via useEpubReader (options assembly from
  *    preferences + book metadata, initial location, event callbacks),
- *  - the ReadingSessionRecorder lifecycle (Phase 6 §6),
- *  - the ReaderCommands object (Phase 6 §5a — the provider mounts it),
- *  - reader-wide lifecycle effects moved verbatim from the legacy
- *    ReaderView: version-check redirect, loading/error mirroring, audio +
- *    UI-store book context, popover/selection hygiene, unmount cleanup,
- *    TTS error toasts.
+ *  - the ReadingSessionRecorder lifecycle,
+ *  - the ReaderCommands object (the provider mounts it),
+ *  - reader-wide lifecycle effects: version-check redirect, loading/error
+ *    mirroring, audio + UI-store book context, popover/selection hygiene,
+ *    unmount cleanup, TTS error toasts.
  *
  * The shell (src/components/reader/ReaderShell.tsx) is pure composition
  * over this controller's return surface.
@@ -123,8 +122,8 @@ export interface ReaderController {
   /**
    * Pinyin overlay geometry as a SUBSCRIBABLE source, not React state (jank
    * fix): position emissions land here and re-render only the overlay host
-   * (useSyncExternalStore), never this controller's whole host tree — the
-   * legacy useState re-rendered the entire shell per remeasure.
+   * (useSyncExternalStore), never this controller's whole host tree — React
+   * state here would re-render the entire shell per remeasure.
    */
   pinyinPositionsSource: PinyinPositionsSource;
   /** Bumps when a reading-history entry lands (ReadingHistoryPanel refresh). */
@@ -133,20 +132,18 @@ export interface ReaderController {
   scrollWrapperRef: React.RefObject<HTMLDivElement | null>;
   readerViewMode: 'paginated' | 'scrolled';
   /**
-   * The reader-session search surface (Phase 7 §F): one SearchSession per
-   * open reader, worker-backed, fed by the persisted corpus. Replaces the
-   * `searchClient` module singleton the controller used to terminate.
+   * The reader-session search surface: one SearchSession per open reader,
+   * worker-backed, fed by the persisted corpus.
    */
   searchSession: SearchSession;
-  /** Land on the EXACT occurrence with a temporary highlight (PR-S4). */
+  /** Land on the EXACT occurrence with a temporary highlight. */
   navigateToSearchResult: (result: DetailedSearchResult) => Promise<void>;
 }
 
 export interface ReaderControllerDeps {
   /**
    * The import-jump gate (ImportJumpPrompt): returns true when the prompt
-   * took over this relocation — progress saving is skipped (the legacy
-   * "SKIP SAVING PROGRESS" branch).
+   * took over this relocation — progress saving is skipped.
    */
   checkImportJump: (percentage: number) => boolean;
 }
@@ -199,13 +196,13 @@ export function useReaderController(
     dispatchCompass: state.dispatchCompass,
   })));
 
-  // Panic-save context ref (recorder getContext — legacy panicSaveState).
+  // Panic-save context ref (the recorder's getContext).
   const panicSaveState = useRef({ readerViewMode, currentSectionTitle });
   useEffect(() => {
     panicSaveState.current = { readerViewMode, currentSectionTitle };
   }, [readerViewMode, currentSectionTitle]);
 
-  // Select current book metadata from stores (Phase 2)
+  // Select current book metadata from stores
   const rawBookMetadata = useBook(bookId || null);
   const bookMetadata = useMemo(() => {
     if (!rawBookMetadata) return null;
@@ -295,7 +292,7 @@ export function useReaderController(
     return bookId ? useReadingStateStore.getState().getProgress(bookId)?.currentCfi : undefined;
   }, [bookId, cfiOverride, locationOverride]);
 
-  // Cold-open resume guard (the wrong-resume race fix): protects the saved
+  // Cold-open resume guard (the wrong-resume race guard): protects the saved
   // position when the reader opens before the Yjs IDB load has delivered
   // the progress store — see ColdOpenResumeGuard. Recreated per book so
   // its latch never leaks across opens.
@@ -343,7 +340,7 @@ export function useReaderController(
   }
   const pinyinFeed = pinyinFeedRef.current;
 
-  // Reading-session recording (Phase 6 §6): one recorder per book.
+  // Reading-session recording: one recorder per book.
   const recorderRef = useRef<ReadingSessionRecorder | null>(null);
 
   const depsRef = useRef(deps);
@@ -364,8 +361,8 @@ export function useReaderController(
     getInitialLocation,
     metadata: readerMetadata,
     onLocationChange: (location, percentage, title, sectionId) => {
-      // Initialize the recorder's previous-location tracker (legacy step 1
-      // — it ran even when the import-jump check skipped the save).
+      // Initialize the recorder's previous-location tracker (runs even when
+      // the import-jump check skips the save).
       recorderRef.current?.prime(location, Date.now());
 
       // Cold-open resume guard (ColdOpenResumeGuard): a mislanded open must
@@ -387,9 +384,9 @@ export function useReaderController(
         return;
       }
 
-      // Reading-session recording (ReadingSessionRecorder, Phase 6 §6). A
-      // false return is the recorder's no-op CFI guard — the legacy code
-      // also skipped the section update in that case.
+      // Reading-session recording (ReadingSessionRecorder). A false return
+      // is the recorder's no-op CFI guard — the section update is skipped
+      // in that case too.
       const recorded = recorderRef.current?.onRelocated({
         location,
         percentage,
@@ -409,8 +406,8 @@ export function useReaderController(
         // the x/y below are not load-bearing — we must NOT gate the popover on
         // a non-zero bounding rect. On Android a perfectly valid selection can
         // report a degenerate rect (column-break / off-screen / not-yet-laid-
-        // out range), and the old `rect.width===0 && height===0` early-return
-        // silently dropped it. Gate only on there being real selected text.
+        // out range), so a zero-size-rect early-return would silently drop
+        // it. Gate only on there being real selected text.
         const text = range?.toString() ?? '';
         if (!cfiRange || !text.trim()) return;
 
@@ -442,7 +439,7 @@ export function useReaderController(
       }
     },
     onBookLoaded: (_book) => {
-      // Indexing is now deferred until search is opened
+      // Indexing is deferred until search is opened
     },
     onClick: (e: MouseEvent) => {
       const selection = e.view?.getSelection();
@@ -485,10 +482,9 @@ export function useReaderController(
     engineRef.current = engine;
   }, [engine]);
 
-  // Reader-session search (Phase 7 §F, the post-merge reader adoption): ONE
-  // SearchSession per open reader — worker lifecycle owned here (created
-  // lazily on first index/search), corpus from the searchText repo, engine
-  // crashes reset the session and surface a toast (search.md #6).
+  // Reader-session search: ONE SearchSession per open reader — worker
+  // lifecycle owned here (created lazily on first index/search), corpus from
+  // the searchText repo, engine crashes reset the session and surface a toast.
   //
   // fix(reader): the session is keyed by bookId. React Router reuses the
   // `/read/:id` element across a /read/A -> /read/B navigation, so this hook
@@ -612,13 +608,12 @@ export function useReaderController(
     };
   }, [isReady, bookId, searchSession]);
 
-  // Chinese reading registration (Phase 6 §7, PR-10): the app layer wires
-  // the feature module to the engine's content seam — and ONLY for books
-  // whose BASE language is zh (getBookBaseLanguage is the CH-8 interim
-  // helper; the legacy exact-match check skipped 'zh-CN'/'zh-TW' books).
-  // Preference reads stay store-side here (domains-no-store): injected as a
-  // thunk, read at run time. Preference CHANGES drive an explicit refresh —
-  // the legacy React-deps re-run, made event-driven (CH-2).
+  // Chinese reading registration: the app layer wires the feature module to
+  // the engine's content seam — and ONLY for books whose BASE language is zh
+  // (getBookBaseLanguage matches the base subtag, so 'zh-CN'/'zh-TW' books
+  // register too). Preference reads stay store-side here (domains-no-store):
+  // injected as a thunk, read at run time. Preference CHANGES drive an
+  // explicit, event-driven refresh rather than a React-deps re-run.
   useEffect(() => {
     if (!engine || getBookBaseLanguage(bookLanguage) !== 'zh') {
       pinyinFeed.set([]);
@@ -653,7 +648,7 @@ export function useReaderController(
   }, [engine, bookLanguage, pinyinFeed]);
 
   // Check version and redirect if outdated. Keyed on the narrowed projection
-  // so a progress-only write no longer re-runs it.
+  // so a progress-only write does not re-run it.
   useEffect(() => {
     if (readerMetadata) {
       const effectiveVersion = readerMetadata.version ?? 0;
@@ -663,8 +658,8 @@ export function useReaderController(
     }
   }, [readerMetadata, bookId, navigate]);
 
-  // Reading-session recorder lifecycle (Phase 6 §6): one per book.
-  // flushSync on teardown is the legacy unmount panic save; the recorder's
+  // Reading-session recorder lifecycle: one per book.
+  // flushSync on teardown is the unmount panic save; the recorder's
   // coalescing window (one CRDT write per 5s instead of one per page turn) is
   // additionally drained on `visibilitychange` → hidden and on `pagehide` —
   // the only signals a mobile background kill reliably delivers — and the
@@ -798,7 +793,7 @@ export function useReaderController(
     }
   }, [lastError, clearError]);
 
-  // --- ReaderCommands (Phase 6 §5a) ---
+  // --- ReaderCommands ---
 
   const handlePlayFromSelection = useCallback((cfiRange: string) => {
     // The queue is engine state replicated into the store via the engine subscription.
@@ -854,8 +849,8 @@ export function useReaderController(
           })
           .catch((e) => {
             logger.error('Failed to jump to location', e);
-            // Was log-only: a TOC/bookmark link the book can't resolve made
-            // the click silently do nothing.
+            // Surface the failure: a TOC/bookmark link the book can't resolve
+            // would otherwise make the click silently do nothing.
             useToastStore.getState().showToast("Couldn't open that location in the book.", 'error');
           });
       } catch (e) {
@@ -913,13 +908,13 @@ export function useReaderController(
     nextPage: () => { breakAudioFollowOnManualNav(); engineRef.current?.next(); },
     prevPage: () => { breakAudioFollowOnManualNav(); engineRef.current?.prev(); },
     nextChapter: () => {
-      // Pure audio transport (compass-pill rework Phase 1): the pill arrows
-      // skip a TTS section while audio is live and are inert otherwise. The
-      // pill disables them when stopped; this guard also makes the command a
-      // no-op for any out-of-band caller so it can never auto-start playback.
-      // Page turns no longer route through here — they moved to the reading
-      // surface (PageTurnRails + the ArrowLeft/Right shortcuts), so the arrows
-      // have ONE meaning ("skip chapter") instead of flipping with TTS state.
+      // Pure audio transport: the pill arrows skip a TTS section while audio
+      // is live and are inert otherwise. The pill disables them when stopped;
+      // this guard also makes the command a no-op for any out-of-band caller
+      // so it can never auto-start playback. Page turns do not route through
+      // here — they live on the reading surface (PageTurnRails + the
+      // ArrowLeft/Right shortcuts), so the arrows have ONE meaning ("skip
+      // chapter") instead of flipping with TTS state.
       if (useTTSPlaybackStore.getState().status !== 'stopped') {
         audio.skipToNextSection();
       }
@@ -931,9 +926,8 @@ export function useReaderController(
     },
     playFromSelection: (cfiRange) => handlePlayFromSelection(cfiRange),
     refineSelection: () => {
-      // D11: the audio-triage selection refinement, reachable again (it
-      // rode a rendition prop that was never supplied). Reads the current
-      // iframe selection through the engine port.
+      // The audio-triage selection refinement: reads the current iframe
+      // selection through the engine port.
       const currentEngine = engineRef.current;
       if (!currentEngine) return null;
       try {
@@ -979,8 +973,8 @@ export function useReaderController(
     isReady,
     areLocationsReady,
     bookMetadata,
-    // The ONE epub.js annotations caller (Phase 6 §4): every highlight
-    // layer goes through the engine's manager.
+    // The ONE epub.js annotations caller: every highlight layer goes through
+    // the engine's manager.
     highlights: engine?.highlights ?? null,
     containerNode: engine?.getOverlayContainer() ?? null,
     commands,

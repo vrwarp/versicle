@@ -1,25 +1,24 @@
 #!/usr/bin/env node
 /**
- * CC-CEDICT compiler (Phase 6 §7.6, plan/overhaul/prep/phase6-reader-engine.md
- * PR-12) — provenance-preserving, fail-hard.
+ * CC-CEDICT compiler — provenance-preserving, fail-hard.
  *
- * Repairs over the legacy pipeline (gap report D5):
- *  - the silent 11-entry mock fallback on download failure is DELETED from
- *    the production path: any failure exits non-zero (the historical CI
- *    failure mode silently degraded the shipped dictionary). `--mock`
- *    writes ONLY to the test-fixture path and never touches public/.
+ * Properties:
+ *  - there is no silent mock fallback on the production path: any failure
+ *    exits non-zero, so a failed download can never silently degrade the
+ *    shipped dictionary. `--mock` writes ONLY to the test-fixture path and
+ *    never touches public/.
  *  - the `#` header (license declaration + release metadata) is parsed and
- *    RETAINED as a sidecar, public/dict/cedict.meta.json — the shipped
- *    release is finally knowable (inventory.json references it).
+ *    RETAINED as a sidecar, public/dict/cedict.meta.json, so the shipped
+ *    release is knowable (inventory.json references it).
  *  - the source snapshot is VENDORED in-repo (scripts/cedict-source.zip) and
  *    pinned (scripts/cedict.lock.json: sha256 + release date). Normal builds
  *    compile the committed snapshot OFFLINE and reproducibly — MDBG rotates
  *    its "latest" export ~daily, so pinning a checksum against that moving URL
- *    was inherently fragile (any cache-miss recompile would fail through no
- *    code change of ours). The only network access is the deliberate
+ *    would be inherently fragile (any cache-miss recompile would fail through
+ *    no code change of ours). The only network access is the deliberate
  *    `--update-lock` upgrade, automated monthly behind a reviewed PR
  *    (.github/workflows/update-dict.yml).
- *  - system `unzip` replaced by fflate (no shell deps; works on any CI).
+ *  - the archive is extracted with fflate (no shell deps; works on any CI).
  *
  * Outputs (git-ignored; built in CI and on dev bootstrap):
  *  - public/dict/cedict.json        word → [pinyin, definitions]

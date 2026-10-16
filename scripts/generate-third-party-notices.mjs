@@ -7,11 +7,10 @@
  *      with each package's copyright line where one is extractable.
  *
  * Run as `npm run licenses:generate` and commit the result whenever
- * production deps or the inventory change. The build today strips every
+ * production deps or the inventory change. The build strips every
  * @license banner from dist chunks (gap report D1) — this file is the
- * notice-retention artifact for the repo/GitHub audience; emitting it into
- * dist/ (and driving the in-app credits UI from the same data) is a later
- * phase of the target design.
+ * notice-retention artifact for the repo/GitHub audience; it is not emitted
+ * into dist/.
  *
  * Output is deterministic (sorted, no timestamps) so regeneration diffs
  * are reviewable.

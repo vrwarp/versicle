@@ -1,29 +1,27 @@
 /**
- * `cache_session_state` repository — the TTS playback session mirror
- * (Phase 3, D5.2 in plan/overhaul/prep/phase3-storage-gateway.md; the
- * WebKit-hang-safe block carved VERBATIM from src/db/DBService.ts — this
- * is an explicitly protected keeper, the product of a multi-week WebKit
- * IndexedDB investigation; see verification/_idb_probe.js).
+ * `cache_session_state` repository — the TTS playback session mirror.
  *
- * Worker-safe: the TTS engine worker imports this module (via
- * PlaybackStateManager/AudioPlayerService). It must never import stores,
+ * The WebKit-hang-safe write block below is an explicitly protected keeper,
+ * the product of a multi-week WebKit IndexedDB investigation (see
+ * verification/_idb_probe.js); keep its write shape intact.
+ *
+ * Worker-safe: the TTS engine worker imports this module (via the repo-backed
+ * SessionStore in lib/tts/engine/repoPorts.ts). It must never import stores,
  * sync services, React, or zustand.
  *
- * P13a (closed): a `saveQueue` on a mirror that does not hold the book builds
- * a fresh record, so it used to clobber whatever else the persisted row
- * carried (a previous session's `lastPauseTime`). It now marks the book
+ * Cold-record safety: a `saveQueue` on a mirror that does not hold the book
+ * builds a fresh record, which would clobber whatever else the persisted row
+ * carries (a previous session's `lastPauseTime`). It therefore marks the book
  * unseeded and the flush merges the persisted row in — a read OUTSIDE the
  * gate, before the single synchronous put, never inside the transaction. The
  * consumer's "seeded once" memo (createRepoSessionStore) cannot carry that
- * guarantee any more: since the mirror became an LRU, a book it believes
- * seeded may have been evicted, so cold-safety has to live HERE.
+ * guarantee: because the mirror is an LRU, a book it believes seeded may have
+ * been evicted, so cold-safety has to live HERE.
  *
- * KNOWN GAPS deliberately deferred to P5b (the SessionStore port / single
- * session-owner fix of the C4 decomposition — engine surgery, not storage
- * motion):
- *  - Dual mirror: the worker and the main thread each hold their own
- *    `sessionCache` instance. The navigator.locks write gate removes the
- *    cross-context HANG hazard; single ownership lands with P5b.
+ * Per-context mirror: the worker and the main thread each hold their own
+ * `sessionCache` instance (the singleton is per JS context). The
+ * navigator.locks write gate removes the cross-context HANG hazard; the
+ * mirrors themselves are not shared.
  */
 import { getConnection } from '../connection';
 import { runExclusiveIdbWrite } from '../write-gate';
@@ -191,8 +189,7 @@ class PlaybackCacheRepo {
   // cache_session_state readwrite txn is in flight: WebKit can still intermittently hang
   // even a single clean put(), and a hung txn wedges the whole connection (and the TTS
   // sequencer behind it) — so fewer writes means fewer chances to wedge during the
-  // play/pause window. (The window is shorter than the 1s the queue write already used, so
-  // cross-session resume is no more delayed than before.)
+  // play/pause window.
   private sessionDirty = new Set<string>();
   private sessionFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -207,11 +204,11 @@ class PlaybackCacheRepo {
     }, 500);
   }
 
-  // ── Public surface (D5.2) ──────────────────────────────────────────────────
+  // ── Public surface ─────────────────────────────────────────────────────────
 
   /**
    * Read a book's persisted session row, seeding the in-memory mirror so
-   * later writes never need an intra-transaction read (getTTSState's seed).
+   * later writes never need an intra-transaction read.
    */
   async getSession(bookId: string): Promise<CacheSessionStateRow | undefined> {
     try {
@@ -229,7 +226,7 @@ class PlaybackCacheRepo {
     }
   }
 
-  /** Mirror-update + debounced disk write of the playback queue (saveTTSState). */
+  /** Mirror-update + debounced disk write of the playback queue. */
   saveQueue(bookId: string, queue: TTSQueueItem[]): void {
     // Update the in-memory mirror (preserving lastPauseTime), then debounce the disk write.
     // Stays synchronous: a cold record is flagged instead, and the flush merges the
@@ -244,7 +241,7 @@ class PlaybackCacheRepo {
   }
 
   /**
-   * Persist the last pause timestamp (updatePlaybackState). `null` clears it.
+   * Persist the last pause timestamp. `null` clears it.
    * Seeds the mirror from disk on first touch so the write cannot clobber a
    * persisted queue.
    */
@@ -278,7 +275,7 @@ class PlaybackCacheRepo {
    * Runs at teardown/wipe: the in-memory mirror still holds the latest state,
    * and writing during teardown can race a closing DB connection — so drop
    * the pending write rather than flush it (the wipe path depends on
-   * drop-not-flush, src/db/wipe.ts).
+   * drop-not-flush, src/data/wipe.ts).
    */
   dropPending(): void {
     if (this.sessionFlushTimer) {

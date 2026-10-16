@@ -1,7 +1,6 @@
 /**
- * useSyncToasts — remote-progress toast announcements (P9: rewritten from
- * the whole-map JSON.stringify subscription onto zustand's (state,
- * prevState) reference diffing; this suite is its first behavior pin).
+ * useSyncToasts — remote-progress toast announcements, driven by zustand's
+ * (state, prevState) reference diffing.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';

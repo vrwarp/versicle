@@ -27,9 +27,8 @@ describe('ReadingHistoryPanel', () => {
     }
   };
 
-  // Engine port over the same book double: the nav-label resolution the
-  // panel used to own moved verbatim into EpubJsEngine.getNavLabel, so the
-  // suite now pins it THROUGH the engine (same assertions as pre-port).
+  // Engine port over the same book double: nav-label resolution lives in
+  // EpubJsEngine.getNavLabel, so the suite pins it THROUGH the engine.
   const makeEngine = () =>
     new EpubJsEngine({
       book: mockBook as any,

@@ -1,7 +1,7 @@
 /**
  * Production SearchEngineFactory: the Comlink-wrapped search worker
- * (`src/workers/search.worker.ts`, the 5-line keeper). Tests inject an
- * in-process factory instead — see SearchSession.test.ts.
+ * (`src/workers/search.worker.ts`, which only exposes a `SearchEngine`). Tests
+ * inject an in-process factory instead — see SearchSession.test.ts.
  */
 import * as Comlink from 'comlink';
 import { installAppErrorTransferHandler } from '@lib/comlinkAppError';

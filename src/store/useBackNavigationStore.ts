@@ -22,13 +22,13 @@ export enum BackButtonPriority {
  * Handlers are executed in descending order of priority (highest priority first).
  *
  * - **Hardware Back Button (Android):** Triggered via Capacitor App plugin.
- * - **Browser Back Button:** Triggered via React Router `useBlocker` or `popstate`.
+ * - **Browser Back Button:** Triggered via React Router `useBlocker`.
  *
  * **Example Usage:**
  *
  * ```typescript
- * import { useNavigationGuard } from '../hooks/useNavigationGuard';
- * import { BackButtonPriority } from '../store/useBackNavigationStore';
+ * import { useNavigationGuard } from '@hooks/useNavigationGuard';
+ * import { BackButtonPriority } from '@store/useBackNavigationStore';
  *
  * // Inside a component (e.g., a Modal)
  * useNavigationGuard(() => {

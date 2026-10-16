@@ -1,14 +1,12 @@
 /**
- * ImportJumpPrompt — the "Resume from Reading List?" flow, extracted
- * verbatim from the legacy ReaderView (Phase 6 §5 table,
- * prep/phase6-reader-engine.md PR-9).
+ * ImportJumpPrompt — the "Resume from Reading List?" flow.
  *
  * A book imported via the reading list carries a percentage but no CFI;
  * on first open the prompt offers to jump there. The check runs inside the
  * controller's onLocationChange (returning true suppresses progress
- * saving for that relocation — the legacy "SKIP SAVING PROGRESS" branch);
- * the dialog handles confirm/cancel, the deferred jump once the location
- * registry generates, and the 2-minute safety timeout.
+ * saving for that relocation); the dialog handles confirm/cancel, the
+ * deferred jump once the location registry generates, and the 2-minute
+ * safety timeout.
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
@@ -109,7 +107,7 @@ export function useImportJumpPrompt(opts: {
   useEffect(() => {
     // If we are waiting, and the capability arrives... (deferred a
     // microtask so the jump + state transitions never run synchronously
-    // inside the effect — same observable behavior, no cascading render.)
+    // inside the effect, avoiding a cascading render.)
     if (!(isWaitingForJump && areLocationsReady && engine)) return;
     let cancelled = false;
     queueMicrotask(() => {

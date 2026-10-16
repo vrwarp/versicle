@@ -1,23 +1,19 @@
 /**
- * `AuthSession` — the auth half of the legacy FirestoreSyncManager
- * (phase4-sync-strangler.md §D2): firebase-config init, the
- * `onAuthStateChanged` listener, redirect-result handling, signIn/signOut,
- * and the auth-status fan-out (callbacks + the typed `auth` SyncEvent).
+ * `AuthSession` — the auth half of the sync domain
+ * (plan/overhaul/prep/phase4-sync-strangler.md §D2): firebase-config init,
+ * the `onAuthStateChanged` listener, signIn/signOut, and the auth-status
+ * fan-out (callbacks + the typed `auth` SyncEvent).
  *
- * The legacy `getRedirectResult` block was DELETED in P9 (the P4
- * §Follow-ups item 2 decision). Evidence of deadness: no module in the
- * production graph ever calls `signInWithRedirect` /`linkWithRedirect`/
- * `reauthenticateWithRedirect` (the only `signInWithRedirect` token in the
- * repo was this suite's firebase/auth MOCK), and per Firebase SDK
- * semantics `getRedirectResult` resolves null unless THIS app initiated a
- * redirect operation — the live sign-in path is SocialLogin →
- * `signInWithCredential` (auth-helper via GoogleAuthClient.connect
- * ('identity'), all platforms). The `signed-in-via-redirect` SyncEvent
- * died with it.
+ * There is no `getRedirectResult` handling: no module in the production
+ * graph calls `signInWithRedirect` / `linkWithRedirect` /
+ * `reauthenticateWithRedirect`, and per Firebase SDK semantics
+ * `getRedirectResult` resolves null unless THIS app initiated a redirect
+ * operation. The sign-in path is auth-helper's `signInWithGoogle` →
+ * `GoogleAuthClient.connect('identity')` → `signInWithCredential`, on all
+ * platforms.
  *
  * Mock sessions: the composition root installs `mockSession` with the mock
- * backend; this module synthesizes the user instead of touching Firebase
- * (the legacy `initialize()` / `getCurrentUser()` mock branches).
+ * backend; this module synthesizes the user instead of touching Firebase.
  */
 import type { User } from 'firebase/auth';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -55,8 +51,8 @@ export class AuthSession {
    *
    * `onUser` is the orchestrator's handleAuthStateChange — invoked for the
    * synthesized mock user immediately, or by `onAuthStateChanged` for real
-   * Firebase auth. NOT awaited for the mock path (legacy parity: the
-   * routing/connect chain runs detached; pinned debt, prep doc item 17).
+   * Firebase auth. NOT awaited for the mock path (the routing/connect chain
+   * runs detached).
    */
   async start(onUser: (user: User | null) => void): Promise<void> {
     // Mock backend selected (E2E/dev): simulate auth and connect.
@@ -151,10 +147,10 @@ export class AuthSession {
       const result = await signInWithGoogle();
 
       if (result) {
-        // Native flow returns a credential
+        // signInWithGoogle resolved with a Firebase credential
         logger.debug('Sign in returned credential (Native flow)');
       } else {
-        // Web flow returns void (redirecting)
+        // signInWithGoogle's return type also allows no credential
         logger.debug('Sign in redirected (Web flow)');
       }
     } catch (error) {

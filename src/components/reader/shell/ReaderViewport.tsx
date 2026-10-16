@@ -1,10 +1,9 @@
 /**
- * ReaderViewport — the epub.js mount point + reader-area navigation
- * (Phase 6 §5, prep/phase6-reader-engine.md PR-9). Wheel/touch handling
- * stays in useReaderNavigation; page-turn KEYS are KeyboardShortcutService
- * registrations (Phase 8 §E — scope 'reader', yielding to 'tts-active'),
- * and the engine's iframe keydown stream feeds the same service through
- * the ONE bridge.
+ * ReaderViewport — the epub.js mount point + reader-area navigation.
+ * Wheel/touch handling lives in useReaderNavigation; page-turn KEYS are
+ * KeyboardShortcutService registrations (scope 'reader', yielding to
+ * 'tts-active'), and the engine's iframe keydown stream feeds the same
+ * service through the ONE bridge.
  */
 import React from 'react';
 import { useReaderNavigation } from '@hooks/useReaderNavigation';

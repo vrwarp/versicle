@@ -12,7 +12,7 @@ import {
 
 /**
  * Captured-fixture drift guard (phase2-fork-surgery.md §4.2): the committed
- * v{1,2,4,5,6,7}.update.bin files are REVIEWED artifacts — this test pins
+ * v{1,2,4,5,6,7,8}.update.bin files are REVIEWED artifacts — this test pins
  * manifest↔file sha256 agreement and the structural content checklist so the
  * bytes cannot drift silently (and a fixture regeneration that forgets the
  * manifest, or vice versa, fails CI).
@@ -115,7 +115,7 @@ describe('ydoc fixture manifest guard', () => {
 
     // v6/v7: terminal era shapes — folded preferences + staged meta surface.
     // v6 carries TRADITIONAL vocabulary keys incl. the 紅/红 duplicate pair
-    // (the v7 canonicalization input, Phase 6 PR-13); v7 carries the
+    // (the v7 canonicalization input); v7 carries the
     // CANONICAL simplified keys (the v7 output, duplicate pair min-merged).
     if (era >= 6) {
       expect(doc.getMap('meta').get('schemaVersion')).toBe(era);
@@ -145,8 +145,9 @@ describe('ydoc fixture manifest guard', () => {
       expect(Object.values(entries).some((entry) => 'bookId' in entry)).toBe(false);
     }
 
-    // Era 8 (the v9 husk-clear INPUT): the legacy husks are still populated
-    // and every preferences map still carries the de-synced activeContext.
+    // Eras ≥ 6 (era 8 is the v9 husk-clear INPUT): the legacy husks are still
+    // populated and every preferences map still carries the de-synced
+    // activeContext.
     if (era >= 6) {
       expect((doc.getMap(`preferences/${DEVICE_A}`).toJSON() as Record<string, unknown>)['activeContext']).toBe('library');
       expect(((doc.getMap('preferences').get(DEVICE_A) as Y.Map<unknown>).toJSON())['activeContext']).toBe('library');

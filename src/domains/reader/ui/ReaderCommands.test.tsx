@@ -4,9 +4,9 @@
  *
  * Both encode a11y and lifecycle rules that only fail at runtime: an
  * overlay in the wrong mode puts focusable children inside an aria-hidden
- * container (the app-shell finding this contract exists to prevent), and a
- * registry that cleared on the WRONG owner's unmount would leave CompassPill
- * driving a dead reader.
+ * container (the a11y violation this contract exists to prevent), and a
+ * registry that cleared on the WRONG owner's unmount would leave an
+ * out-of-tree consumer (ReaderControlBar) driving a dead reader.
  */
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';

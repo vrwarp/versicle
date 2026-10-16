@@ -1,7 +1,6 @@
 /**
- * epubTheming — the reader's presentation pipeline, extracted verbatim from
- * useEpubReader (Phase 6 §5 table row "useEpubReader dissolves",
- * prep/phase6-reader-engine.md PR-4).
+ * epubTheming — the reader's presentation pipeline (consumed by
+ * useEpubReader).
  *
  * Owns everything that turns preference state into iframe CSS:
  *  - base theme registration (light/dark/sepia),
@@ -12,12 +11,10 @@
  *  - the per-content-load CSS normalization hook (`injectContentExtras`):
  *    absolute→rem CSSOM rewrite, static styles, the scrolled-mode spacer.
  *
- * D5 (reader.md): `applyReaderTheme` reflows ONLY when the flow mode
- * actually changed — colors/typography-only updates no longer call
- * `flow()+display()`, so they no longer fire a relocation event per
- * settings tweak (pinned by epubTheming.test.ts; the always-reflow
- * extraction commit precedes the fix commit, per the prep doc's
- * characterization-then-improve discipline).
+ * `applyReaderTheme` reflows ONLY when the flow mode actually changed —
+ * colors/typography-only updates do not call `flow()+display()`, so they do
+ * not fire a relocation event per settings tweak (pinned by
+ * epubTheming.test.ts).
  */
 import type { Rendition, Contents } from 'epubjs';
 import { internals } from './epubjsInternals';
@@ -25,8 +22,7 @@ import { iframeHighlightThemeCss } from './highlightStyles';
 
 /**
  * Static styles injected into every section document (e.g. note markers).
- * Currently empty — kept verbatim from the legacy hook; deleting the dead
- * constant is the PR-14 exit-audit item (prep doc Reality #6).
+ * Currently empty.
  */
 const STATIC_READER_STYLES = `
 `;
@@ -152,7 +148,7 @@ const safeInjectStyles = (doc: Document, css: string, styleId: string) => {
   }
 };
 
-/** Registers the built-in light/dark/sepia themes (verbatim). */
+/** Registers the built-in light/dark/sepia themes. */
 export function registerBaseThemes(rendition: Rendition): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const themes = rendition.themes as any;
@@ -174,20 +170,19 @@ export function registerBaseThemes(rendition: Rendition): void {
 }
 
 /**
- * Read-time fontFamily normalization (Phase 8 §I, RC-16): the pinyin font
- * was renamed off the OFL Reserved Font Names ('PT Sans Narrow' →
- * 'Versicle Sans Narrow'). The synced `fontFamily` preference is free-form
- * but no shipped UI ever wrote the legacy family (VisualSettings only
- * offers serif/sans-serif/monospace), so this is deliberate
- * belt-and-braces with NO persisted migration — the rule-4 ledger slot
- * stays released (zero P8 user-data format changes). Applied at the two
- * consumption points below; idempotent.
+ * Read-time fontFamily normalization: the pinyin font is named 'Versicle
+ * Sans Narrow' (renamed from 'PT Sans Narrow' to stay off the OFL Reserved
+ * Font Names). The synced `fontFamily` preference is free-form but no
+ * shipped UI ever wrote the old family (VisualSettings only offers
+ * serif/sans-serif/monospace), so this is deliberate belt-and-braces with NO
+ * persisted migration. Applied at the two consumption points below;
+ * idempotent.
  */
 export function normalizeFontFamily(fontFamily: string): string {
   return fontFamily.replace(/PT Sans Narrow/g, 'Versicle Sans Narrow');
 }
 
-/** The full presentation input (the prep doc's `ReaderThemeSpec`). */
+/** The full presentation input. */
 export interface ReaderThemeSpec {
   viewMode: 'paginated' | 'scrolled';
   currentTheme: string;
@@ -206,8 +201,8 @@ export interface ReaderThemeSpec {
 }
 
 /**
- * The font-scale + line-height normalization math (verbatim from the legacy
- * settings effect) — exported for the characterization unit suite.
+ * The font-scale + line-height normalization math — exported for the unit
+ * suite.
  */
 export function computeFontScale(spec: ReaderThemeSpec): {
   finalFSScalePct: number;
@@ -234,8 +229,8 @@ export function computeFontScale(spec: ReaderThemeSpec): {
 
 /**
  * Builds the forced-styles CSS block (font scaling always; color/font
- * mapping when forced or in non-light themes) — verbatim, exported for the
- * characterization unit suite.
+ * mapping when forced or in non-light themes) — exported for the unit
+ * suite.
  */
 export function buildForcedStylesCss(spec: ReaderThemeSpec, finalFSScalePct: number): string {
   const isDarkOrSepia = spec.currentTheme === 'dark' || spec.currentTheme === 'sepia' || spec.currentTheme === 'custom';
@@ -294,12 +289,12 @@ export function buildForcedStylesCss(spec: ReaderThemeSpec, finalFSScalePct: num
 }
 
 /**
- * Applies the whole presentation spec to a live rendition — the legacy
- * settings-effect body, verbatim except D5: `flow()` (plus the
- * location-restoring `display()`) runs ONLY when the flow mode actually
- * changed, passed in by the caller who tracks the previous mode. Returns
- * the forced-styles applier so the content hook can re-run it on section
- * load (the legacy `applyStylesRef` contract).
+ * Applies the whole presentation spec to a live rendition — the body of the
+ * reader's settings effect. `flow()` (plus the location-restoring
+ * `display()`) runs ONLY when the flow mode actually changed, passed in by
+ * the caller who tracks the previous mode. Returns the forced-styles applier
+ * so the content hook can re-run it on section load (the caller keeps it in
+ * `applyStylesRef`).
  */
 export function applyReaderTheme(
   rendition: Rendition,
@@ -312,12 +307,10 @@ export function applyReaderTheme(
   themes.register('custom', {
     'body': { 'background': `${spec.customTheme?.bg || '#ffffff'} !important`, 'color': `${spec.customTheme?.fg || '#000000'} !important` },
     'p, div, span, h1, h2, h3, h4, h5, h6': { 'color': 'inherit !important', 'background': 'transparent !important' },
-    // PR-14 typo audit: the fallback was the invalid hex '#0000e' (the
-    // browser dropped the declaration); fixed to the built-in link blue.
     'a': { 'color': `${spec.customTheme?.fg || '#0000ee'} !important` }
   });
 
-  // Highlight theme rules from the ONE styles registry (Phase 6 §4).
+  // Highlight theme rules from the ONE styles registry (highlightStyles.ts).
   themes.default(iframeHighlightThemeCss(spec.currentTheme));
 
   themes.select(spec.currentTheme);
@@ -337,9 +330,9 @@ export function applyReaderTheme(
     }
   });
 
-  // Flow — D5: only when the mode actually changed (a colors/typography
-  // update must not reflow + re-display, which fired a spurious relocation
-  // per settings tweak in the legacy effect).
+  // Flow — only when the mode actually changed (a colors/typography update
+  // must not reflow + re-display, which would fire a spurious relocation per
+  // settings tweak).
   if (opts.flowModeChanged) {
     // Capture current location before changing flow to prevent reset
     const currentLoc = (rendition.location as typeof rendition.location | undefined)?.start?.cfi;
@@ -370,9 +363,9 @@ export function applyReaderTheme(
 }
 
 /**
- * Per-content-load CSS normalization (the legacy `injectExtras` hook,
- * verbatim): absolute→rem rewrite of stylesheet + inline styles, forced
- * styles re-application, static styles, and the scrolled-mode spacer.
+ * Per-content-load CSS normalization: absolute→rem rewrite of stylesheet +
+ * inline styles, forced styles re-application, static styles, and the
+ * scrolled-mode spacer.
  */
 export function injectContentExtras(
   contents: Contents,

@@ -6,17 +6,17 @@ import type { FlightEventSource, FlightEvent, FlightSnapshot } from '~types/flig
 /**
  * TTSFlightRecorder — the audio domain's named flight recorder.
  *
- * Since 5b-PR4 the generic ring-buffer core lives in
- * src/kernel/diagnostics/ringRecorder.ts (N7: zero internal deps; further
- * consumers arrive in P6/P7); this wrapper owns everything TTS-specific —
- * the playback-context provider, the premature-chapter-advance anomaly
- * heuristic, and snapshot persistence (IndexedDB via the diagnostics repo;
- * works in both the worker and the main thread).
+ * The generic ring-buffer core lives in src/kernel/diagnostics/ringRecorder.ts
+ * (zero internal deps, shared with other recorders); this wrapper owns
+ * everything TTS-specific — the playback-context provider, the
+ * premature-chapter-advance anomaly heuristic, and snapshot persistence
+ * (IndexedDB via the diagnostics repo; works in both the worker and the main
+ * thread).
  *
  * Each JS context (main thread, TTS worker) has its own module instance; the
  * production engine runs in the worker, so its live buffer is exported over
- * the engine handle (TtsEngine.exportDiagnostics — the S9 fix), while the
- * persisted snapshots are shared through IndexedDB.
+ * the engine handle (TtsEngine.exportDiagnostics), while the persisted
+ * snapshots are shared through IndexedDB.
  */
 
 type ContextProvider = () => {
@@ -31,7 +31,7 @@ type ContextProvider = () => {
     nextItemSkipped?: boolean | undefined;
 };
 
-/** The live-buffer export served over the engine handle (S9). */
+/** The live-buffer export served over the engine handle. */
 export interface FlightRecorderExport {
     stats: { eventCount: number; capacity: number; oldestWall: number | null };
     events: FlightEvent[];
@@ -84,7 +84,7 @@ class TTSFlightRecorder {
         return this.ring.getStats();
     }
 
-    /** The live-buffer export served over the engine handle (S9). */
+    /** The live-buffer export served over the engine handle. */
     exportForHandle(): FlightRecorderExport {
         return { stats: this.getStats(), events: this.export() };
     }
@@ -184,7 +184,7 @@ class TTSFlightRecorder {
 
     private async saveSnapshot(snap: FlightSnapshot) {
         // Persistence (incl. the MAX_SNAPSHOTS prune in one gated txn) lives
-        // in the diagnostics repo (P3-9).
+        // in the diagnostics repo.
         await diagnostics.saveSnapshot(snap);
     }
 }

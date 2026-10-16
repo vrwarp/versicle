@@ -1,5 +1,5 @@
 // LexiconEngine fuzz companion (absorption ledger row 18): drives the
-// yjs-free LexiconApplier directly — no store mocks needed since 5c-PR3.
+// yjs-free LexiconApplier directly — no store mocks needed.
 import { describe, it, expect } from 'vitest';
 import { lexiconApplier as service } from './LexiconApplier';
 import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '@test/fuzz-utils';

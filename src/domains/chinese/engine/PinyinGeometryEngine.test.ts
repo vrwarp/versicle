@@ -1,12 +1,7 @@
 /**
- * PinyinGeometryEngine unit suite (Phase 6 §7.1, prep doc PR-10).
- *
- * ABSORPTION NOTE: the alignment/geometry assertions here carry forward the
- * P6 entry-gate characterization that lived in
- * src/hooks/useEpubReader_Pinyin.characterization.test.tsx (deleted in the
- * same commit) — the pinyin pass left useEpubReader, so its owning suite
- * moved with it. Same synthetic-glyph fixture: 10 px per UTF-16 code unit,
- * geometry pinned as exact offset arithmetic.
+ * PinyinGeometryEngine unit suite: pinyin/glyph alignment and geometry over a
+ * synthetic-glyph fixture — 10 px per UTF-16 code unit, geometry pinned as
+ * exact offset arithmetic.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
@@ -88,7 +83,7 @@ describe('PinyinGeometryEngine (characterization heritage: P6 entry gate)', () =
 
     const positions = collectNodePinyinPositions(doc, textNode, IFRAME_OFFSET);
     // 𠀀 is \p{Script=Han}; pinyin-pro returns the char itself for unknown
-    // readings (the pre-existing BMP behavior, now uniform for Ext-B Han).
+    // readings (the BMP behavior, uniform for Ext-B Han).
     expect(positions.length).toBe(4);
     const p = getPinyin(text); // per CODE POINT: [𠀀, zhōng, wén, hǎo]
 
@@ -154,7 +149,7 @@ describe('PinyinGeometryEngine (characterization heritage: P6 entry gate)', () =
     const doc = document.implementation.createHTMLDocument('fixture');
     doc.body.innerHTML =
       '<p id="astral"></p><p id="latin">hello</p><ruby>汉<rt>hàn</rt></ruby>';
-    // Ext-B-only content — invisible to the legacy BMP block test.
+    // Ext-B-only content — invisible to a BMP-block-only test.
     doc.getElementById('astral')!.textContent = '\u{20000}\u{20001}';
 
     const nodes = findHanTextNodes(doc);

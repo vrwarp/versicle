@@ -4,8 +4,8 @@ import { FakeAudioSink } from '../engine/FakeAudioSink';
 import type { TTSCache } from '../TTSCache';
 import type { TTSOptions, SpeechSegment } from './types';
 
-// Injected fakes instead of module mocks (vi.mock is banned in providers/ since
-// 5a-PR2): the sink and cache go in through the BaseCloudProvider constructor.
+// Injected fakes instead of module mocks (vi.mock is banned in providers/):
+// the sink and cache go in through the BaseCloudProvider constructor.
 const mockGet = vi.fn();
 const mockPut = vi.fn();
 const mockGenerateKey = vi.fn((text) => Promise.resolve(`key-${text}`));

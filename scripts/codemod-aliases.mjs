@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Path-alias codemod (Phase 1, plan/overhaul/README.md §Roadmap P1a).
+ * Path-alias codemod.
  *
  * Rewrites cross-root relative imports under src/ to the path aliases
  * declared in tsconfig.app.json `paths` (and mirrored in vite.config.ts /
  * vitest.config.ts resolve.alias):
  *
  *   ../(../)*<root>/rest  ->  @<root>/rest
- *   for root in: app components db hooks lib store types test workers
+ *   for root in: the ROOTS list below
  *   (types maps to ~types, NOT @types: TypeScript rejects any import
  *   specifier starting with '@types/' — error TS6137, the prefix is
  *   reserved for declaration packages.)
@@ -21,7 +21,7 @@
  *     root after the `../` climb (e.g. `../../lib/x` from inside lib/ —
  *     the lint regex bans the spelling, so it is normalized too). The
  *     resolved target decides the alias, so non-canonical spellings like
- *     `../lib/tts/../../db/DBService` become `@db/DBService`.
+ *     `../lib/tts/../../store/useFoo` become `@store/useFoo`.
  *   - Same-directory (`./foo`) and within-subtree relative imports stay
  *     relative by design.
  *   - Specifiers that name a root but do not resolve to an existing
@@ -30,7 +30,7 @@
  *     would silently activate it — a behavior change.
  *   - Vite query suffixes (?worker, ?url, ?raw, ...) are preserved.
  *   - `new URL('...', import.meta.url)` string arguments are NOT
- *     rewritten: they are not import statements; the two
+ *     rewritten: they are not import statements; the
  *     `new Worker(new URL('../workers/…'))` sites stay relative.
  *
  * Rewritten specifier positions:

@@ -5,7 +5,7 @@ import { useDeviceStore } from '@store/useDeviceStore';
 import { getDeviceId } from '@lib/device-id';
 import { Calendar, Percent } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { cn } from '@lib/utils'; // Assuming utils exists
+import { cn } from '@lib/utils';
 
 interface SyncStatusPanelProps {
     open: boolean;

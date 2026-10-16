@@ -1,16 +1,16 @@
 /**
  * ReaderOverlay — the decorative/interactive contract for geometry portals
- * over the epub.js container (Phase 6 §4, contract C7).
+ * over the epub.js container.
  *
  * Geometry overlays portal into the epub.js manager container so they scroll
- * in lockstep with the text at native frame rates (the preserved
- * geometry-overlay-portal keeper). Two modes, mechanically enforced:
+ * in lockstep with the text at native frame rates. Two modes, mechanically
+ * enforced:
  *
  *  - `decorative`: hidden from the accessibility tree (`aria-hidden`) AND
  *    click-transparent (`pointer-events: none`). Pinyin conforms.
  *  - `interactive`: NEVER inside an aria-hidden container (focusable
- *    children inside aria-hidden was the app-shell a11y finding for note
- *    markers — fixed by this contract), requires an accessible `label`,
+ *    children inside aria-hidden are an a11y violation, e.g. for note
+ *    markers), requires an accessible `label`,
  *    container stays click-transparent so only the children (which opt into
  *    `pointer-events: auto`) take hits.
  */

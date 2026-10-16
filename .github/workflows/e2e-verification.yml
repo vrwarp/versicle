@@ -5,7 +5,7 @@
 # journeys are too timing-sensitive for a PR gate, so the nightly lane splits
 # it into three shards on separate runners instead of loading one machine.
 #
-# Uses the existing run_verification.sh flow: builds Dockerfile.verification,
+# Uses the run_verification.sh flow: builds Dockerfile.verification,
 # serves the production build via `vite preview` inside the container, and
 # runs the Playwright suite (verification/*.spec.ts) against it.
 name: E2E verification

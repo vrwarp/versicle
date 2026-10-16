@@ -27,7 +27,7 @@ vi.mock('@store/useReaderUIStore', () => ({
   useReaderUIStore: vi.fn(),
 }));
 
-// Mock the bookContent repo (the DBService carve)
+// Mock the bookContent repo
 vi.mock('@data/repos/bookContent', () => ({
   bookContent: {
     getTableImages: vi.fn(),

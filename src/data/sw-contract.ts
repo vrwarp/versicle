@@ -1,17 +1,17 @@
 /**
- * The service worker's read contract with EpubLibraryDB (Phase 3, D3 in
- * plan/overhaul/prep/phase3-storage-gateway.md; absorbs src/sw-utils.ts).
+ * The service worker's read contract with EpubLibraryDB: the DB/store-name
+ * constants and the cover read behind the `/__versicle__/covers/` route
+ * (see covers.ts).
  *
  * The SW runs in its own JS context and cannot share the app's connection
  * (src/data/connection.ts), so it owns its own read-only connection at
  * whatever version is current (unversioned open — the SW must never trigger
  * or block an upgrade). The database name comes from the schema module
- * instead of the local copy sw-utils.ts used to re-declare, so the two can
- * no longer drift.
+ * rather than a local copy, so the two cannot drift.
  *
- * The connection is MEMOIZED (P-perf): every visible cover used to pay a
- * full open/close handshake of its own — one per cover per paint, a
- * library grid's worth on every scroll. It is held in a module-level promise
+ * The connection is MEMOIZED: opening one per cover would pay a full
+ * open/close handshake for every visible cover on every paint — a library
+ * grid's worth on every scroll. It is held in a module-level promise
  * with an idle-close timer, and mirrors connection.ts's lifecycle discipline:
  * `blocking` (another context is upgrading) closes it immediately so an
  * upgrade is never blocked by a cover read, and `terminated` drops it so the
@@ -24,8 +24,8 @@
  * unbound timer would then close whichever connection the NEXT burst had
  * opened, mid-read, 30s later.
  *
- * The legacy `'books'`-store fallback survives until P9: a pre-v18
- * straggler's covers must render before their first main-app upgrade.
+ * The legacy `'books'`-store fallback serves a pre-v18 straggler's covers,
+ * which must render before their first main-app upgrade.
  */
 import { openDB, type IDBPDatabase } from 'idb';
 import { DB_NAME } from './schema';
@@ -152,11 +152,11 @@ const COVER_SNIFF_BYTES = 12;
  * Blob → ArrayBuffer (WebKit's IDB structured clone cannot hold a Blob) and a
  * restore decodes them straight out of base64, and BOTH drop the MIME type —
  * so the fallback below is what every current-format row is actually served
- * with. It used to be a flat `image/webp`, on the grounds that the import path
- * compresses thumbnails to webp; but `imageCompression` failures keep the
- * ORIGINAL cover bytes (`thumbnailBlob = coverBlob` in
- * domains/library/import/extract.ts), so a cover is just as legitimately jpeg,
- * png or gif. Asking the bytes costs 12 of them and is never wrong.
+ * with. A flat `image/webp` would be wrong: the import path compresses
+ * thumbnails to webp, but `imageCompression` failures keep the ORIGINAL cover
+ * bytes (`thumbnailBlob = coverBlob` in domains/library/import/extract.ts), so
+ * a cover is just as legitimately jpeg, png or gif. Asking the bytes costs 12
+ * of them and is never wrong.
  *
  * Practically inert for `<img>`, which sniffs the payload regardless — but the
  * header is not inert everywhere: this response carries a one-year

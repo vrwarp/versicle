@@ -26,7 +26,8 @@ export const DeviceManager = () => {
         });
 
         // Apply TTS: write the active profile (the TtsController pushes the
-        // changes to the engine). Profile pitch died in the 5b settings split.
+        // changes to the engine). The profile's pitch is not applied: the TTS
+        // settings store has no pitch setting.
         const settings = useTTSSettingsStore.getState();
         settings.setRate(profile.ttsRate);
 

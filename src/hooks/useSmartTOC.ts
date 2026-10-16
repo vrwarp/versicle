@@ -25,11 +25,11 @@ export function useSmartTOC(
 ): UseSmartTOCResult {
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
-  // Scoped selector (jank fix): the bare useGenAIStore() call subscribed
-  // this hook to the WHOLE GenAI store — including its 500-entry `logs` ring
-  // buffer, which the TTS worker bridge and embedding pipeline append to
-  // during playback. ReaderSidebars calls this hook unconditionally, so every
-  // log line re-rendered the sidebars (and the open TOC tree) mid-reading.
+  // Scoped selector: a bare useGenAIStore() call would subscribe this hook
+  // to the WHOLE GenAI store — including its 500-entry `logs` ring buffer,
+  // which the TTS worker bridge and embedding pipeline append to during
+  // playback. ReaderSidebars calls this hook unconditionally, so every log
+  // line would re-render the sidebars (and the open TOC tree) mid-reading.
   const isAIEnabled = useGenAIStore((state) => state.isEnabled);
   const showToast = useToastStore((state) => state.showToast);
 
@@ -63,8 +63,8 @@ export function useSmartTOC(
       const bookTitle = bookMetadata?.title || 'Unknown Book';
       const language = bookMetadata?.language;
 
-      // Deep feature import (first-use loading, Phase 8 §A — the feature
-      // module's zod schemas must stay out of the static graph).
+      // Deep feature import (first-use loading — the feature module's zod
+      // schemas must stay out of the static graph).
       const { generateTocTitles } = await import('@domains/google/genai/features/tocTitles');
       const generatedTitles = await generateTocTitles(getGenAIClient(), sectionsToProcess, { bookTitle, language });
 

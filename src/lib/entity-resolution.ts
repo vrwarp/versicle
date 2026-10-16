@@ -19,32 +19,33 @@
  * 4. Replace structural punctuation (- _ : , .) with spaces
  * 5. Remove quotes and apostrophes entirely
  * 6. Collapse whitespace and trim
- * 7. Nullify generic "unknown author" strings
+ * 7. Strip trailing contributor role suffixes (e.g. "gen. ed.", "trans.")
+ * 8. Nullify generic "unknown author" strings
  */
 export function normalizeMetadata(text: string): string {
     if (!text) return "";
 
     let normalized = text.toLowerCase();
 
-    // 1. Strip file extensions at the end of the string
+    // 2. Strip file extensions at the end of the string
     normalized = normalized.replace(/\.(epub|pdf|mobi|azw3)$/i, "");
 
-    // 2. Remove parenthetical or bracketed metadata
+    // 3. Remove parenthetical or bracketed metadata
     normalized = normalized.replace(/\(.*?\)|\[.*?\]/g, "");
 
-    // 3. Replace structural punctuation with spaces
+    // 4. Replace structural punctuation with spaces
     normalized = normalized.replace(/[-_:,.]/g, " ");
 
-    // 4. Remove possessives and quotes entirely
+    // 5. Remove possessives and quotes entirely
     normalized = normalized.replace(/['"''""\u2018\u2019\u201C\u201D]/g, "");
 
-    // 5. Collapse and trim whitespace
+    // 6. Collapse and trim whitespace
     normalized = normalized.replace(/\s+/g, " ").trim();
 
-    // 6. Strip trailing contributor role suffixes (e.g. "gen. ed." → "gen ed" after punct removal)
+    // 7. Strip trailing contributor role suffixes (e.g. "gen. ed." → "gen ed" after punct removal)
     normalized = normalized.replace(/\b(?:gen ed|eds?|trans|illus|fwd|intro|comp|narr)$/, "").trim();
 
-    // 7. Nullify generic author strings
+    // 8. Nullify generic author strings
     if (normalized === "unknown author") {
         return "";
     }

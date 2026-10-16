@@ -39,42 +39,41 @@ export const DEFAULT_SENTENCE_STARTERS = [
 
 // Pre-compiled regexes for performance
 
+// RE_LAST_WORD through RE_TRAILING_PUNCTUATION are word-boundary helpers that the
+// segmentation path does not use (refineSegments scans with TextScanningTrie instead);
+// only TextSegmenter.test.ts exercises them.
+
 // Matches the last sequence of non-whitespace characters in a string.
 // \S+ = one or more non-whitespace characters
 // $ = end of string
-// Used to identify the last word of a sentence segment to check for abbreviations.
 export const RE_LAST_WORD = /\S+$/;
 
 // Matches the last two whitespace-separated words in a string.
 // (?:...) = non-capturing group for the first word and its trailing space
 // \S+\s+ = one or more non-whitespace chars followed by one or more whitespace chars
 // \S+$ = the final word (non-whitespace) at the end of the string
-// Used to identify multi-word abbreviations like "et al." at the end of a segment.
 export const RE_LAST_TWO_WORDS = /(?:\S+\s+)\S+$/;
 
 // Matches the first sequence of non-whitespace characters in a string.
 // ^ = start of string
 // \S+ = one or more non-whitespace characters
-// Used to identify the first word of the next segment to check against sentence starters.
 export const RE_FIRST_WORD = /^\S+/;
 
 // Matches common opening punctuation marks (quotes, brackets, etc.) at the start of a string.
 // ^ = start of string
 // ['"([<{]+ = one or more characters from the set of opening punctuation
-// Used to strip punctuation before checking if a word is a sentence starter.
 export const RE_LEADING_PUNCTUATION = /^['"([<{]+/;
 
 // Matches sentence-ending punctuation marks (.,!?;:) at the end of a string.
 // [.,!?;:] = character class containing common sentence delimiters
 // $ = end of string
-// Used to clean the next word before checking if it's a starter.
 export const RE_TRAILING_PUNCTUATION = /[.,!?;:]$/;
 
 // Fallback sentence splitting regex.
-// Captures sequences of characters ending with sentence-ending punctuation (.!?).
-// ([^.!?]+[.!?]+) = Capture group 1:
-//   [^.!?]+ = one or more characters that are NOT sentence-ending punctuation
-//   [.!?]+ = one or more sentence-ending punctuation characters
+// Captures sequences of characters ending with sentence-ending punctuation (.!? and CJK 。！？).
+// ([^.!?。！？]+[.!?。！？]+) = Capture group 1:
+//   [^.!?。！？]+ = one or more characters that are NOT sentence-ending punctuation
+//   [.!?。！？]+ = one or more sentence-ending punctuation characters
 // /g = global flag to find all matches
 // Used when Intl.Segmenter is not available.
 export const RE_SENTENCE_FALLBACK = /([^.!?。！？]+[.!?。！？]+)/g;
@@ -116,8 +115,8 @@ export class TextSegmenter {
      * `text` exactly as passed, so callers can map segments back onto source DOM
      * text nodes (Range/CFI bookkeeping). Only the outbound segment `text` is
      * NFKD-normalized (nbsp → space, accent/ligature decomposition). Normalizing
-     * the input *before* segmenting shifted offsets by the cumulative length
-     * change of every decomposable character (é → e+◌́, ﬁ → fi) and corrupted
+     * the input *before* segmenting would shift offsets by the cumulative length
+     * change of every decomposable character (é → e+◌́, ﬁ → fi) and corrupt
      * persisted CFIs in non-ASCII books.
      *
      * @param text - The text to segment.

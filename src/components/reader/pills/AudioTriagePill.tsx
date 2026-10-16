@@ -1,9 +1,8 @@
 /**
- * AudioTriagePill — the "Review Bookmark" pill for dragnet audio bookmarks,
- * extracted from the dissolved ui/CompassPill (Phase 8 §C). Confirms or
- * discards the pending dragnet annotation; selection refinement goes
- * through the ReaderCommands registry (D11 — reachable from this
- * out-of-tree mount since P6).
+ * AudioTriagePill — the "Review Bookmark" pill for dragnet audio bookmarks.
+ * Confirms or discards the pending dragnet annotation; selection refinement
+ * goes through the ReaderCommands registry (reachable from this out-of-tree
+ * mount).
  */
 import React from 'react';
 import { X } from 'lucide-react';

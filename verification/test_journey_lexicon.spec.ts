@@ -46,7 +46,7 @@ test('Journey Lexicon Test', async ({ page }) => {
   await expect(matchTypeSelect).toHaveValue('ignore_case');
   await matchTypeSelect.selectOption('regex'); // Leave regex selected for the rule
 
-  // Check for Cancel Button (Bug Reproduction)
+  // Check for Cancel Button
   console.log('Verifying Cancel button visibility...');
   const cancelBtn = page.getByTestId('lexicon-cancel-rule-btn');
   await expect(cancelBtn).toBeVisible();

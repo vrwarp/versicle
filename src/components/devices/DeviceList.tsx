@@ -3,7 +3,7 @@ import { Laptop, Smartphone, Globe, Edit2, Trash2, Copy, Check, X } from 'lucide
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import type { DeviceInfo, DeviceProfile } from '~types/device';
-import { cn } from '@lib/utils'; // Assuming utils exists, or I'll use inline classes
+import { cn } from '@lib/utils';
 import { formatRelativeTime } from '@kernel/locale/format';
 
 interface DeviceListProps {
@@ -78,8 +78,8 @@ const DeviceItem = ({ device, isCurrent, onRename, onDelete, onClone }: DeviceIt
         return 'bg-muted-foreground/30'; // Offline
     };
 
-    // The mixed-locale chimera ("5m ago" beside a system-locale date) died
-    // here: ONE locale-aware formatter renders the whole range (Phase 8 §F).
+    // ONE locale-aware formatter renders the whole range (no mixing "5m ago"
+    // with a system-locale date).
     const formatLastActive = (lastActive: number) => formatRelativeTime(lastActive, now);
 
     return (

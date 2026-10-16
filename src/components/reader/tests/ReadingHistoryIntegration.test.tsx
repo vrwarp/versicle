@@ -37,7 +37,7 @@ describe('ReadingHistory Integration', () => {
             />
         );
 
-        // No loading state - component renders synchronously now
+        // No loading state - the component renders synchronously
         expect(screen.queryByText('Loading history...')).not.toBeInTheDocument();
         expect(screen.getByText('Chapter One')).toBeInTheDocument();
     });

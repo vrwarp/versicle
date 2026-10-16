@@ -1,8 +1,7 @@
 /**
- * SectionAnalysisDriver — the background content-analysis orchestration half
- * of the strangled AudioContentPipeline (Phase 5c; phase5-tts-strangler.md
- * §5c.2). Queue building went to the pure SectionQueueBuilder (the host
- * orchestrates it); what remains here is detection/adaptation driving:
+ * SectionAnalysisDriver — background content-analysis orchestration. Queue
+ * building is the pure SectionQueueBuilder's job (the host orchestrates it);
+ * this class drives detection/adaptation:
  *
  *  - {@link triggerAnalysis}: skip-mask detection + table adaptations for the
  *    current section (background, callback-reported);
@@ -10,10 +9,9 @@
  *  - {@link detectContentSkipMask}: groups → ReferenceSectionDetector →
  *    raw-index skip mask (the AnalysisApplier's reapplication read).
  *
- * D4 fix by construction: section content is fetched as ONE
- * `{sentences, citationMarkers}` unit (see {@link SectionContent}) — the
- * legacy path-dependence (loadSection passed sentences and DROPPED markers;
- * only the prewarm path carried them) is unrepresentable.
+ * Section content is fetched as ONE `{sentences, citationMarkers}` unit (see
+ * {@link SectionContent}), so a path that carries sentences but drops the
+ * markers is unrepresentable.
  */
 import type { EngineContext } from './engine/EngineContext';
 import type { SectionMetadata } from '~types/book';
@@ -180,7 +178,7 @@ export class SectionAnalysisDriver {
         return new Set<number>();
     }
 
-    /** Fetch prepared section content — sentences AND markers, one read (D4). */
+    /** Fetch prepared section content — sentences AND markers, one read. */
     private async fetchContent(bookId: string, sectionId: string): Promise<SectionContent> {
         const ttsContent = await this.ctx.content.getTTSPreparation(bookId, sectionId);
         return {
@@ -193,9 +191,9 @@ export class SectionAnalysisDriver {
     private async buildGroups(bookId: string, sectionId: string, sentences: SentenceNode[]): Promise<CfiGroup[]> {
         // Table CFIs for grouping — LOCATIONS only (this needs no pixels), and
         // through the table processor's per-book memo: buildGroups runs on
-        // every section load AND every prewarm, and the old getTableImages
-        // call re-read and re-wrapped every table image of the whole book
-        // each time. Filtered by section to keep getParentCfi complexity at
+        // every section load AND every prewarm, and getTableImages would
+        // re-read and re-wrap every table image of the whole book each time.
+        // Filtered by section to keep getParentCfi complexity at
         // O(N_sentences * N_section_tables).
         const tables = await this.tableProcessor.getTableLocations(bookId);
         const sectionTables = tables.filter(t => t.sectionId === sectionId);

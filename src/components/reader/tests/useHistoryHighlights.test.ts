@@ -10,10 +10,9 @@ vi.mock('@lib/logger', () => ({
     })
 }));
 
-// Phase 6 §4: the hook now drives the HighlightLayerManager's 'history'
-// layer instead of touching rendition.annotations directly. The manager is
-// constructed over the same mock rendition, so every pre-manager assertion
-// on the epub.js call shapes below survives the cutover unchanged.
+// The hook drives the HighlightLayerManager's 'history' layer rather than
+// touching rendition.annotations directly. The manager is constructed over
+// the mock rendition, so the assertions below pin the epub.js call shapes.
 describe('useHistoryHighlights', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mockRendition: any;
@@ -106,15 +105,8 @@ describe('useHistoryHighlights', () => {
             }
         );
 
-        // Initial render (even if playing, initial state is applied?
-        // Actually, logic says: "Update when data changes, BUT only if not playing".
-        // But the initial state setting in `updateDisplayedRanges` is called in the first useEffect [bookId, currentCfi]
-        // because `updateDisplayedRanges` is in its dependency array.
-        // Wait, the hook has two effects.
-        // 1. [bookId, currentCfi, updateDisplayedRanges] -> Calls updateDisplayedRanges()
-        // 2. [lastPlayedCfi, isPlaying, updateDisplayedRanges] -> Calls updateDisplayedRanges() IF !isPlaying.
-
-        // Initial render: bookId is set. Effect 1 runs. updateDisplayedRanges sets state.
+        // Initial render: displayedRanges is seeded from lastPlayedCfi even
+        // while playing, so the highlight is applied on mount.
         expect(mockRendition.annotations.add).toHaveBeenCalledWith('highlight', 'cfi1', expect.anything(), null, expect.anything(), expect.anything());
         mockRendition.annotations.add.mockClear();
         mockRendition.annotations.remove.mockClear();
@@ -122,8 +114,8 @@ describe('useHistoryHighlights', () => {
         // Update lastPlayedCfi while playing
         rerender({ lastPlayedCfi: 'cfi2', isPlaying: true });
 
-        // Should NOT update (no remove, no add) because Effect 2 blocks it.
-        // And Effect 1 only runs on bookId/currentCfi change.
+        // Should NOT update (no remove, no add): lastPlayedCfi changed while
+        // playing and the page (bookId/currentCfi) did not.
         expect(mockRendition.annotations.remove).not.toHaveBeenCalled();
         expect(mockRendition.annotations.add).not.toHaveBeenCalled();
 

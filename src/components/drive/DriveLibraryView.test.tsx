@@ -15,8 +15,7 @@ const { driveSync, metadataService } = vi.hoisted(() => ({
   metadataService: { getPreview: vi.fn(), getCached: vi.fn() },
 }));
 
-// The shelf talks to the domain holder directly (the DriveScannerService
-// façade died in P9), exactly as the dialog it replaces did.
+// The shelf talks to the domain holder directly.
 vi.mock('@domains/google/drive/holder', () => ({
   getDriveClient: vi.fn(),
   setDriveClient: vi.fn(),
@@ -160,7 +159,6 @@ describe('DriveLibraryView', () => {
     globalThis.IntersectionObserver = originalIntersectionObserver;
   });
 
-  // ── absorbed from the retired DriveImportDialog suite ─────────────────────
   describe('index refresh', () => {
     it('renders the refresh control', () => {
       renderShelf();
@@ -351,8 +349,8 @@ describe('DriveLibraryView', () => {
     // The shelf's own "In library" badge and the preview sheet's dedup hint
     // both promise an "import anyway", and the orchestrator answers a filename
     // duplicate with DuplicateBookError rather than a real failure. Reporting
-    // that as "Failed to import" was the bug: it read as data loss, named no
-    // cause, and left the user no way through.
+    // that as "Failed to import" would read as data loss, name no cause, and
+    // leave the user no way through, so the shelf prompts to replace instead.
     describe('duplicates', () => {
       it('prompts to replace instead of reporting a failure', async () => {
         setDriveState({ index: makeFiles(1) });
@@ -454,8 +452,8 @@ describe('DriveLibraryView', () => {
     });
 
     // The shelf renders inside LibraryView, which registers guards for its own
-    // dialogs; without matching ones here, back left /drive with a sheet open
-    // on top of it.
+    // dialogs; the shelf registers matching ones so back closes an open sheet
+    // instead of leaving /drive.
     describe('back navigation', () => {
       it('registers no guard while the shelf has nothing open', () => {
         setDriveState({ index: makeFiles(1) });

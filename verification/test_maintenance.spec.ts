@@ -41,8 +41,8 @@ test("orphan repair", async ({ page }) => {
     });
   });
 
-  // Open Settings (Phase-10 SettingsShell route over the library). The bare
-  // "Settings" accessible name is now ambiguous — it also matches the audio
+  // Open Settings (SettingsShell route over the library). The bare
+  // "Settings" accessible name is ambiguous — it also matches the audio
   // deck's footer Settings tab — so drive the header button by test-id and
   // wait for the real Radix tablist via the shared helper.
   console.log("Opening Settings...");
@@ -56,7 +56,7 @@ test("orphan repair", async ({ page }) => {
   console.log("Running Repair...");
   await page.getByRole("button", { name: "Check & Repair Database" }).click();
 
-  // The maintenance panel no longer uses window.confirm() — it renders an
+  // The maintenance panel does not use window.confirm() — it renders an
   // in-app ConfirmDialog (useConfirm → ConfirmHost). A page.on('dialog', …)
   // handler would hang forever (no native dialog fires); accept by clicking
   // the dialog's confirm button so pruneOrphans() actually runs.

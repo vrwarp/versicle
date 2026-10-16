@@ -26,6 +26,6 @@ describe('LexiconCSV', () => {
     expect(parsed[1].applyBeforeGlobal).toBe(false);
 
     expect(parsed[2].original).toBe('Test');
-    expect(parsed[2].applyBeforeGlobal).toBe(false); // Default is false/undefined -> boolean conversion might be false
+    expect(parsed[2].applyBeforeGlobal).toBe(false); // undefined applyBeforeGlobal is generated as false and parsed back as false
   });
 });

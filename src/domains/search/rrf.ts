@@ -1,5 +1,5 @@
 /**
- * fuseRrf (Increment D §3) — reciprocal-rank fusion of the regex full-text
+ * fuseRrf — reciprocal-rank fusion of the regex full-text
  * results and the semantic-cosine results into ONE ranked list.
  *
  * Each list contributes `1/(k + rank)` per result (rank is 1-based), summed
@@ -27,11 +27,12 @@ const DEFAULT_K = 60;
 /**
  * Hard cap on the fused page. The semantic side contributes up to
  * SEMANTIC_SECTION_LIMIT (50) chunk rows PER SECTION, so a 30-section book
- * fused ~1500 results into a list the panel renders as one `<li>` each — the
- * regex side has been capped at 50 since forever, but the fused list had no cap
- * at all. The cut is taken AFTER the score sort, so the surviving page is the
- * best-ranked one, and every regex hit still survives it (a rank-50 regex hit
- * scores 1/110, which only the top ~50 semantic hits can beat).
+ * would fuse ~1500 results into a list the panel renders as one `<li>` each —
+ * the regex side is capped at 50 (SearchEngine.DEFAULT_LIMIT), so the fused
+ * list needs its own cap. The cut is taken AFTER the score sort, so the
+ * surviving page is the best-ranked one, and every regex hit still survives it
+ * (a rank-50 regex hit scores 1/110, which only the top ~50 semantic hits can
+ * beat).
  */
 const DEFAULT_FUSED_LIMIT = 100;
 

@@ -45,9 +45,8 @@
  * boot the in-memory remainder is empty, so a hint written exclusively from
  * inside the sweep could never advance again — every session's writes died with
  * the page, the stored value sat frozen under budget, and the sweep went on
- * skipping a cache that had grown past the budget, where the pre-change code
- * rescanned at every boot and could not drift. The eviction delete batches keep
- * carrying the corrected total in their own transactions.
+ * skipping a cache that had grown past the budget. The eviction delete batches
+ * keep carrying the corrected total in their own transactions.
  *
  * {@link EmbeddingsRepo.deltaBytes} is only the remainder that could not be
  * folded yet (the hint absent, or a write that raced a sweep's own write).
@@ -130,9 +129,9 @@ function rowBytes(row: CacheEmbeddingsRow): number {
  * as the typed-array views the compute layer consumes. Persisting always uses
  * the ArrayBuffer-shaped {@link CacheEmbeddingsRow}.
  *
- * Internal for now (knip's "every export needs a consumer" policy): callers
- * get it via inference on {@link EmbeddingsRepo.get}'s return type. It will be
- * exported once the indexer/search worker consume it by name directly.
+ * Not exported (knip's "every export needs a consumer" policy): callers get
+ * it via inference on {@link EmbeddingsRepo.get}'s return type, or through the
+ * structurally identical `EmbeddedRowView` in domains/search/embeddingPort.ts.
  */
 type CacheEmbeddingsView = Omit<CacheEmbeddingsRow, 'sections'> & {
   sections: (Omit<CacheEmbeddingsRow['sections'][number], 'vectors' | 'scales'> & {
@@ -248,8 +247,8 @@ class EmbeddingsRepo {
     try {
       const db = await getConnection();
       // Same durable fold as put(): base read outside the gate, the new value
-      // written by the row's own transaction (the atomic pair is untouched —
-      // app_metadata simply joins the same scope).
+      // written by the row's own transaction (app_metadata simply joins the
+      // atomic pair's scope).
       const plan = await this.planFold(db, rowBytes(row));
       await write(['cache_embeddings', 'cache_embed_jobs', 'app_metadata'], (tx) => {
         tx.objectStore('cache_embeddings').put(row);

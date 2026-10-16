@@ -1,18 +1,18 @@
 /**
- * The M suite — IDB v25 upgrade tests (P3-13, design D7 in
- * plan/overhaul/prep/phase3-storage-gateway.md).
+ * The M suite — IDB upgrade tests against captured v18/v24 fixtures, plus the
+ * additive/destructive steps after v25.
  *
  * Fixture strategy: src/data/__fixtures__/schema-fixtures.ts (programmatic
  * builders with provenance, committed — master plan §3).
  *
- * v25 is THE one persisted-format change of Phase 3 (one-in-flight rule).
- * What it must prove, from the doc's exit criteria:
+ * v25 is the persisted-format change that introduced the versioned migration
+ * registry. What it must prove:
  *
  *  - M.1 v24-fixture upgrade: zero data loss for every store's rows, the
  *    new `by_lastAccessed` index, `schemaHistory` appended, and NO recovery
  *    record (a clean v24 DB has no stragglers).
- *  - M.2 v18-fixture upgrade: the straggler guard (snapshot-BEFORE-delete,
- *    the P9 fix) captures every legacy user-data store into
+ *  - M.2 v18-fixture upgrade: the straggler guard (snapshot-BEFORE-delete)
+ *    captures every legacy user-data store into
  *    `app_metadata['legacy-recovery-v25']` — with binary fields elided, not
  *    crashing — then the deletion loop converges the store set. Regenerable
  *    v17 stores are deleted WITHOUT capture.
@@ -24,6 +24,10 @@
  *    generic mechanism is pinned in connection.test.ts).
  *  - M.6 the post-open idle `size` backfill stamps pre-v25 audio rows once,
  *    preserving every other field (incl. the legacy `alignmentData` name).
+ *  - M.7 / M.8 the additive v26 (`cache_search_text`) and v27
+ *    (`cache_embeddings` + `cache_embed_jobs`) steps create empty stores
+ *    without touching existing data.
+ *  - M.9 v28 clears the legacy embedding vectors and leaves other data intact.
  *
  * NOTE: like connection.test.ts, this suite mutates module-level connection
  * state — every test leaves the database deleted and the cache reset.

@@ -1,5 +1,5 @@
 /**
- * KeyboardShortcutService unit matrix (Phase 8 §E): scope stack,
+ * KeyboardShortcutService unit matrix: scope stack,
  * when()-fall-through, built-in guards (repeat / typing / Space-on-control
  * / Escape-overlay ordering), dev collision error, unregister.
  */

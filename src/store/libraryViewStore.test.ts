@@ -1,8 +1,6 @@
 /**
- * libraryViewStore hook suite (Phase 7 PR-L5: re-pointed from the
- * render-time module cache to the derived libraryViewStore — assertions
- * preserved, running against the REAL input stores per the harness
- * philosophy; renamed from selectors.test.ts when the façade died).
+ * libraryViewStore hook suite — runs against the REAL input stores per the
+ * harness philosophy.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
@@ -167,8 +165,8 @@ describe('selectors', () => {
       expect(result.current[0].progress).toBe(0.7);
     });
 
-    // `await act(async …)` throughout: the projection now rebuilds on a
-    // microtask (one flush per task instead of one per input notification),
+    // `await act(async …)` throughout: the projection rebuilds on a
+    // microtask (one flush per task, not one per input notification),
     // so the assertions have to let that microtask run.
     it('should maintain object reference stability for unchanged books when progress updates', async () => {
       seedBooks({
@@ -200,7 +198,7 @@ describe('selectors', () => {
       expect(bookA_v2?.progress).toBe(0.5);
       expect(bookA_v2).not.toBe(bookA_v1);
       // Book B did NOT change, must be the SAME object reference (the
-      // per-book memoization the old module cache provided).
+      // per-book memoization).
       expect(bookB_v2?.progress).toBe(0);
       expect(bookB_v2).toBe(bookB_v1);
     });
@@ -256,7 +254,7 @@ describe('selectors', () => {
 
       // Force a re-render without changing ANY dependencies. The derived
       // store's state is untouched, so identity MUST hold (no React cache
-      // semantics involved at all anymore).
+      // semantics involved at all).
       rerender();
 
       const secondRender = result.current;
@@ -268,10 +266,10 @@ describe('selectors', () => {
 
   /**
    * perf (P-mem): cover thumbnails are served by the service worker straight
-   * from IndexedDB, so the merged metadata stops materializing a Blob per book
-   * while the page is SW controlled (app/repositories/BookRepository). The
-   * projection must still emit the SW route — it now reads `hasCover`, not the
-   * presence of the bytes.
+   * from IndexedDB, so the merged metadata carries no Blob per book while the
+   * page is SW controlled (app/repositories/BookRepository). The projection
+   * must still emit the SW route — it reads `hasCover`, not the presence of
+   * the bytes.
    */
   describe('regression: the cover route survives without the cover bytes', () => {
     it('emits coverUrl from hasCover alone, holding no blob', () => {
@@ -322,10 +320,10 @@ describe('selectors', () => {
 
   /**
    * perf: the projection listens to four input stores and a single page turn
-   * writes two of them, so it rebuilt the reading-list join maps and allocated
-   * a fresh N-element array TWICE per turn — and it did that even while the
-   * library view was unmounted, because the subscriptions start on first use
-   * and were never torn down.
+   * writes two of them, so an unbatched listener would rebuild the reading-list
+   * join maps and allocate a fresh N-element array TWICE per turn — even while
+   * the library view is unmounted, because the subscriptions start on first use
+   * and are never torn down.
    *
    * `getDeviceId` is read exactly once per phase-2 rebuild, so its call count
    * is the rebuild count.
@@ -418,10 +416,10 @@ describe('selectors', () => {
 
   /**
    * perf: `useLastReadBook` feeds the app-wide ReaderControlBar summary pill,
-   * which renders the title only. It used to go through the progress-joined
-   * `useBook`, so it subscribed to `state.progress[id]` — a NEW object on every
-   * write — and re-rendered the pill on every page turn AND every background
-   * TTS tick, even on the library route.
+   * which renders the title only. Going through the progress-joined `useBook`
+   * would subscribe it to `state.progress[id]` — a NEW object on every write —
+   * and re-render the pill on every page turn AND every background TTS tick,
+   * even on the library route.
    */
   describe('regression: the last-read chrome projection ignores progress writes', () => {
     beforeEach(() => {

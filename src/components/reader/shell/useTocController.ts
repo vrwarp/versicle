@@ -1,10 +1,8 @@
 /**
- * useTocController — the synthetic-TOC state machine + Smart TOC wiring
- * (Phase 6 §5 table, prep/phase6-reader-engine.md PR-9). Extracted
- * verbatim from the legacy ReaderView: the user-toggle guard against the
- * Yjs observer reset race, metadata-driven initialization, active-item
- * resolution, the section-title sync effect, and the GenAI enhancement
- * hook.
+ * useTocController — the synthetic-TOC state machine + Smart TOC wiring:
+ * the user-toggle guard against the Yjs observer reset race,
+ * metadata-driven initialization, active-item resolution, the
+ * section-title sync effect, and the GenAI enhancement hook.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { NavigationItem, BookMetadata } from '~types/book';
@@ -108,7 +106,7 @@ export function useTocController(opts: {
   }, [bookId]);
 
   // Load synthetic TOC from metadata (deferred a microtask so the sync
-  // never runs synchronously inside the effect — same observable behavior).
+  // never runs synchronously inside the effect).
   //
   // perf: keyed on the two fields this effect reads (plus whether there IS
   // metadata) rather than the whole `bookMetadata` object — its identity moves

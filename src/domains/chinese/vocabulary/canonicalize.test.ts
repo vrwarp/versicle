@@ -1,8 +1,7 @@
 /**
- * canonicalize suite (Phase 6 §7.5, PR-13): the CH-6 single-char table
- * invariants — including the §7.3 length-preservation check over the FULL
- * committed table and the display round-trip invariant the suppression
- * read path depends on.
+ * canonicalize suite: the CH-6 single-char table invariants — including the
+ * length-preservation check over the FULL committed table and the display
+ * round-trip invariant the suppression read path depends on.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import {

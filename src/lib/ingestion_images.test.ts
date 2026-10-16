@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { extractBook } from '@domains/library/import/extract';
 
-// Re-pointed at PR-L1/L2 (phase7): the deleted extractBookData delegate.
+// Full-depth extraction of an EPUB file.
 const extractBookData = (file: File) => extractBook(file, { depth: 'full' });
 import imageCompression from 'browser-image-compression';
 
@@ -107,9 +107,8 @@ describe('Ingestion Image Optimization', () => {
     }));
 
     expect(data.manifest.coverBlob).toBeDefined();
-    // In extractBookData, the returned cover is the optimized one (or original if optimization fails/not needed)
-    // We mocked optimization to return mockThumbnailBlob
-    // Check if the logic in extractBookData uses the optimized blob.
+    // The returned cover is the optimized one (or the original if optimization fails);
+    // the mocked optimization returns mockThumbnailBlob. Only existence is asserted here.
   });
 
   it('should extract table images', async () => {

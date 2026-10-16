@@ -2,10 +2,10 @@
  * Main-thread repository for content-analysis reads/writes.
  *
  * Thin adapter over the yjs-backed useContentAnalysisStore. Lives outside the
- * data layer (src/data/repos — the carve of the deleted DBService) so the TTS
- * engine worker — which reaches IndexedDB through those repos — never bundles yjs. Worker-side
- * engine code reaches content analysis through the EngineContext contentAnalysis port, whose
- * host implementation calls this repository.
+ * data layer (src/data/repos) so the TTS engine worker — which reaches
+ * IndexedDB through those repos — never bundles yjs. Worker-side engine code
+ * reaches content analysis through the EngineContext contentAnalysis port,
+ * whose host implementation calls this repository.
  */
 import { useContentAnalysisStore } from '@store/useContentAnalysisStore';
 import type { ContentAnalysis } from '~types/book';

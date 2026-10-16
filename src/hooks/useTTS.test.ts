@@ -16,7 +16,7 @@ const { mockCommands } = vi.hoisted(() => {
 });
 
 // Mock Dependencies — production issues engine commands via useAudioCommands()
-// (the TtsController facade; Phase 5b-PR1).
+// (the TtsController facade).
 vi.mock('@app/tts/useAudioCommands', () => ({
     useAudioCommands: vi.fn(() => mockCommands),
 }));

@@ -1,7 +1,7 @@
 /**
  * `extractBook` / `extractPreamble` — the branch arms.
  *
- * extract.test.ts pins the PR-L1 exit criteria (short-circuit, preamble
+ * extract.test.ts pins the core extractor contract (short-circuit, preamble
  * reuse, cancellation, extractor outputs) on the happy path. This file
  * walks the degrade paths instead: every optional the preamble tolerates
  * (no cover, an unreachable cover, compression that fails, a palette that

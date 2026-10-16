@@ -4,17 +4,14 @@
  * else.
  *
  * Ownership rule (risk R6): app/ owns intervals + presentation (toast keys,
- * useSyncStore writes); domains/sync owns transport + events. Since Phase 8
- * §D the copy itself lives in the typed catalog (kernel/locale/messages.ts,
- * `sync.*` namespace) — this file maps events to keys+params, and editing
- * copy cannot touch the transport OR this mapping.
+ * useSyncStore writes); domains/sync owns transport + events. The copy
+ * itself lives in the typed catalog (kernel/locale/messages.ts, `sync.*`
+ * namespace) — this file maps events to keys+params, and editing copy
+ * cannot touch the transport OR this mapping.
  *
  * `lastSyncTime` semantics: driven by `flushed` (a committed save) and by
- * NOTHING else. Both transports announce committed saves — the mock always
- * did; the real Firestore path since the y-cinder `saved` fork delta
- * (packages/y-cinder/PROVENANCE.md, surgery 1). The transitional
- * connected-transition floor this file carried while the delta was pending
- * is deleted (its removal was the P4 §Follow-ups canary for the delta).
+ * NOTHING else. Both transports announce committed saves — the mock, and
+ * the real Firestore path via the y-cinder provider's `saved` event.
  *
  * Registered by the `syncInit` boot task with ctx.addCleanup.
  */
@@ -112,10 +109,9 @@ export function wireSyncEvents(): () => void {
         break;
 
       case 'workspace-purged':
-        // The honest delete / purge maintenance action (P4-6): tell the
-        // user what actually got removed remotely. Params arrive
-        // pre-pluralized (the catalog carries no ICU plural support yet —
-        // recorded ADR §2 limitation).
+        // The delete / purge maintenance action: tell the user what
+        // actually got removed remotely. Params arrive pre-pluralized (the
+        // catalog carries no ICU plural support yet — see kernel/locale/messages.ts).
         toast(
           {
             key: 'sync.workspacePurged',
@@ -135,7 +131,7 @@ export function wireSyncEvents(): () => void {
         // handleObsoleteClient (store/yjs-provider), which emitted this.
         // peek (not get): if sync never composed there is no connection to
         // sever, and composing the firebase chunk just to sever would be
-        // absurd (P8 first-use split).
+        // absurd (the firebase code loads on first use).
         peekSyncOrchestrator()?.severObsoleteConnection();
         stopDeviceHeartbeat();
         break;

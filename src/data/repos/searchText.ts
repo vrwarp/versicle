@@ -1,6 +1,6 @@
 /**
  * Repo for `cache_search_text` — the persisted per-book search corpus
- * (Phase 7 §F; store created by the v26 migration step).
+ * (store created by the v26 migration step).
  *
  * Written at import (the unified extractor emits `searchText` for free) and
  * lazily on first search for pre-existing books; DELETED with the book

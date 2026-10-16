@@ -119,15 +119,15 @@ describe('ContentMissingDialog', () => {
   });
 
   it('REGRESSION: "Restore from Cloud" attaches the binary to THIS ghost (book.id) via onRestore, not the filename/title re-matching importer', async () => {
-    // The screenshot scenario: the ghost the user clicked has its own bookId,
-    // and the Drive copy was found by FUZZY title containment -- its filename
+    // The scenario: the ghost the user clicked has its own bookId, and the
+    // Drive copy was found by FUZZY title containment -- its filename
     // ("Fred Sanders - ...") differs from the ghost's sourceFilename. Routing
     // the download through the generic importer makes it re-discover the target
     // by filename (miss) then by exact title+author (often a miss too), so it
     // imports a brand-new book and leaves the ghost the user clicked unresolved.
-    // The fix downloads the blob and hands it to onRestore, which targets the
-    // known book.id (controller.restoreBook(book.id, file)) -- the same path as
-    // "Select File".
+    // "Restore from Cloud" downloads the blob and hands it to onRestore, which
+    // targets the known book.id (controller.restoreBook(book.id, file)) -- the
+    // same path as "Select File".
     const downloadedFile = new File(['epub'], 'Fred Sanders - The Holy Spirit.epub', {
       type: 'application/epub+zip',
     });

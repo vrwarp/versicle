@@ -1,5 +1,5 @@
 /**
- * useTocController — the synthetic-TOC state machine (Phase 6 §5, PR-9).
+ * useTocController — the synthetic-TOC state machine.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';

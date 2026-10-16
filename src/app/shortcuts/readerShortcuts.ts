@@ -1,20 +1,17 @@
 /**
- * Reader + TTS shortcut registrants (Phase 8 §E) — the production
- * registrations that replaced the two deleted window keydown registries.
- * The P0 keyboard-gating predicates died here: ownership is expressed as
- * scope stacking ('tts-active' over 'reader'), not as each listener
- * peeking at the other's state.
+ * Reader + TTS shortcut registrants — the production registrations on the
+ * KeyboardShortcutService. Ownership is expressed as scope stacking
+ * ('tts-active' over 'reader'), not as each listener peeking at the
+ * other's state.
  *
  *  - {@link useReaderPageTurnShortcuts}: ArrowLeft/ArrowRight page turns
- *    (scope 'reader') — the keyboard half of the deleted
- *    useReaderNavigation registry; wheel/touch stayed in that hook.
+ *    (scope 'reader'); wheel/touch navigation lives in useReaderNavigation.
  *  - {@link useTtsPlaybackShortcuts}: sentence jumps + Space play/pause +
- *    Escape stop (scope 'tts-active', live while playing|paused) — the
- *    deleted ReaderTTSController registry.
+ *    Escape stop (scope 'tts-active', live while playing|paused).
  *  - {@link useReaderEngineKeyBridge}: the ONE iframe bridge — forwards
  *    the engine's iframe keydown stream (C7 port event) into the service,
  *    so every policy and scope applies identically with focus inside the
- *    book text (the P0 hotfix path).
+ *    book text.
  */
 import { useEffect } from 'react';
 import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
@@ -116,7 +113,7 @@ export function useTtsPlaybackShortcuts({ play, pause, stop, jumpTo }: TtsPlayba
 /**
  * Forward the engine's iframe keydown stream into the service — keys
  * pressed with focus inside the book text behave exactly like window
- * keys (one bridge, registered by the reader feature, per §E).
+ * keys (one bridge, registered by the reader feature).
  */
 export function useReaderEngineKeyBridge(engine: ReaderEngine | null): void {
   useEffect(() => {

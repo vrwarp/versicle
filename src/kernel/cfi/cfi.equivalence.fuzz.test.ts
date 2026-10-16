@@ -1,7 +1,7 @@
 /**
- * Property-based equivalence suite for the CFI kernel's string fast paths
- * (phase5-tts-strangler.md §5c.4): every fast path survives ONLY behind
- * agreement with the parsed-component reference model in ./parse.
+ * Property-based equivalence suite for the CFI kernel's string fast paths:
+ * every fast path survives ONLY behind agreement with the parsed-component
+ * reference model in ./parse.
  *
  * The arbitrary is STRUCTURED (token-built CFIs — steps, id-like assertions,
  * indirections, offsets, ranges), not random strings: the seeded-fuzz
@@ -201,8 +201,8 @@ describe('cfi kernel — property equivalence vs the parsed reference', () => {
     });
 
     it('E4 counterexamples: the legacy ACP separator set mis-grouped assertion-bracket and range children', () => {
-        // The inline copies in AudioContentPipeline used ['/', '!', ':'] — these
-        // two cases are exactly what '[' and ',' add (content debt D9 / S17).
+        // A separator set limited to ['/', '!', ':'] would mis-group these two
+        // cases — they are exactly what '[' and ',' add to THE set.
         const parent = 'epubcfi(/6/14!/4/10)';
         expect(cfiContains(parent, 'epubcfi(/6/14!/4/10[note])')).toBe(true);
         expect(cfiContains(parent, 'epubcfi(/6/14!/4/10,/1:0,/3:2)')).toBe(true);
@@ -214,7 +214,7 @@ describe('cfi kernel — property equivalence vs the parsed reference', () => {
     });
 
     it('E3 quirk pin: spine-only CFIs (no indirection) keep the legacy `!`-append behavior', () => {
-        // Characterization, not design: the legacy string path treats the whole
+        // Characterization, not design: the string path treats the whole
         // content as a spine component when no '!' is present. The parsed
         // oracle is not consulted for this family (the structured arbitrary
         // always includes an indirection, like every real book CFI).

@@ -1,17 +1,15 @@
 /**
- * VocabTriageCard — the vocab-triage CompassPill variant + character tiles
- * (Phase 6 §7.4, prep doc PR-11; extracted from CompassPill.tsx).
+ * VocabTriageCard — the vocab-triage pill variant + character tiles.
  *
- * Dictionary data now comes from the async DictionaryService (IDB-backed):
- * the import is triggered HERE, on triage open — the legacy module-global
- * fetch fired on ANY selection containing a CJK character and retained the
- * whole ~80 MB map for the session. Entries and compound hits load in one
+ * Dictionary data comes from the async DictionaryService (IDB-backed):
+ * the import is triggered HERE, on triage open, not on every selection
+ * containing a CJK character. Entries and compound hits load in one
  * batched pass per selection; tiles render immediately (pinyin fills in
- * when the lookup lands, matching the legacy not-yet-fetched render).
+ * when the lookup lands).
  *
  * Lives under src/components (not domains/chinese/ui): it reads/writes the
  * vocabulary + readerUI stores, which domains-no-store forbids inside
- * domains/ — same reconciliation as the reader shell (prep doc §Status 3).
+ * domains/.
  */
 import React, { useState, useEffect, useRef } from 'react';
 import { useReaderUIStore } from '@store/useReaderUIStore';
@@ -37,7 +35,7 @@ interface TileData {
   compound: CompoundHit | null;
 }
 
-/** Interactive individual character tile (markup preserved verbatim). */
+/** Interactive individual character tile. */
 const VocabTile: React.FC<{
   char: string;
   pinyin: string;
@@ -135,8 +133,8 @@ const VocabTile: React.FC<{
 };
 
 export const VocabTriageCard: React.FC<{ text: string }> = ({ text }) => {
-  // Scoped selectors (jank fix): the bare useVocabularyStore() call
-  // re-rendered the card on EVERY store change, selected or not.
+  // Scoped selectors: re-render only when these slices change, not on
+  // every vocabulary store change.
   const knownCharacters = useVocabularyStore(state => state.knownCharacters);
   const toggleKnownCharacter = useVocabularyStore(state => state.toggleKnownCharacter);
   const [tiles, setTiles] = useState<Map<number, TileData>>(new Map());
@@ -161,8 +159,8 @@ export const VocabTriageCard: React.FC<{ text: string }> = ({ text }) => {
         }
         const hanChars = [...new Set(hanIndices.map((index) => chars[index]))];
         // TWO batched lookups for the whole selection — one for the standalone
-        // entries, one for every compound window. It used to be one lookup per
-        // Han character, each its own IDB transaction re-splitting the text.
+        // entries, one for every compound window (no per-character IDB
+        // transaction re-splitting the text).
         const entries = await service.getEntries(hanChars);
         const compounds = await service.getCompounds(text, hanIndices);
         const next = new Map<number, TileData>();

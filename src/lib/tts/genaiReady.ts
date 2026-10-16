@@ -1,10 +1,10 @@
 /**
  * ensureGenAIReady — the single GenAI availability/configuration gate for the
- * TTS content pipeline. Callers (AudioContentPipeline, TableAdaptationProcessor)
+ * TTS content pipeline. Callers (ReferenceSectionDetector, TableAdaptationProcessor)
  * route through it instead of each repeating their own enabled-check plus
  * fallback-model wiring.
  *
- * Test/dev mocks no longer go through any localStorage seam: they install a
+ * Test/dev mocks do not go through any localStorage seam: they install a
  * MockGenAIClient at the composition root via
  * `window.__versicleTest.genai.setMock(...)` (src/test-api.ts), and the port's
  * isConfigured() reflects that transparently.

@@ -3,10 +3,9 @@ import { create } from 'zustand';
 /**
  * State interface for global UI state.
  *
- * Phase 8 §B: `isGlobalSettingsOpen` retired — the settings overlay is
- * route state (`/settings/:tab`, see src/app/settings/SettingsShell.tsx);
- * openers navigate instead of toggling a flag. This store is the shell-UI
- * store (currently: the obsolete-schema lock).
+ * The settings overlay is route state (`/settings/:tab`, see
+ * src/app/settings/SettingsShell.tsx), not a flag here; openers navigate. This
+ * store is the shell-UI store (currently: the obsolete-schema lock).
  */
 interface UIState {
     /** Whether the app is locked due to an obsolete schema version. */
@@ -16,7 +15,7 @@ interface UIState {
 }
 
 /**
- * Zustand store for managing global UI state (modals, sidebars, etc.).
+ * Zustand store for global shell UI state.
  */
 export const useUIStore = create<UIState>((set) => ({
     obsoleteLock: false,

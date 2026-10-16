@@ -1,7 +1,6 @@
 /**
- * Y.8–Y.10 — contract for the Phase 3 §D6 fork surgery
- * (plan/overhaul/prep/phase3-storage-gateway.md §D6, PR P3-11; surgery log
- * in PROVENANCE.md):
+ * Y.8–Y.11 — contract for the y-idb fork's additions over upstream
+ * y-indexeddb (design: plan/overhaul/prep/phase3-storage-gateway.md §D6):
  *
  *   Y.8  public `flush(): Promise<void>` — idle no-op, pending-drain,
  *        in-flight chaining;
@@ -11,12 +10,12 @@
  *   Y.10 `'synced'` durability — the event is not emitted before the
  *        constructor's hydration transaction (which carries the
  *        initial-state write) has COMMITTED.
- *   Y.11 `readSnapshot(name, { transactionRunner })` module export (Phase 4
- *        §D4 staged swap) — null on empty/missing, byte round-trip with
- *        writeSnapshot, multi-row merge, runner wraps the read.
+ *   Y.11 `readSnapshot(name, { transactionRunner })` module export (used by
+ *        the staged workspace swap) — null on empty/missing, byte round-trip
+ *        with writeSnapshot, multi-row merge, runner wraps the read.
  *
- * All cuts are additive: characterization.test.ts (Y.1–Y.7, written
- * against the pre-surgery source) must stay green alongside this suite.
+ * The additions are purely additive: characterization.test.ts (Y.1–Y.7,
+ * the upstream baseline semantics) must stay green alongside this suite.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import * as Y from 'yjs';

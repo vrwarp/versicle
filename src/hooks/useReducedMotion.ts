@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 /**
- * useReducedMotion (Phase 8 §K) — the JS half of the reduced-motion
+ * useReducedMotion — the JS half of the reduced-motion
  * policy. CSS animations/transitions are globally collapsed by the
  * `prefers-reduced-motion: reduce` block in index.css; JS-DRIVEN motion
  * (smooth scrolling, programmatic animation) cannot be reached by CSS and

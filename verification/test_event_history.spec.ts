@@ -23,7 +23,7 @@ test('verify event history', async ({ page }) => {
   console.log('Reader loaded.');
 
   // Allow epub.js/iframe to stabilize before freezing time: the first display
-  // has landed (was a fixed 2s sleep)
+  // has landed
   await waitForReaderLocated(page);
 
   // Install Clock

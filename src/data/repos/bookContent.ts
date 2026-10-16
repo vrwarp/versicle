@@ -1,22 +1,19 @@
 /**
  * Book-content repository — the static_* stores plus the derived/cache rows
- * that live and die with a book (Phase 3, D5.3 in
- * plan/overhaul/prep/phase3-storage-gateway.md; carved from
- * src/db/DBService.ts, absorbing lib/ingestion.ts's raw reprocess
- * transaction as {@link BookContentRepo.replaceDerivedContent}).
+ * that live and die with a book (including the atomic reprocess replacement,
+ * {@link BookContentRepo.replaceDerivedContent}).
  *
  * Worker-safe: the TTS engine worker imports this module (sections, TTS
  * preparation, table images). It must never import the yjs-backed Zustand
  * stores, sync services, React, or the EPUB ingestion pipeline — inventory
  * merging lives in app/repositories/BookRepository; book import lives in
- * lib/BookImportService.
+ * domains/library/import.
  *
- * Write discipline (D1): every writer goes through `write()` — one
- * readwrite transaction opened inside the cross-context gate, populated
+ * Write discipline (see write-gate.ts): every writer goes through `write()` —
+ * one readwrite transaction opened inside the cross-context gate, populated
  * SYNCHRONOUSLY (intra-transaction awaits are WebKit hang trigger #2).
  * Read-modify-write sites read in a plain readonly transaction OUTSIDE the
- * gate first (last-write-wins between read and write — identical to, and
- * narrower than, the races the old intra-transaction-await sites had).
+ * gate first (last-write-wins between read and write).
  */
 import { getConnection } from '../connection';
 import { write } from '../write-gate';
@@ -251,7 +248,7 @@ class BookContentRepo {
   /**
    * Returns a Map of bookId -> isOffloaded status for the requested book IDs.
    * (With no IDs there is nothing to answer against — the caller owns the
-   * book list; the dead "all books" branch died with the DBService carve.)
+   * book list.)
    */
   async getOffloadedStatus(bookIds?: string[]): Promise<Map<string, boolean>> {
     try {
@@ -321,11 +318,11 @@ class BookContentRepo {
    * Table LOCATIONS for a book — `{id, cfi, sectionId}` only, never a Blob.
    *
    * The consumers that only need CFIs (TTS grouping, the table-adaptation
-   * work set) used to call {@link getTableImages}, which `getAll`s every
-   * table row of the book and wraps each stored ArrayBuffer in a fresh Blob —
-   * 10–25 MB of Blob churn per section load on a table-heavy book, twice per
-   * chapter boundary (load + prewarm). This walks the same `by_bookId` index
-   * with a cursor and copies out three strings per row.
+   * work set) should use this rather than {@link getTableImages}, which
+   * reads every table row of the book and wraps each stored ArrayBuffer in a
+   * fresh Blob — 10–25 MB of Blob churn per section load on a table-heavy
+   * book, twice per chapter boundary (load + prewarm). This walks the same
+   * `by_bookId` index with a cursor and copies out three strings per row.
    *
    * A value cursor still deserializes the row (the image bytes cannot be
    * skipped without a schema change) but nothing is retained: no Blob wrapper
@@ -354,16 +351,16 @@ class BookContentRepo {
   /**
    * Table snapshots for a book; stored ArrayBuffers re-wrapped as Blob for
    * the UI. `sectionId` narrows the rows INSIDE the repo so the callers that
-   * only ever adapt one section stop materializing every other section's
-   * image (the filter used to run on the caller's side, after every blob had
-   * already been wrapped).
+   * only ever adapt one section do not materialize every other section's
+   * image (filtering on the caller's side would happen only after every blob
+   * had already been wrapped).
    */
   async getTableImages(bookId: string, sectionId?: string): Promise<TableImage[]> {
     try {
       const db = await getConnection();
       // Filtered reads stream a cursor and keep ONLY the matching rows: a
       // getAll would hold every table image of the book in one array at once
-      // (the caller then threw all but one section's away).
+      // (only to discard all but one section's).
       const rows: TableImageRow[] = [];
       if (sectionId === undefined) {
         rows.push(...(await db.getAllFromIndex('cache_table_images', 'by_bookId', bookId)));
@@ -482,11 +479,10 @@ class BookContentRepo {
   }
 
   /**
-   * Atomically replaces a book's reprocessed derived rows (absorbs
-   * lib/ingestion.ts's raw reprocess transaction): manifest update, new
-   * structure, drop-and-rewrite of the per-section TTS preparation and
-   * table-image cache rows. Old keys are read OUTSIDE the gate (D1 recipe);
-   * the replacement itself is one synchronous gated transaction.
+   * Atomically replaces a book's reprocessed derived rows: manifest update,
+   * new structure, drop-and-rewrite of the per-section TTS preparation and
+   * table-image cache rows. Old keys are read OUTSIDE the gate; the
+   * replacement itself is one synchronous gated transaction.
    */
   async replaceDerivedContent(bookId: string, replacement: DerivedContentReplacement): Promise<void> {
     try {
@@ -526,7 +522,7 @@ class BookContentRepo {
   /** Updates the static structure (TOC) for a book. Used by Smart TOC enhancement. */
   async updateToc(bookId: string, toc: NavigationItem[]): Promise<void> {
     try {
-      // Read outside the gate (D1 recipe), then one synchronous put.
+      // Read outside the gate, then one synchronous put.
       const db = await getConnection();
       const structure = await db.get('static_structure', bookId);
       if (!structure) {
@@ -563,10 +559,10 @@ class BookContentRepo {
         tx.objectStore('static_structure').delete(id);
         tx.objectStore('cache_render_metrics').delete(id);
         tx.objectStore('cache_session_state').delete(id);
-        // v26: the persisted search corpus dies with the book (Phase 7 §F).
+        // The persisted search corpus dies with the book.
         tx.objectStore('cache_search_text').delete(id);
-        // v27: the embedding vectors and their resumable job state die with
-        // the book too (Increment B) — no vectors leak past deletion.
+        // The embedding vectors and their resumable job state die with
+        // the book too — no vectors leak past deletion.
         tx.objectStore('cache_embeddings').delete(id);
         tx.objectStore('cache_embed_jobs').delete(id);
 
@@ -584,8 +580,7 @@ class BookContentRepo {
 
   /**
    * Offloads a book's file content: deletes the resource record entirely so
-   * `getKey`/`count` report it as absent. (The old DBService transaction
-   * also locked static_manifests and never touched it — P13d; dropped.)
+   * `getKey`/`count` report it as absent.
    */
   async offloadBook(id: string): Promise<void> {
     try {
@@ -599,7 +594,7 @@ class BookContentRepo {
 
   /**
    * Writes a restored book's binary content. Fingerprint verification (which
-   * needs the ingestion pipeline) happens in BookImportService.restoreBook
+   * needs the ingestion pipeline) happens in ImportOrchestrator.restore
    * before this is called. Stores the file as ArrayBuffer (WebKit IDB does
    * not support Blob structured clone).
    */
@@ -633,7 +628,7 @@ class BookContentRepo {
     }
   }
 
-  /** Persist one TTS preparation row (migration/caching path). */
+  /** Persist one TTS preparation row. */
   async saveTTSPreparation(content: CacheTtsPreparationRow): Promise<void> {
     try {
       await write(['cache_tts_preparation'], (tx) => {
@@ -742,8 +737,8 @@ class BookContentRepo {
 
   /**
    * Per-book MINIMUM `extractionVersion` across all `cache_tts_preparation`
-   * rows (missing stamp = implicit v1, reported as 1). The Phase 7 §E
-   * re-ingest wave's candidacy scan: a single readonly cursor pass.
+   * rows (missing stamp = implicit v1, reported as 1). The re-ingest wave's
+   * candidacy scan: a single readonly cursor pass.
    */
   async listTtsExtractionVersions(): Promise<Map<string, number>> {
     const result = new Map<string, number>();
@@ -779,7 +774,7 @@ class BookContentRepo {
 
   /**
    * Restamp a book's TTS preparation rows to `extractionVersion` IN PLACE —
-   * the §E fast path for rows proven byte-equivalent to a newer extraction
+   * the re-ingest fast path for rows proven byte-equivalent to a newer extraction
    * (no re-extraction). Rows are read OUTSIDE the gate; one synchronous
    * gated transaction writes the stamps.
    */
@@ -801,8 +796,7 @@ class BookContentRepo {
   /**
    * Deletes all orphaned records found by {@link scanOrphans}. Orphan keys
    * are collected OUTSIDE the gate (readonly), then deleted in one gated
-   * synchronous transaction (the old shape awaited getAllKeys/cursors inside
-   * the readwrite transaction).
+   * synchronous transaction.
    */
   async pruneOrphans(validBookIds: Set<string>): Promise<void> {
     try {

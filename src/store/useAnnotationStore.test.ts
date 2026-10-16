@@ -43,10 +43,8 @@ describe('useAnnotationStore', () => {
       '1': { id: '1', bookId: 'book1', cfiRange: 'cfi', text: 'text', type: 'highlight', color: 'yellow', created: 123 }
     };
 
-    // Create expected array if the test checked for array, but here it checks equality of the map or object
-    // The previous test expected 'annotations' to be equal to an array.
-    // However, the STORE defines 'annotations' as Record<string, UserAnnotation>.
-    // So we should expect it to equal the map.
+    // The store defines 'annotations' as Record<string, UserAnnotation>,
+    // so the expectation is the map itself.
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     act(() => useAnnotationStore.setState({ annotations: annotationsMap as any }));

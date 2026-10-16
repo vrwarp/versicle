@@ -1,7 +1,6 @@
 /**
- * General settings panel (Phase 8 §B): self-contained wiring for the
- * presentational GeneralSettingsTab — theme + batch import. Handlers moved
- * verbatim from the deleted GlobalSettingsDialog.
+ * General settings panel: self-contained wiring for the presentational
+ * GeneralSettingsTab — theme + batch import.
  */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';

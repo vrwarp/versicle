@@ -13,9 +13,9 @@ const COVER_BLOB_REPAIR_FLAG = 'versicle_cover_blob_repair_v1';
 /**
  * Service to handle database maintenance and integrity checks.
  * 
- * Post-Yjs Migration: Only handles static_* and cache_* stores.
- * User data stores (user_inventory, user_progress, user_annotations, user_overrides)
- * are now in Yjs and managed by their respective stores.
+ * Only handles the static_* and cache_* IndexedDB stores. User data
+ * (inventory, progress, annotations, lexicon overrides) lives in Yjs and is
+ * managed by its respective stores.
  */
 export class MaintenanceService {
   /**
@@ -138,9 +138,8 @@ export class MaintenanceService {
 
           onProgress(current, total, `Regenerating ${books[bookId].title}...`);
 
-          // Phase 7: BookImportService died with the orchestrator cutover —
-          // regeneration is extract → retarget-onto-existing-id → overwrite
-          // ingest (+ the search corpus that rides every ingest, §F).
+          // Regeneration is extract → retarget-onto-existing-id → overwrite
+          // ingest (+ the search corpus that rides every ingest).
           const extraction = retargetExtraction(
             await extractBook(file, { depth: 'full', extraction: { sanitizationEnabled } }),
             bookId,

@@ -1,7 +1,7 @@
 /**
- * Re-ingest wave pins (Phase 7 §E / PR-L6): the stamp-based detection
- * matrix, the NFKD restamp fast path, idle resumability via stamps, the R4
- * old-row-retention failure path, and the no-binary skip.
+ * Re-ingest wave pins: the stamp-based detection matrix, the NFKD restamp
+ * fast path, idle resumability via stamps, the old-row-retention failure
+ * path (the alignment self-check), and the no-binary skip.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
@@ -303,10 +303,10 @@ describe('runReingestWave', () => {
 /**
  * The wave's candidacy scan (`listVersions`) is a cursor over EVERY
  * `cache_tts_preparation` row of every book — all of a book's sentences
- * deserialized to read one integer — and it ran 10 s after every single boot,
- * forever, even for a library that had nothing left to converge. A marker
- * written when a wave ends with zero candidates now short-circuits it until
- * the extraction constant moves.
+ * deserialized to read one integer — so a library with nothing left to
+ * converge must not pay for it on every boot. A marker written when a wave
+ * ends with zero candidates short-circuits the scan until the extraction
+ * constant moves.
  */
 describe('regression: a converged library does not re-scan', () => {
   it('runs listVersions once across two waves, then skips it', async () => {

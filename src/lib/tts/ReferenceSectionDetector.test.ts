@@ -1,8 +1,7 @@
 /**
- * ReferenceSectionDetector unit suite (Phase 5c; phase5-tts-strangler.md
- * §5c.2): the strategy seam, the persisted retry/timeout state machine, the
- * concurrent promise dedup, and the deterministic detector — previously
- * tested only through AudioContentPipeline integration.
+ * ReferenceSectionDetector unit suite: the strategy seam, the persisted
+ * retry/timeout state machine, the concurrent promise dedup, and the
+ * deterministic detector.
  */
 import { describe, it, expect, vi } from 'vitest';
 import {
@@ -533,8 +532,8 @@ describe('regression: a linked note tail is decided locally (Oct 2026 export)', 
 /**
  * On the Oct 2026 export twelve detection attempts died (eleven 503s, one
  * timeout) and the log held nothing about those sections but their prompts —
- * the telemetry record was only written after a successful model call. A
- * failure now reaches the observer with the section's full structure, and
+ * the telemetry record was written only after a successful model call. A
+ * failure must reach the observer with the section's full structure, and
  * the deterministic shadow answers that playback while the model is retried.
  */
 describe('regression: a failed model call is reported to telemetry with the section structure', () => {

@@ -4,17 +4,19 @@ import Papa from 'papaparse';
 /**
  * Utilities for parsing and generating CSV data for the Pronunciation Lexicon.
  * Handles standard CSV escaping (RFC 4180-ish) for original/replacement pairs
- * and a boolean regex flag.
+ * plus their match type, apply-before-global flag and optional language scope.
  */
 export const LexiconCSV = {
   /**
    * Parses a CSV string into a list of partial LexiconRule objects.
    *
-   * Expects a header row "original,replacement,isRegex" (though strict header validation is skipped).
+   * Expects a header row like the one generate() emits (though strict header validation is skipped:
+   * the first row is always treated as the header).
    * Supports quoted values containing commas, newlines, and escaped quotes using double-double quotes ("").
    *
    * @param text - The raw CSV string to parse.
-   * @returns An array of objects containing `original`, `replacement`, and `isRegex`.
+   * @returns An array of objects containing `original`, `replacement`, `isRegex`, `matchType`,
+   *          `applyBeforeGlobal` and `language`.
    *          Properties `id`, `created`, and `bookId` are excluded as they are generated/managed by the system.
    */
   parse(text: string): Omit<LexiconRule, 'id' | 'created' | 'bookId'>[] {

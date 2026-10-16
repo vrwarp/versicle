@@ -1,6 +1,5 @@
 /**
- * DOM-Range → CFI generation, ported verbatim from src/lib/cfi-utils.ts
- * (the epubjs constructor call goes through the shim).
+ * DOM-Range → CFI generation (the epubjs constructor call goes through the shim).
  */
 import { cfiFromRange } from './epubcfiShim';
 import { stripCfiWrapper } from './parse';

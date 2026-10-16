@@ -1,5 +1,5 @@
 /**
- * Book content identity — the two generations that coexist (§B "identify").
+ * Book content identity — the two generations that coexist.
  *
  * The legacy fingerprint's whole point is that its TAIL is filename- and
  * metadata-independent, so a renamed file still restores. That property is

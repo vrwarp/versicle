@@ -1,24 +1,21 @@
 /**
  * ReferenceSectionDetector — the reference-section ("endnotes tail")
- * detection strategy unit of the strangled AudioContentPipeline (Phase 5c;
- * phase5-tts-strangler.md §5c.2).
+ * detection strategy.
  *
  *  - Strategies: `deterministic` (the enumerator-run detector, always
- *    available) | GenAI (through the EXISTING GenAIService surface via the
- *    EngineContext GenAI port — the Phase 7 track replaces its internals),
- *    which also shadow-runs the deterministic detector for telemetry.
+ *    available) | GenAI (through the EngineContext GenAI port), which also
+ *    shadow-runs the deterministic detector for telemetry.
  *  - Owns the persisted retry/timeout state machine and the concurrent
- *    promise dedup that previously lived in getOrDetectContentTypes.
+ *    promise dedup.
  *  - Telemetry is an INJECTED observer ({@link DetectionTelemetry}); the
  *    default GenAI-log implementation lives in ./detectionTelemetry.
- *  - D4 fix by construction: the input is `{groups, citationMarkers}` —
- *    sentences and markers ALWAYS travel together; there is no markers-less
- *    entry point.
+ *  - The input is `{groups, citationMarkers}` — sentences and markers ALWAYS
+ *    travel together; there is no markers-less entry point.
  *  - Model calls run ONE AT A TIME across sections (the load path and the
- *    next-section prewarm used to fire two requests in the same millisecond
- *    at a 5-requests-per-minute pool, and the Jul–Sep 2026 export showed one
- *    of each such pair dying without an answer), and sections too small to
- *    hold a reference tail never reach the model at all.
+ *    next-section prewarm would otherwise fire two requests in the same
+ *    millisecond at a 5-requests-per-minute pool, and the Jul–Sep 2026 export
+ *    showed one of each such pair dying without an answer), and sections too
+ *    small to hold a reference tail never reach the model at all.
  *  - A LINKED NOTE TAIL is decided locally, with no model call: the trailing
  *    run of groups that open with a citation marker linking back to the body
  *    ({@link findLeadingMarkerRun}). On the Oct 2026 export that run started
@@ -26,8 +23,8 @@
  *    would have answered three of the seven sections that never got one.
  *  - Every model failure reaches the telemetry observer too, with the
  *    section's full marker/group structure, so a section that never gets an
- *    answer is diagnosable offline (the export used to hold only its prompt);
- *    the deterministic shadow result answers that playback meanwhile.
+ *    answer is diagnosable offline (the export would otherwise hold only its
+ *    prompt); the deterministic shadow result answers that playback meanwhile.
  */
 import type { CitationMarker } from '~types/cache';
 import type { CfiGroup } from '@kernel/cfi';
@@ -113,9 +110,8 @@ export interface DetectionObservation {
     /** The answer's group index (-1 = no reference section); null when the model call failed. */
     referenceStartIndex: number | null;
     /**
-     * referenceStartIndex / groups.length, or null when -1 or failed. The
-     * former 40% validation guard lives on here as a REVIEW signal, not a
-     * rejection.
+     * referenceStartIndex / groups.length, or null when -1 or failed. A
+     * REVIEW signal in the exported log, not a rejection criterion.
      */
     positionFraction: number | null;
     detShadowCfi: string | null;
@@ -142,7 +138,7 @@ interface DeterministicShadow {
     markerDropoffIndex: number;
 }
 
-/** Injected detection-telemetry observer (phase5 §5c.2). */
+/** Injected detection-telemetry observer. */
 export interface DetectionTelemetry {
     onDetection(observation: DetectionObservation): void;
 }
@@ -341,7 +337,7 @@ export class ReferenceSectionDetector {
                     // model decides whether the section is all notes.
                     leadingMarkerCandidate: leadingMarkerRun ? leadingMarkerRun.start : -1,
                 },
-                // bookId rides to the egress consent gate (P9 threading).
+                // bookId rides to the egress consent gate.
                 { bookId, bookTitle, sectionTitle, correlationId }
             );
 
@@ -364,8 +360,8 @@ export class ReferenceSectionDetector {
             console.warn("Content detection failed", e);
             // The failure record carries the section's full structure to the
             // log, so a section that never gets an answer (a 503 streak, a
-            // timeout) is diagnosable offline — the export used to hold only
-            // its prompt.
+            // timeout) is diagnosable offline — the export would otherwise
+            // hold only its prompt.
             observe({
                 source: 'failure',
                 referenceStartCfi: undefined,

@@ -3,7 +3,7 @@
  * report, debt #6 layer 3): library grid, reader, global settings dialog,
  * audio deck.
  *
- * Phase 0 BASELINE MODE (plan/overhaul/README.md §4 rule 3 — new tooling
+ * BASELINE MODE (plan/overhaul/README.md §4 rule 3 — new tooling
  * lands at warn until clean): each scan always runs, prints a summary, and
  * attaches the full violation list as a JSON artifact, but only FAILS on
  * serious/critical violations when A11Y_ENFORCE=1 is set. The first nightly
@@ -11,18 +11,17 @@
  * to enforcing as the known violations (nested-interactive in
  * BookCard/VocabTile) are burned down by their owning workstreams.
  *
- * Phase 6 ratchet (prep/phase6-reader-engine.md §4 / PR-9): the reader
- * surface's P0 baseline findings are FIXED and now assert ALWAYS, not just
- * under A11Y_ENFORCE —
+ * Per-rule ratchet: the reader surface's baseline findings are FIXED and
+ * assert ALWAYS, not just under A11Y_ENFORCE —
  *   - frame-title: the engine titles every section iframe at content
  *     render (EpubJsEngine content hook, the C7 SR contract),
  *   - aria-hidden-focus: note markers ride the ReaderOverlay
  *     'interactive' contract (focusable buttons never inside an
  *     aria-hidden container),
  *   - region (landmark): the reader body is a real <main> landmark
- *     (ReaderShell); the header is the <header> banner; since Phase 8 the
- *     pill mount (ReaderControlBar) is a named region landmark — 'region'
- *     asserts as fixed on the reader surface.
+ *     (ReaderShell); the header is the <header> banner; the pill mount
+ *     (ReaderControlBar) is a named region landmark — 'region' asserts as
+ *     fixed on the reader surface.
  * A regression in these named rules fails the nightly lane outright.
  *
  * Runs in the existing Docker flow (nightly lane), e.g.:
@@ -44,7 +43,7 @@ async function scanSurface(
   surface: string,
   opts: {
     /**
-     * Rules whose P0-baseline findings were fixed by an owning workstream:
+     * Rules whose baseline findings were fixed by an owning workstream:
      * ANY violation of these (regardless of impact, regardless of
      * A11Y_ENFORCE) fails the scan — the per-rule ratchet that burns the
      * baseline down without flipping the whole gate at once.
@@ -56,9 +55,8 @@ async function scanSurface(
   // iframes:false skips frame-content rules. epub.js creates/destroys
   // sandboxed blob iframes during section load and axe's injection hangs or
   // throws on them — and "how AT reads the book content" is an explicitly
-  // open contract owned by the ReaderShell phase (gap-accessibility report,
-  // debt #5). The <iframe> ELEMENT itself is still audited by the
-  // parent-document scan (e.g. frame-title).
+  // open contract (gap-accessibility report, debt #5). The <iframe> ELEMENT
+  // itself is still audited by the parent-document scan (e.g. frame-title).
   const results = await new AxeBuilder({ page })
     .withTags(RULE_TAGS)
     .options({ iframes: false })
@@ -137,7 +135,7 @@ test('a11y scan: reader surface', { tag: '@a11y' }, async ({ page }, testInfo) =
     .toBe(true);
 
   // Scan the SETTLED reader surface, not a mid-mount frame. The reader route is
-  // React.lazy (epubjs is a lazy chunk, Phase 8); under full-suite CPU load the
+  // React.lazy (epubjs is a lazy chunk); under full-suite CPU load the
   // Suspense fallback / first paint briefly leaves one node outside a landmark
   // before the chrome finishes mounting. Wait for the lazy chunk + network to go
   // idle and the reader header (a banner landmark) to be present. 'region' stays
@@ -146,11 +144,9 @@ test('a11y scan: reader surface', { tag: '@a11y' }, async ({ page }, testInfo) =
   await page.waitForLoadState('networkidle');
   await expect(page.getByTestId('reader-header')).toBeVisible();
 
-  // Phase 6 fixed findings (see header): titled iframe + interactive
-  // note-marker overlay. 'region' joined with Phase 8: the CompassPill
-  // dissolved (§C) and the pill mount is a named region landmark
-  // (ReaderControlBar) — every reader-surface node now lives inside a
-  // landmark.
+  // Fixed findings (see header): titled iframe + interactive note-marker
+  // overlay + 'region' (the pill mount is a named region landmark,
+  // ReaderControlBar — every reader-surface node lives inside a landmark).
   await scanSurface(page, testInfo, 'reader', {
     expectAbsentRules: ['frame-title', 'aria-hidden-focus', 'region'],
   });

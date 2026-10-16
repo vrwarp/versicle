@@ -1,9 +1,5 @@
 /**
- * DriveClient (Phase 7 §G) — the Drive v3 REST client at its final address.
- *
- * Replaces src/lib/drive/DriveService (a thin deprecated façade until its
- * P9 deletion — consumers now call this client directly). Changes vs the
- * legacy client:
+ * DriveClient — the Drive v3 REST client.
  *
  *  - All HTTP through `NetworkGateway.egress('drive', …)` (C9 boundary).
  *  - Typed errors: DriveApiError{status, reason} instead of message-prose
@@ -11,12 +7,11 @@
  *  - Token acquisition via GoogleAuthClient with an explicit
  *    interactive/silent split per call: background callers (scanner boot
  *    policy) stay silent; user-gesture callers may escalate to connect().
- *  - 401 → invalidate cached token, re-acquire, retry ONCE (legacy policy);
- *    NEW: 403-with-insufficient-scope retries the same way (GG-1's failure
- *    mode was an opaque non-retried 403).
- *  - NO force-disconnect on errors — the legacy manager cleared persisted
- *    connection state on ANY token failure (GG-2); this client never touches
- *    persisted state.
+ *  - 401 → invalidate cached token, re-acquire, retry ONCE; a 403 with
+ *    insufficient scope retries the same way (GG-1's failure mode was an
+ *    opaque non-retried 403).
+ *  - NO force-disconnect on errors (GG-2): this client never touches
+ *    persisted connection state.
  *  - Drive query values are escaped (GG-11).
  */
 import { egress, type EgressFn } from '@kernel/net';
@@ -95,7 +90,7 @@ export class DriveClient {
   /**
    * Authenticated fetch with two layered retry policies:
    *  - 401 (and 403 insufficient scope) invalidates the cached token,
-   *    re-acquires, and retries ONCE (unchanged legacy policy).
+   *    re-acquires, and retries ONCE.
    *  - server 429 / 403 rate-limit (rateLimitExceeded / userRateLimitExceeded)
    *    backs off with truncated exponential backoff and retries, up to the
    *    configured budget. This is the client half of the quota-safety design:

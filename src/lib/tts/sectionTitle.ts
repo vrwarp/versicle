@@ -1,6 +1,5 @@
 /**
- * Section display-title resolution for TTS (Phase 5c; extracted from
- * AudioContentPipeline.loadSection's priority chain). Reads only through the
+ * Section display-title resolution for TTS. Reads only through the
  * narrow ports it is handed; the generic `Section N` fallback lives in the
  * pure SectionQueueBuilder.
  *

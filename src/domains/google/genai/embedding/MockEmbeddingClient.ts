@@ -1,7 +1,7 @@
 /**
- * MockEmbeddingClient (Increment C §1) — a deterministic fixture
- * EmbeddingClient for the suite + the indexer test. Lives OUTSIDE the
- * production import graph (boundary rule 9, mirrors MockGenAIClient.ts:25):
+ * MockEmbeddingClient — a deterministic fixture EmbeddingClient for the
+ * suite + the indexer test. Lives OUTSIDE the production import graph
+ * (boundary rule 9, mirrors MockGenAIClient.ts):
  * reachable only from test files (and a future installTestApi seam).
  *
  * Vectors are hash-seeded unit vectors keyed by (text, profile), so the same

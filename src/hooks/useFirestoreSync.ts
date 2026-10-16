@@ -1,13 +1,10 @@
 /**
- * React hook for Firebase/Firestore sync integration (relocated from
- * src/lib/sync/hooks/ when FirestoreSyncManager was decomposed into the
- * sync orchestrator — P4-3; src/hooks is the established hook home).
+ * React hook for Firebase/Firestore sync integration.
  *
- * Since the P4 SyncEvent bus landed, this hook no longer mirrors transport
- * state into useSyncStore — `src/app/sync/wireSyncEvents.ts` is the single
- * subscriber that owns those writes (including `lastSyncTime`, which is
- * driven by `flushed` events instead of the old connected-transition stamp
- * this hook used to fake it with). What remains:
+ * This hook does not mirror transport state into useSyncStore —
+ * `src/app/sync/wireSyncEvents.ts` is the single SyncEvent-bus subscriber
+ * that owns those writes (including `lastSyncTime`, which is driven by
+ * `flushed` events). What this hook provides:
  *
  *  - the settings-driven (re)start effect: boot's `syncInit` task handles
  *    the configured-at-boot case, but enabling/configuring Firebase from
@@ -46,7 +43,7 @@ export const useFirestoreSync = () => {
 
         // Idempotent for the already-started boot case; picks up
         // settings-time enablement without a reload. The await covers the
-        // P8 first-use composition (firebase chunk loads on enablement).
+        // first-use composition (the firebase chunk loads on enablement).
         void getSyncOrchestratorAsync().then((orchestrator) => orchestrator.start());
     }, [firebaseEnabled, isConfigured]);
 

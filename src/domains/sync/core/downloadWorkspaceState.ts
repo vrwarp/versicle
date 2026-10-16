@@ -1,17 +1,16 @@
 /**
  * `downloadWorkspaceState` — THE one temp-doc hydration utility
- * (phase4-sync-strangler.md §D2): replaces the two copy-pasted
- * temp-provider dances in FirestoreSyncManager (`performCleanSync` and
- * `switchWorkspace`, with their `(tempDoc as any)._tempProvider` smuggling).
- * DataRecoveryView's third copy is retargeted in P4-7.
+ * (phase4-sync-strangler.md §D2): hydrates a throwaway Y.Doc from the
+ * workspace's replicated document and returns its full state. Shared by
+ * clean-sync, the workspace switch and the sync diagnostics remote check.
  *
- * Semantics preserved from both originals (pinned by the P4-0
+ * Semantics (pinned by downloadWorkspaceState.test.ts and the orchestrator
  * characterization suite):
  *  - resolves with the temp doc's full state once the initial sync
  *    handshake lands;
  *  - the TIMEOUT resolves with whatever synced so far (an unreachable or
  *    empty remote yields an empty update — callers treat that as "remote is
- *    empty", the long-standing behavior);
+ *    empty") unless `onTimeout: 'reject'`;
  *  - a synchronous connect failure either resolves with the current state
  *    (clean-sync behavior) or rejects (switch behavior) per
  *    `onAttachError`;
@@ -31,13 +30,13 @@ export interface DownloadWorkspaceStateOptions {
   timeoutMs?: number;
   /**
    * Synchronous connect-failure policy: 'resolve' returns the (likely
-   * empty) current state — the legacy clean-sync behavior; 'reject'
-   * propagates — the legacy switch behavior. Default 'reject'.
+   * empty) current state — the clean-sync behavior; 'reject' propagates —
+   * the workspace-switch behavior. Default 'reject'.
    */
   onAttachError?: 'resolve' | 'reject';
   /**
    * Handshake-timeout policy: 'resolve' returns whatever synced so far (the
-   * legacy "unreachable means empty" behavior); 'reject' fails with a
+   * "unreachable means empty" behavior); 'reject' fails with a
    * timeout error instead — for callers that must not mistake an
    * unreachable remote for an empty one (the sync diagnostics remote
    * check). Default 'resolve'.

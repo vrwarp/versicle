@@ -39,8 +39,7 @@ test("smart toc success", async ({ page }) => {
   // Wait for library to load
   await expect(page.getByTestId("library-view")).toBeVisible({ timeout: 10000 });
 
-  // Install the GenAI mock through the typed test API (Phase 7: the
-  // localStorage.mockGenAIResponse production seam is gone). Runtime-settable,
+  // Install the GenAI mock through the typed test API. Runtime-settable,
   // so post-reload installation is the supported timing.
   await page.evaluate((mockData) => {
     window.__versicleTest!.genai.setMock({ response: mockData });
@@ -197,7 +196,7 @@ test("smart toc failure", async ({ page }) => {
     await expect(page.getByTestId("reader-view")).toBeVisible({ timeout: 20000 });
   }
 
-  // Phase 7: simulated service failure via the typed mock seam.
+  // Simulated service failure via the typed mock seam.
   await page.evaluate(() => {
     window.__versicleTest!.genai.setMock({ error: "Simulated GenAI Error" });
   });

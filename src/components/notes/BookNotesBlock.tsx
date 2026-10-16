@@ -17,8 +17,9 @@ interface BookNotesBlockProps {
 
 export const BookNotesBlock: React.FC<BookNotesBlockProps> = ({ group, onNavigate, onOpenBook }) => {
     const book = useBook(group.bookId);
-    // Scoped selector (jank fix): one block per book in the Notes view — the
-    // bare call re-rendered every block on any annotation-store change.
+    // Scoped selector: one block per book in the Notes view — a bare
+    // useAnnotationStore() call would re-render every block on any
+    // annotation-store change.
     const update = useAnnotationStore(state => state.update);
     const [isReassignDialogOpen, setIsReassignDialogOpen] = React.useState(false);
 

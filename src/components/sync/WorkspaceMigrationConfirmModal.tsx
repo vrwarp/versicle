@@ -41,8 +41,8 @@ export const WorkspaceMigrationConfirmModal: React.FC<WorkspaceMigrationConfirmM
             }
 
             // Drop the staging database — the switch is finalized, so the
-            // crash-resume buffer (§D4) is no longer needed. Best-effort:
-            // the next stage write clears junk anyway.
+            // crash-resume buffer is no longer needed. Best-effort: the next
+            // stage write clears junk anyway.
             try {
                 await clearStagedState();
             } catch (e) {

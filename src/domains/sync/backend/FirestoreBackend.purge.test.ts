@@ -1,11 +1,11 @@
 /**
- * FirestoreBackend honest-delete purge mechanics (P4-6) — the unit half of
- * the purge acceptance: the emulator contract case proves the Firestore
- * residual sweep under the REAL rules (syncBackendContract.emulator.test.ts,
- * capabilities.purge), but the Storage-blob half needs a Storage emulator
- * the lane doesn't run — so the listAll recursion, the ≤500 batching, the
- * exact prefix scoping (risk R8), and the storage-failure tolerance are
- * pinned here over mocked SDK modules.
+ * FirestoreBackend honest-delete purge mechanics — the unit half of the purge
+ * acceptance: the emulator contract case proves the Firestore residual sweep
+ * under the REAL rules (syncBackendContract.emulator.test.ts,
+ * capabilities.purge), but the Storage-blob half needs a Storage emulator the
+ * lane doesn't run — so the listAll recursion, the ≤500 batching, the exact
+ * prefix scoping, and the storage-failure tolerance are pinned here over mocked
+ * SDK modules.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -162,7 +162,7 @@ describe('FirestoreBackend.purgeWorkspace (P4-6 honest delete)', () => {
     seedDocs(`${root}/history`, 2);
     seedDocs(`${root}/maintenance`, 1);
     seedDocs(`${root}/metadata`, 1);
-    // A sibling workspace's residuals must be untouched (risk R8).
+    // A sibling workspace's residuals must be untouched (exact prefix scoping).
     seedDocs(`users/${UID}/versicle/ws_sibling/updates`, 5);
 
     const report = await new FirestoreBackend(UID).purgeWorkspace(WS);
@@ -195,7 +195,7 @@ describe('FirestoreBackend.purgeWorkspace (P4-6 honest delete)', () => {
       prefixes: [],
     });
     // Sibling blobs exist but are never listed/deleted (scoping is by the
-    // ref the backend constructs — assert the deleted set, R8).
+    // ref the backend constructs — assert the deleted set).
     h.storageTree.set(`users/${UID}/versicle/ws_sibling`, {
       items: ['snapshot_v9.bin'],
       prefixes: [],

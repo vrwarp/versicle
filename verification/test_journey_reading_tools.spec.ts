@@ -36,7 +36,6 @@ test("journey reading tools", async ({ page }) => {
   await navigateToChapter(page);
   frame = await waitForReaderFrame(page);
 
-  // Helper script to select text
   // Helper to select text inside the iframe
   const selectText = async (skipCount: number): Promise<boolean> => {
     return await frame.locator("body").evaluate((bodyEl, skip) => {
@@ -161,7 +160,7 @@ test("journey reading tools", async ({ page }) => {
 
   await captureScreenshot(page, "tools_3_sidebar_check");
 
-  // 5. Verify Sidebar Closing via Back Button (New Feature)
+  // 5. Verify Sidebar Closing via Back Button
   console.log("Verifying Sidebar Back Navigation...");
   // Annotations sidebar is currently open. Pressing back should close it.
   await page.goBack();

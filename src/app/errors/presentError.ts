@@ -1,9 +1,9 @@
 /**
  * presentError — the ONE error→user-message mapper (C10; type-safety-errors
  * convention: UI maps `error.code`, never relays raw `message` prose from
- * services). en-only per docs/adr/0001-i18n-strategy.md; when the message
- * catalog lands (P8 choke points), this switch becomes a catalog lookup
- * keyed `errors.<code>`.
+ * services). en-only per docs/adr/0001-i18n-strategy.md; the typed catalog in
+ * src/kernel/locale/messages.ts keys `errors.<code>` for every code, but this
+ * table does not consult it yet.
  */
 import { AppError } from '~types/errors';
 

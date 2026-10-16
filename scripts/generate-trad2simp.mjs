@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 /**
- * trad→simp single-character table generator (Phase 6 §7.5/§7.6,
- * plan/overhaul/prep/phase6-reader-engine.md PR-12/PR-13).
+ * trad→simp single-character table generator.
  *
  * Emits the COMMITTED table behind `canonicalizeChar`
  * (src/domains/chinese/vocabulary/trad2simp.json + .meta.json sidecar).
  *
- * RECONCILIATION vs the prep doc (§7.6 wanted the table emitted from the
- * CC-CEDICT run): the table is derived from opencc-js's bundled
- * dictionaries instead, deliberately —
+ * The table is derived from opencc-js's bundled dictionaries rather than
+ * from the CC-CEDICT compile, deliberately —
  *  1. the DISPLAY path converts cn→tw through opencc-js
  *     (TraditionalConverter), so vocabulary suppression only round-trips if
  *     canonicalization inverts the SAME mapping; CC-CEDICT's trad/simp

@@ -1,13 +1,10 @@
 /**
  * Pins the §D3 presentation contract: wireSyncEvents is the single
  * subscriber mapping typed SyncEvents → useSyncStore writes + toast keys
- * (resolved copy asserted verbatim — Phase 8 §D keyed the choke point).
- * In particular it pins the FLUSH-DRIVEN `lastSyncTime` semantics (P4-3
- * exit criterion): a `flushed` event stamps the store with the save
- * timestamp — the pulse tooltip reports actual sync activity, not
- * connection time. The transitional connected-transition floor died with
- * the y-cinder `saved` fork delta (P9; packages/y-cinder/PROVENANCE.md
- * surgery 1) — `flushed` is now the ONLY writer, pinned below.
+ * (resolved copy asserted verbatim). In particular it pins the FLUSH-DRIVEN
+ * `lastSyncTime` semantics: a `flushed` event stamps the store with the save
+ * timestamp — the pulse tooltip reports actual sync activity, not connection
+ * time. `flushed` is the ONLY writer, pinned below.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getSyncEventBus } from '@domains/sync/events';
@@ -15,8 +12,8 @@ import { formatMessage, resolveMessage } from '@kernel/locale/messages';
 import { wireSyncEvents } from './wireSyncEvents';
 import { useSyncStore } from '@store/useSyncStore';
 
-// The rules-lockout copy now lives in the catalog (Phase 8 §D); resolving
-// it here keeps this suite pinning the USER-VISIBLE string, not the key.
+// The rules-lockout copy lives in the catalog; resolving it here keeps this
+// suite pinning the USER-VISIBLE string, not the key.
 const RULES_OUT_OF_DATE_MESSAGE = formatMessage('sync.rulesOutOfDate');
 
 // Module-mock the toast store: spying the live zustand state object is
@@ -31,9 +28,9 @@ vi.mock('@store/useToastStore', () => ({
 
 /**
  * Assert a toast whose RESOLVED display text matches — wireSyncEvents
- * passes catalog keys/`{key, params}` since Phase 8 §D, and this suite
- * keeps pinning the rendered copy verbatim (the §D3 presentation
- * contract is about what the user reads).
+ * passes catalog keys/`{key, params}`, and this suite pins the rendered
+ * copy verbatim (the §D3 presentation contract is about what the user
+ * reads).
  */
 function expectToastShown(message: string, type: string, duration?: number) {
   const matched = showToast.mock.calls.some(
@@ -198,11 +195,11 @@ describe('wireSyncEvents (single SyncEvent subscriber)', () => {
   });
   /*
    * Pluralization is hand-rolled (the catalog carries no ICU plural
-   * support), so the singular/plural boundary is real logic and was
-   * entirely unasserted — mutation testing reported both ternaries and
-   * both comparison operators as surviving. A purge report that reads
-   * "1 documents" is the visible symptom; the invisible one is the
-   * comparison silently inverting.
+   * support), so the singular/plural boundary is real logic that needs
+   * asserting — both ternaries and both comparison operators are
+   * mutation targets. A purge report that reads "1 documents" is the
+   * visible symptom; the invisible one is the comparison silently
+   * inverting.
    */
   describe('workspace-purged pluralization', () => {
     const emitPurge = (docsDeleted: number, blobsDeleted: number) => {

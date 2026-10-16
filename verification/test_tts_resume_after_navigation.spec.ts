@@ -74,7 +74,7 @@ test("tts resume after leaving book", async ({ page, baseURL }) => {
   await page.getByTestId("reader-back-button").click();
   await expect(page).toHaveURL(new RegExp(finalBaseURL.replace(/\/$/, "") + "/?$"), { timeout: 10000 });
 
-  // Flush debounced persistence deterministically (replaces a 1000ms sleep)
+  // Flush debounced persistence deterministically
   await waitForPersistedWrites(page);
 
   // Re-open the book
@@ -96,7 +96,7 @@ test("tts resume after leaving book", async ({ page, baseURL }) => {
   // position. The queue DOM is just a view of it: on WebKit the audio Sheet's open
   // animation can momentarily leave the queue items `visibility:hidden`, which is a
   // rendering transient unrelated to resume correctness. Gating on DOM *visibility* here
-  // made the test flaky; gating on the store (and on the items being *attached*) is
+  // is flaky; gating on the store (and on the items being *attached*) is
   // deterministic.
   const queueItems = page.locator("[data-testid^='tts-queue-item-']");
   await expect(queueItems.first()).toBeAttached({ timeout: 10000 });
@@ -155,7 +155,7 @@ test("tts position persists across reload", async ({ page }) => {
   const item5Text = await page.getByTestId("tts-queue-item-5").innerText();
   console.log(`Item 5 text before reload: ${item5Text.substring(0, 50)}...`);
 
-  // Let the debounced position writes (Yjs currentQueueIndex + DBService playback queue) reach
+  // Let the debounced position writes (Yjs currentQueueIndex + playbackCache session state) reach
   // disk before the hard reload; otherwise the reload tears the page down with the writes still
   // buffered and the restored position is lost.
   await waitForPersistedWrites(page);
@@ -191,10 +191,10 @@ test("tts position persists across reload", async ({ page }) => {
  *
  * Leaving the book unmounts ReaderShell (and with it `useTTS`) but deliberately
  * does NOT stop the engine — audio keeps going while the user browses. Coming
- * back re-mounts `useTTS`, whose mount effect calls `loadVoices()`. That used to
- * re-issue `setProviderById(<the id already active>)`, and the engine's provider
- * swap begins with an unconditional `stopInternal()` — so re-entering the book
- * silently killed the audio.
+ * back re-mounts `useTTS`, whose mount effect calls `loadVoices()`. Re-issuing
+ * `setProviderById(<the id already active>)` there would silently kill the audio,
+ * because the engine's provider swap begins with an unconditional `stopInternal()`;
+ * `loadVoices` therefore skips the swap when the provider is already applied.
  */
 test("tts keeps playing when returning to the book from the library", async ({ page, baseURL }) => {
   const finalBaseURL = baseURL || "http://localhost:5173";

@@ -15,7 +15,7 @@ test("verify progress bar", async ({ page }) => {
   await navigateToChapter(page, 'toc-item-6');
 
   // Wait for rendition and locations to be ready
-  // Engine-port test handle (Phase 6): typed predicates replaced window.rendition.
+  // Engine-port test handle: typed predicates on the reader engine.
   await page.waitForFunction("window.__versicleTest?.reader?.currentCfi()").catch(() => {});
   await page.waitForFunction(
     "(window.__versicleTest?.reader?.locationsTotal() ?? 0) > 0",
@@ -37,8 +37,7 @@ test("verify progress bar", async ({ page }) => {
 
   // Commit the progress before leaving the reader: it sits in the reading
   // session's 5s commit window, and the page.goto fallback below unloads the
-  // page instead of unmounting the reader (the pauses this journey used to
-  // take between turns outlasted that window).
+  // page instead of unmounting the reader.
   await waitForPersistedWrites(page);
 
   // Go back to library

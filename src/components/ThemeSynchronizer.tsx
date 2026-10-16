@@ -19,10 +19,8 @@ export const ThemeSynchronizer = () => {
     } else if (currentTheme === 'sepia') {
       root.classList.add('sepia');
     } else if (currentTheme === 'custom') {
-      // For custom theme, we might need a way to inject variables or class
-      // Current implementation of 'custom' in ReaderView just changes epub colors.
-      // For UI, we might fallback to light or dark depending on brightness?
-      // Let's assume light for now or handle 'custom' class if we define it.
+      // 'custom' only recolors the EPUB content (see epubTheming.ts in the
+      // reader engine); the app chrome falls back to the light theme.
       root.classList.add('light');
     }
   }, [currentTheme]);

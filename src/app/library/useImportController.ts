@@ -1,13 +1,13 @@
 /**
- * The shared import/library controller (Phase 7 §D / PR-L5): EVERY
- * non-reader entry point — FileUploader, LibraryView input/drop, settings,
- * EmptyLibrary, the Drive dialog adapter, dialogs — drives workflows through
- * this surface; `useLibraryStore` is a read-only projection for them.
+ * The shared import/library controller: EVERY non-reader entry point —
+ * FileUploader, LibraryView input/drop, settings, EmptyLibrary, the Drive
+ * dialog adapter, dialogs — drives workflows through this surface;
+ * `useLibraryStore` is a read-only projection for them.
  *
- * Compatibility contract: `importFile` THROWS `DuplicateBookError` for the
- * 'ask' outcome — the pre-P7 `addBook` signal every Replace-dialog flow is
- * built around — and failed jobs rethrow their typed error after the
- * orchestrator has already projected the user-facing message.
+ * Contract: `importFile` THROWS `DuplicateBookError` for the 'ask' outcome —
+ * the signal every Replace-dialog flow is built around — and failed jobs
+ * rethrow their typed error after the orchestrator has already projected the
+ * user-facing message.
  */
 import { DuplicateBookError } from '~types/errors';
 import type { BatchImportSummary, ImportJobResult, RestoreOptions } from '@domains/library';

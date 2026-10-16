@@ -1,9 +1,7 @@
 /**
- * The ONE Bible-lexicon preference resolution (Phase 5c;
- * phase5-tts-strangler.md §5c.3): per-book preference wins; 'default' defers
- * to the global setting. Used by the queue-building path (abbreviation
- * injection) and the lexicon assembler — previously duplicated in
- * AudioContentPipeline and LexiconService.
+ * The ONE Bible-lexicon preference resolution: per-book preference wins;
+ * 'default' defers to the global setting. Used by the queue-building path
+ * (abbreviation injection) and the system-lexicon provider.
  */
 export type BiblePreference = 'on' | 'off' | 'default';
 

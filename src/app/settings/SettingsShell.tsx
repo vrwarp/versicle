@@ -1,16 +1,15 @@
 /**
- * SettingsShell (Phase 8 §B) — the registry-driven replacement for the
- * 738-line GlobalSettingsDialog god file (deleted with this shell).
+ * SettingsShell — the registry-driven settings overlay: tabs and panels are
+ * rendered from the descriptor table in ./registry.ts.
  *
  * - `/settings/:tab` is the single source of the active tab: deep links
  *   cold-load onto the right panel (over the library), tab switches are
  *   `replace` navigations so ONE back gesture closes the whole overlay.
- * - Real tablist semantics via Radix Tabs `orientation="vertical"` (the
- *   fake-button sidebar was a11y item 7).
+ * - Real tablist semantics via Radix Tabs `orientation="vertical"`.
  * - Panels are self-contained modules (the DiagnosticsTab model), mounted
  *   lazily — ONLY the active panel loads/mounts, each behind its own
  *   ErrorBoundary + Suspense.
- * - Back-button safety: closing IS history navigation, so the existing
+ * - Back-button safety: closing IS history navigation, so the
  *   BackNavigationManager (useBackNavigationStore keeper) needs no
  *   settings-specific guard — hardware back with no higher-priority
  *   handler pops the URL and the overlay closes; overlays INSIDE panels
@@ -86,9 +85,9 @@ export const SettingsShell: React.FC = () => {
   const selectTab = useCallback(
     (value: string) => {
       // `replace`: tab hops are one overlay session — back closes settings,
-      // it does not replay the tab tour (matches the old dialog's local
-      // tab state). Keep the current base so a reader-nested overlay stays
-      // nested (preserving the book context) instead of jumping to /settings.
+      // it does not replay the tab tour. Keep the current base so a
+      // reader-nested overlay stays nested (preserving the book context)
+      // instead of jumping to /settings.
       navigate(`${settingsBase}/${value as SettingsTabId}`, { replace: true });
     },
     [navigate, settingsBase],
@@ -141,7 +140,7 @@ export const SettingsShell: React.FC = () => {
           orientation="vertical"
           className="flex flex-col sm:flex-row w-full h-full min-h-0"
         >
-          {/* Sidebar — a REAL tablist (a11y item 7) */}
+          {/* Sidebar — a REAL tablist */}
           <TabsList
             aria-label="Settings sections"
             className="w-full sm:w-1/4 h-auto bg-muted/30 border-b sm:border-r sm:border-b-0 p-2 sm:p-4 flex flex-row sm:flex-col gap-2 overflow-x-auto sm:overflow-visible items-center sm:items-stretch shrink-0 justify-start rounded-none text-foreground"

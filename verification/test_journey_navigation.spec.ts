@@ -1,11 +1,10 @@
 /**
- * Phase 8 §A/§B deep-link navigation journey (prep PR-4 exit criterion):
+ * Deep-link navigation journey:
  *  - /settings/diagnostics cold-load opens the settings overlay on the
  *    Diagnostics panel OVER the library;
  *  - tab activation rewrites the URL (replace) and browser back closes the
  *    whole overlay in ONE step;
- *  - /notes is URL-addressable and the header context Select navigates
- *    (the synced `activeContext` preference died in §J).
+ *  - /notes is URL-addressable and the header context Select navigates.
  */
 import { test, expect } from './utils';
 import * as utils from './utils';
@@ -18,7 +17,7 @@ test('Journey Navigation: /settings and /notes deep links', async ({ page }) => 
   // debounced (~200ms y-idb) and the very next step is a full-document
   // `page.goto('/settings/diagnostics')` that reloads the app. Without flushing,
   // that first navigation tears the page down with the seeded book still
-  // buffered, so it never rehydrates and the final card assertion (line 61)
+  // buffered, so it never rehydrates and the final card assertion below
   // can't be satisfied. Drain the debounced write to disk first (same pattern as
   // the sibling library / library_view / reprocessing reload tests).
   await utils.waitForPersistedWrites(page);

@@ -1,5 +1,5 @@
 /**
- * domains/library — public surface (Phase 7 §A–§E).
+ * domains/library — public surface.
  *
  * Composition root: src/app/library/createLibrary.ts (wires the ports to
  * the zustand stores and constructs the singletons).

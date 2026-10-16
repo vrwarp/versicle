@@ -12,12 +12,12 @@ import {
 import { getDeviceId } from '@lib/device-id';
 
 /**
- * Registry completeness + docs-generation gate (master plan §2 "three
- * explicit store tiers, declared in one registry"; phase2-fork-surgery.md
- * §2.5). Every store module under src/store/ must be declared, the runtime
- * roster must agree with the declared defs, persist keys must match the
- * actual store configuration, and src/store/README.md must be exactly the
- * registry rendering (regenerate with REGEN_STORE_DOCS=1).
+ * Registry completeness + docs-generation gate (master plan §2: one registry
+ * declaring every store as synced | local-persisted | ephemeral;
+ * phase2-fork-surgery.md §2.5). Every store module under src/store/ must be
+ * declared, the runtime roster must agree with the declared defs, persist
+ * keys must match the actual store configuration, and src/store/README.md
+ * must be exactly the registry rendering (regenerate with REGEN_STORE_DOCS=1).
  */
 
 const storeDir = join(process.cwd(), 'src', 'store');

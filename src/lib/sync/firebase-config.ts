@@ -17,12 +17,11 @@ import {
 import type { Firestore } from 'firebase/firestore';
 import { getSyncEventBus } from '@domains/sync/events';
 import { createLogger } from '../logger';
-// The SDK-free presence half lives in firebase-config-presence.ts (Phase 8
-// §A: boot-path callers check "is a config stored?" without pulling the
-// firebase SDK into the entry chunk). Re-exported here so SDK-side
-// consumers keep one import — including the store edge: this module's
-// only store dependency now routes through the presence module (the
-// lib-not-to-store ratchet stays at its pre-split count).
+// The SDK-free presence half lives in firebase-config-presence.ts (boot-path
+// callers check "is a config stored?" without pulling the firebase SDK into
+// the entry chunk). Re-exported here so SDK-side consumers keep one import —
+// including the store edge: this module's only store dependency routes
+// through the presence module.
 import { getFirebaseConfig } from './firebase-config-presence';
 import type { FirebaseConfigSettings } from './firebase-config-presence';
 export { isFirebaseConfigured } from './firebase-config-presence';

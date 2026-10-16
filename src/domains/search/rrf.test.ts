@@ -1,5 +1,5 @@
 /**
- * fuseRrf suite (Increment D §3): reciprocal-rank fusion ordering, dedup on
+ * fuseRrf suite: reciprocal-rank fusion ordering, dedup on
  * href+charOffset, and truncated propagation. Pure — no engine, no ports.
  */
 import { describe, it, expect } from 'vitest';
@@ -68,8 +68,8 @@ describe('fuseRrf', () => {
 
   /**
    * The semantic side contributes up to 50 chunk rows PER SECTION, so a
-   * 30-section book fused ~1500 hits into an uncapped list the search panel
-   * rendered one `<li>` at a time. The fused page is now cut after the score
+   * 30-section book would fuse ~1500 hits into an uncapped list the search
+   * panel renders one `<li>` at a time. The fused page is cut after the score
    * sort, and says so.
    */
   describe('regression: fused results are capped', () => {

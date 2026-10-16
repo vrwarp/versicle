@@ -7,9 +7,9 @@ import { canonicalizeChar } from '@domains/chinese/vocabulary/canonicalize';
 import type { PinyinPosition, PinyinPositionsSource } from '@domains/chinese/types';
 
 /**
- * Pinyin position entry — canonical definition lives with the chinese
- * feature module (Phase 6 §7 types.ts); re-exported here for the legacy
- * import path.
+ * Pinyin position entry — the canonical definition lives with the chinese
+ * domain (`@domains/chinese/types`); re-exported here so overlay consumers
+ * can import it alongside the component.
  */
 export type { PinyinPosition };
 

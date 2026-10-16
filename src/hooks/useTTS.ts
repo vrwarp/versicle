@@ -20,10 +20,9 @@ export const useTTS = () => {
     loadVoices();
   }, [loadVoices]);
 
-  // NOTE (5b-PR4): the pause→play "Dragnet" invalidation on section change is
-  // INTERNAL to the engine now (DragnetGesture subscribes to the engine's own
-  // section-index changes) — the clearPauseGesture effect that lived here is
-  // gone, together with the engine API method.
+  // NOTE: the pause→play "Dragnet" invalidation on section change is
+  // INTERNAL to the engine (DragnetGesture subscribes to the engine's own
+  // section-index changes), so no effect is needed here.
 
   // Main Effect: Sync Audio Service with Visual Location (when idle)
   useEffect(() => {

@@ -45,7 +45,7 @@ const SyncIcon: React.FC<{ status: FirestoreSyncStatus }> = ({ status }) => {
 export const SyncPulseIndicator: React.FC<SyncPulseIndicatorProps> = ({
     className
 }) => {
-    // SyncStore does not expose 'error', rely on status === 'error'
+    // firestoreStatus may be 'error' (see FirestoreSyncStatus)
     const { firestoreStatus, lastSyncTime } = useSyncStore();
 
     // Map store status (with firestore prefix) to local concept

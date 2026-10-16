@@ -1,13 +1,12 @@
 /**
- * locations — the CFI↔percentage registry cache, extracted verbatim from
- * useEpubReader's load generator (Phase 6 §5 table, prep doc PR-4).
+ * locations — the CFI↔percentage registry cache used by useEpubReader's
+ * load pipeline.
  *
  * Load-or-generate semantics: a saved registry (IDB, per book) loads
  * synchronously; otherwise epub.js generates one in the background
- * (1000-char granularity) and persists it. D7 hardening is preserved from
- * the engine-port commit: the generate promise re-checks `isCurrent()`
- * before every step (the legacy code wrote after destroy) and failures log
- * loudly instead of vanishing into an unhandled rejection.
+ * (1000-char granularity) and persists it. The generate promise re-checks
+ * `isCurrent()` after each await so nothing is written after destroy, and
+ * failures log loudly instead of vanishing into an unhandled rejection.
  */
 import type { Book } from 'epubjs';
 import { bookContent } from '@data/repos/bookContent';
@@ -44,9 +43,8 @@ export async function initializeLocations(deps: InitLocationsDeps): Promise<void
     return;
   }
 
-  // Generate in background. D7 (prep/phase6-reader-engine.md §2b): the
-  // generate promise used to write after destroy and had no rejection
-  // handler — guard on the live book + catch loudly.
+  // Generate in background: guard every step on the live book (no write
+  // after destroy) and catch loudly (no unhandled rejection).
   //
   // epub.js sleeps `pause` ms (default 100) between sections during
   // generation — on a long book that alone is many seconds of sleep before

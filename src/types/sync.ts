@@ -2,8 +2,6 @@
  * Sync domain types: the serialized manifest wire shape, local recovery
  * checkpoints, and the sync log row.
  *
- * Extracted from types/db.ts in the Phase 1a type split
- * (plan/overhaul/README.md §Roadmap P1; layering-deps.md LD-1).
  * Layering rule: src/types/** imports nothing internal except other
  * src/types modules, and that graph stays acyclic.
  */
@@ -121,7 +119,8 @@ export interface SyncLogEntry {
  * useSyncStore — which persists/serves these values — does not need a
  * type edge into the sync service modules (such an edge dragged the
  * whole sync service web, and through it several stores, into the TTS
- * worker's type-level import closure; see layering-deps.md LD-7).
+ * worker's type-level import closure; see
+ * plan/overhaul/analysis/layering-deps.md LD-7).
  * Consumers (the sync orchestrator, UI status components) import from
  * here directly.
  */

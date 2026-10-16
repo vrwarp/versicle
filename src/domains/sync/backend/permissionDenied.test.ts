@@ -4,8 +4,7 @@
  * This predicate decides whether the user is told their deployed Firebase
  * security rules are out of date. A false negative leaves them staring at
  * sync that silently does nothing; a false positive tells them to redeploy
- * rules over an unrelated network blip. Mutation testing found every one
- * of its branches unverified — the module had no test of its own.
+ * rules over an unrelated network blip. Every branch of it is pinned here.
  */
 import { describe, expect, it } from 'vitest';
 import { isPermissionDeniedEvent } from './permissionDenied';

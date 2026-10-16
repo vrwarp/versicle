@@ -1,11 +1,10 @@
 /**
- * Reading-list ↔ library fuzzy mapping (Phase 7 §H feature module). Prompt
- * ported verbatim from the legacy GenAIService.mapReadingListToLibrary.
+ * Reading-list ↔ library fuzzy mapping (GenAI feature module).
  *
- * Membership clamp (GG-5): this generalizes the SmartLinkDialog keeper —
- * every echoed pair must reference a real input entry AND a real input
- * book; hallucinated ids are dropped here so EVERY consumer inherits the
- * defense (the dialog's own filter remains as belt-and-braces).
+ * Membership clamp (GG-5): every echoed pair must reference a real input
+ * entry AND a real input book; hallucinated ids are dropped here so EVERY
+ * consumer inherits the defense (SmartLinkDialog's own filter remains as
+ * belt-and-braces).
  */
 import { z } from 'zod';
 import { GenAIInvalidResponseError } from '../errors';
@@ -80,7 +79,7 @@ export function validateLibraryMappings(
       { issues: parsed.error.issues.slice(0, 5).map((i) => i.message) },
     );
   }
-  // Legacy tolerance: a missing `mappings` array means "no matches".
+  // A missing `mappings` array means "no matches".
   return (parsed.data.mappings ?? []).filter(
     (m) => entryIds.has(m.readingListFilename) && bookIds.has(m.libraryBookId),
   );

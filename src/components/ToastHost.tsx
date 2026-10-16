@@ -3,15 +3,14 @@ import { useToastStore } from '@store/useToastStore';
 import { Toast } from './ui/Toast';
 
 /**
- * The toast stack host (Phase 8 §D) — replaces ui/ToastContainer.
+ * The toast stack host.
  *
  * Mounted in App.tsx ABOVE the router gate, beside every boot-state
  * branch: a toast fired before boot reaches 'ready' stays in the queue
- * store and renders here the moment the host mounts — the legacy
- * container lived in RootLayout (below the gate) and silently dropped
- * boot-time toasts.
+ * store and renders here the moment the host mounts instead of being
+ * dropped.
  *
- * a11y item 10: the live regions are PERSISTENT (always in the DOM, even
+ * The live regions are PERSISTENT (always in the DOM, even
  * with zero toasts) and content is injected into them — regions created
  * together with their content are unreliable across screen readers.
  * Errors land in an assertive `role="alert"` region; info/success in a
@@ -19,8 +18,7 @@ import { Toast } from './ui/Toast';
  * live-region semantics.
  *
  * Lives in components/ (not ui/): it subscribes to the toast store, and
- * `ui/` is kernel-only by the Phase 8 §L depcruise rule — landing the
- * host here deletes that rule's two named Toast carve-outs.
+ * `ui/` is kernel-only (the `ui-imports-kernel-only` depcruise rule).
  */
 export const ToastHost: React.FC = () => {
   const toasts = useToastStore((state) => state.toasts);

@@ -55,7 +55,7 @@ export function useSectionDuration() {
   const consumedChars = prefixSums[validIndex];
   const remainingChars = totalChars - consumedChars;
 
-  // Progress based on sentence count as per plan
+  // Progress based on sentence count
   const progress = (validIndex / (queue.length || 1)) * 100;
 
   // Apply the correct baseline multiplier based on context

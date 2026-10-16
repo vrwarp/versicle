@@ -5,9 +5,10 @@ rules_version = '2';
 // Deploy with: firebase deploy --only firestore:rules,storage
 //
 // y-cinder offloads workspace blobs to Cloud Storage (see
-// node_modules/y-cinder/dist/compaction.js and sync.js):
-//   users/{uid}/versicle/{workspaceId}/snapshot_v{N}.bin     compacted snapshots
-//   users/{uid}/versicle/{workspaceId}/large_updates/*.bin   oversized updates
+// node_modules/y-cinder/dist/compaction-policy.js and sync-policy.js):
+//   users/{uid}/versicle/{workspaceId}/snapshot_v{N}_{attemptId}.bin  compacted snapshots
+//                                      (plus sibling ds_v*/tail_v* blobs)
+//   users/{uid}/versicle/{workspaceId}/large_updates/*.bin            oversized updates
 //
 // Without these rules a BYO-Firebase project falls back to default-deny
 // Storage: every compaction upload fails and the updates collection grows

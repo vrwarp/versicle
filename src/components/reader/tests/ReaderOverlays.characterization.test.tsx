@@ -1,30 +1,24 @@
 /**
- * P6 ENTRY GATE — overlay characterization pins (jsdom fixture tier).
+ * Overlay characterization pins (jsdom fixture tier) — the observable
+ * behavior of the reader overlay systems, driven through ReaderShell
+ * (program rule 7: characterization before change):
  *
- * Pins the CURRENT behavior of the reader overlay systems named by
- * plan/overhaul/prep/phase6-reader-engine.md §4 / §Test plan BEFORE any
- * engine/manager extraction touches them (program rule 7: characterization
- * before change):
- *
- *   1. user annotation highlights — the ReaderView diff effect
+ *   1. user annotation highlights — the AnnotationLayer diff effect
  *      (annotations.add/remove with the color→class mapping, the
- *      audio-bookmark striped class, `__reader_added_annotations_count`)
+ *      audio-bookmark striped class, the HighlightLayerManager count)
  *   2. content-analysis debug highlights — debug-analysis-highlight
  *      add/remove keyed on GenAI debug mode + seeded analysis
  *   3. note markers — geometry portal into `rendition.manager.container`
- *      (last-rect placement; current aria contract pinned as-is)
+ *      (last-rect placement; aria contract)
  *
  * The TTS highlight + orphan sweep pins live in the owning
  * ReaderTTSController suite; reading-history highlight pins in
  * useHistoryHighlights.test.ts; pinyin geometry in
- * useEpubReader_Pinyin.characterization.test.tsx.
+ * PinyinGeometryEngine.test.ts.
  *
- * These assertions describe TODAY'S implementation (epub.js annotations
- * called directly from components). The Phase 6 HighlightLayerManager
- * cutover must keep them green — it changes the call path, not the
- * observable epub.js calls. Deliberate characterization deltas (e.g. the
- * ReaderOverlay decorative/interactive contract for note markers) must
- * update the named pin in the same PR and say so in the PR description.
+ * The assertions pin the epub.js annotation calls made through the
+ * engine's HighlightLayerManager; a change to those calls must update the
+ * named pin in the same PR and say so in the PR description.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor, act } from '@testing-library/react';
@@ -195,8 +189,8 @@ describe('characterization: reader overlay systems (P6 entry gate)', () => {
     );
 
   const waitForReady = async () => {
-    // isRenditionReady flips after rendition.display(); the annotation diff
-    // effect publishes the test counter right after.
+    // isReady flips after rendition.display(); the annotation diff effect
+    // runs right after.
     await waitFor(() => expect(mockDisplay).toHaveBeenCalled());
   };
 
@@ -226,9 +220,8 @@ describe('characterization: reader overlay systems (P6 entry gate)', () => {
         expect(c[0]).toBe('highlight');
         expect(typeof c[3]).toBe('function');
       }
-      // CHARACTERIZATION DELTA (engine port): the E2E-polled counter moved
-      // from the raw `__reader_added_annotations_count` global to the
-      // engine's HighlightLayerManager (via __versicleTest.reader).
+      // The E2E-polled counter is the engine's HighlightLayerManager count
+      // (via __versicleTest.reader).
       expect(getActiveReaderEngine()?.highlights.count('annotation')).toBe(4);
     });
 
@@ -401,11 +394,10 @@ describe('characterization: reader overlay systems (P6 entry gate)', () => {
     });
 
     it('ReaderOverlay interactive contract: marker buttons are NOT inside an aria-hidden wrapper', async () => {
-      // CHARACTERIZATION DELTA (deliberate, prep doc §4): the entry-gate pin
-      // recorded the old defect — focusable buttons inside an aria-hidden
-      // overlay (the app-shell a11y finding). The ReaderOverlay interactive
-      // contract fixed it: the overlay group is exposed to the a11y tree
-      // with an accessible name, and the buttons inside it are reachable.
+      // Focusable buttons must not sit inside an aria-hidden overlay (an
+      // app-shell a11y defect). The ReaderOverlay interactive contract
+      // exposes the overlay group to the a11y tree with an accessible
+      // name, and the buttons inside it are reachable.
       renderReader();
       await waitForReady();
 

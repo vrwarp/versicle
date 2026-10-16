@@ -1,13 +1,13 @@
 /**
- * Composition holder for the GenAIClient singleton (Phase 7 §H). The REAL
+ * Composition holder for the GenAIClient singleton. The REAL
  * client (the lazy GeminiClient facade with the useGenAIStore-backed config
  * provider + log sink) is installed by src/app/google/wireGoogle.ts; the
  * fallback is an inline NOT-CONFIGURED client (isConfigured() === false,
  * every call throws GENAI_NOT_CONFIGURED) so stray imports degrade exactly
  * like a missing API key instead of crashing. The fallback deliberately
  * does NOT construct GeminiClient — this holder rides the entry chunk, and
- * a static GeminiClient import here would defeat the Phase 8 §A first-use
- * split (check 4 of scripts/check-worker-chunk.mjs).
+ * a static GeminiClient import here would defeat the first-use split
+ * (check 4 of scripts/check-worker-chunk.mjs).
  *
  * The E2E mock swap (`window.__versicleTest.genai.setMock`) goes through
  * setGenAIClient too — installTestApi() is DEV/VITE_E2E-gated, so the mock

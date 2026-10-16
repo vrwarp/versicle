@@ -152,8 +152,8 @@ describe('WebSpeechProvider', () => {
           const errorEvent = { error: 'some error' };
           if (mockUtterance.onerror) mockUtterance.onerror(errorEvent);
 
-          // The rejection is the one and only signal for a start failure — the
-          // pre-5a emit+reject double-signal fed the fallback double-fire (S2).
+          // The rejection is the one and only signal for a start failure — a
+          // double-signal would make the engine's fallback fire twice.
           await expect(playPromise).rejects.toThrow('SpeechSynthesisError: some error');
           expect(callback).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
       });

@@ -6,7 +6,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
-// Phase 0 ratchet (plan/overhaul/README.md §4 rule 3): new rule sets land at
+// Ratchet (plan/overhaul/README.md §4 rule 3): new rule sets land at
 // "warn" until the repo is clean, then flip to "error". jsx-a11y recommended
 // is downgraded wholesale here; do not silently re-upgrade individual rules
 // while violations exist.
@@ -29,12 +29,11 @@ const crossRootRelativeImportPattern = {
     'Cross-root relative import. Use the path alias for this root instead (e.g. @lib/foo, @data/bar, ~types/baz — see tsconfig.app.json "paths"). Run `node scripts/codemod-aliases.mjs` to fix in bulk.',
 };
 
-// Storage-gateway boundary (Phase 3 D8, C12): raw `idb` access is the data
+// Storage-gateway boundary (C12): raw `idb` access is the data
 // layer's exclusive privilege — everything else goes through the src/data
 // repos (which serialize every readwrite transaction through the
 // cross-context write gate; concurrent readwrite transactions are the proven
-// WebKit IndexedDB hang trigger). Error level: the repo was migrated clean
-// when this rule flipped (P3-12).
+// WebKit IndexedDB hang trigger). Error level.
 const idbImportBan = {
   name: 'idb',
   message:
@@ -42,8 +41,8 @@ const idbImportBan = {
     '(@data/repos/*) or, inside src/data, the connection/write-gate modules.',
 };
 
-// TTS engine access goes through the command facade (Phase 5b-PR1;
-// phase5-tts-strangler.md §5b.4): components use the useAudioCommands()
+// TTS engine access goes through the command facade
+// (phase5-tts-strangler.md §5b.4): components use the useAudioCommands()
 // hook, non-component app code uses getTtsController() — both in
 // src/app/tts/. getAudioPlayer() is the engine composition root and is
 // private to that directory (an override below re-grants it there).
@@ -59,9 +58,9 @@ const audioPlayerImportBan = {
 // Flat-config same-named rules REPLACE each other (options never merge), so
 // every block that declares no-restricted-syntax must restate the FULL
 // selector set it wants. These constants are that set, defined once
-// (Phase 8) so a new ban is added in one place and spread into each block.
+// so a new ban is added in one place and spread into each block.
 
-// Readwrite-transaction ban outside the data layer (Phase 3 D8, C12).
+// Readwrite-transaction ban outside the data layer (C12).
 const readwriteTransactionSelector = {
   selector:
     "CallExpression[callee.property.name='transaction'] > Literal[value='readwrite']",
@@ -71,7 +70,7 @@ const readwriteTransactionSelector = {
     'the cross-context IDB write gate).',
 };
 
-// Raw-egress ban (Phase 7 §I; C9/C12 rule 7).
+// Raw-egress ban (C9/C12 rule 7).
 const rawEgressSelectors = [
   {
     selector: "CallExpression[callee.name='fetch']",
@@ -104,7 +103,7 @@ const rawEgressSelectors = [
   },
 ];
 
-// Ad-hoc toLocale* formatting ban (Phase 8 §F): user-facing date/time/number
+// Ad-hoc toLocale* formatting ban: user-facing date/time/number
 // rendering goes through the cached UI-locale formatters in
 // src/kernel/locale/format.ts (which uses Intl directly, never toLocale*).
 // Production-only: the kernel/net + tests carve-out below restates its own
@@ -120,9 +119,9 @@ const toLocaleSelector = {
     'compareTitles).',
 };
 
-// Keydown-listener ban (Phase 8 §E): TWO overlapping window keydown
-// registries caused the P0 destructive-conflict hotfix; ONE listener now
-// feeds the KeyboardShortcutService. Register shortcuts via useShortcut()
+// Keydown-listener ban: TWO overlapping window keydown registries caused a
+// destructive-shortcut conflict, so ONE listener feeds the
+// KeyboardShortcutService. Register shortcuts via useShortcut()
 // (src/app/shortcuts/) — the only directory allowed to addEventListener
 // ('keydown') (carve-out block below). Tests are exempt via the
 // kernel/net + tests carve-out (fireEvent drives the real listener).
@@ -183,9 +182,10 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      // a11y baseline (Phase 0): recommended preset, everything at warn.
+      // a11y baseline: recommended preset, everything at warn (the per-directory
+      // error block near the end of this file promotes the listed directories).
       ...downgradeToWarn(jsxA11y.flatConfigs.recommended.rules),
-      // P9 disable-counter ratchet: deliberate non-use is expressed by the
+      // Disable-counter ratchet: deliberate non-use is expressed by the
       // `_` naming convention (and rest-destructuring key omission), not by
       // eslint-disable comments — the lint-debt ratchet counts disables
       // (scripts/lint-debt-ratchet.mjs) and they may only decrease.
@@ -210,23 +210,23 @@ export default tseslint.config(
       // on, a plain value import is PRESERVED by the bundler — one missing
       // `type` keyword can pull zustand/yjs/stores into the TTS worker chunk
       // (see .dependency-cruiser.cjs and scripts/check-worker-chunk.mjs).
-      // Error level: the repo was autofixed clean when this rule landed.
+      // Error level.
       // disallowTypeAnnotations stays off: inline `import('…')` type
-      // annotations (18 sites, mostly typeof-import in tests and deliberate
+      // annotations (mostly typeof-import in tests and deliberate
       // store-type references in lib/) are type-position-only by
       // construction, always erased, and have no autofix.
       '@typescript-eslint/consistent-type-imports': [
         'error',
         { disallowTypeAnnotations: false },
       ],
-      // Runtime import cycles (16 chains today, see layering-deps.md LD-2).
-      // Warn until the cycles are broken in Phase 1+; the depcruise baseline
-      // (.dependency-cruiser-baseline.json) is the authoritative ratchet.
+      // Import cycles: the depcruise no-circular / no-circular-runtime rules
+      // (error, zero cycles; .dependency-cruiser.cjs) are the authoritative
+      // gate — this lint-time hint stays at warn.
       'import/no-cycle': 'warn',
-      // Phase 8 §D exit criterion (born at ERROR, zero exceptions): native
-      // dialogs are gone — useConfirm()/confirmDialog
-      // (src/components/ui/ConfirmDialog.tsx) replace confirm(), keyed
-      // toasts (useToastStore.showToast) replace alert(). Both rules:
+      // Native dialogs are banned (born at ERROR, zero exceptions):
+      // useConfirm()/confirmDialog (src/components/ui/ConfirmDialog.tsx)
+      // replace confirm(), keyed toasts (useToastStore.showToast) replace
+      // alert(). Both rules:
       // no-alert catches calls, no-restricted-globals catches bare global
       // references (callbacks, aliasing).
       'no-alert': 'error',
@@ -252,22 +252,21 @@ export default tseslint.config(
             'on @components/ui/Modal.',
         },
       ],
-      // One canonical import path per module (Phase 1 path-alias codemod,
-      // scripts/codemod-aliases.mjs): a relative specifier that climbs out
+      // One canonical import path per module (scripts/codemod-aliases.mjs
+      // bulk-fixes violations): a relative specifier that climbs out
       // with `../` and re-enters one of the aliased src/ roots must use the
-      // alias instead (@app/, @components/, @data/, @hooks/, @lib/,
-      // @store/, ~types/, @test/, @workers/ — declared in tsconfig.app.json
-      // `paths`, mirrored in vite.config.ts + vitest.config.ts
-      // resolve.alias; types/ is ~types because TS rejects '@types/…'
-      // specifiers, TS6137).
+      // alias instead (@app/, @components/, @data/, @domains/, @hooks/,
+      // @kernel/, @lib/, @store/, ~types/, @test/, @workers/ — declared in
+      // tsconfig.app.json `paths`, mirrored in vite.config.ts +
+      // vitest.config.ts resolve.alias; types/ is ~types because TS rejects
+      // '@types/…' specifiers, TS6137).
       // Same-directory and within-subtree relative imports stay relative on
-      // purpose. The repo was codemodded clean, so this lands at "error".
+      // purpose. Error level.
       // Scope notes: the rule covers static import/export declarations only
       // (the core rule does not visit dynamic import() or `new URL(...)`
-      // worker URLs — the two `new Worker(new URL('../workers/…'))` sites
-      // stay relative deliberately); src/layouts has no alias yet, so
-      // relative imports of it remain allowed. @data landed in Phase 3
-      // (P3-3/P3-4) when src/data/ became the storage layer.
+      // worker URLs — the `new Worker(new URL('../workers/…'))` sites
+      // stay relative deliberately); src/layouts has no alias, so
+      // relative imports of it remain allowed.
       'no-restricted-imports': [
         'error',
         {
@@ -276,7 +275,7 @@ export default tseslint.config(
       ],
     },
   },
-  // Store-registry seam (Phase 2, phase2-fork-surgery.md §2.5): synced stores
+  // Store-registry seam (phase2-fork-surgery.md §2.5): synced stores
   // are wired exclusively through defineSyncedStore in
   // src/store/yjs-provider.ts — that module is the only production `yjs()`
   // call site (the def aggregation lives in src/store/registry.ts, which
@@ -284,7 +283,7 @@ export default tseslint.config(
   // middleware's default import everywhere else makes the seam structural.
   // Named (type) imports — YjsOptions, YjsStoreHandle, getYjsStoreHandle —
   // stay allowed, as do tests (contract/fixture suites bind mirror stores).
-  // Since Phase 3 (P3-12) this block also carries the production `idb`
+  // This block also carries the production `idb`
   // import ban (src/data is excluded — raw idb is its exclusive privilege;
   // flat-config rule entries replace, so the cross-root pattern and the
   // zustand ban are restated wherever this rule is re-declared).
@@ -310,8 +309,8 @@ export default tseslint.config(
       ],
     },
   },
-  // The TTS engine composition root is private to src/app/tts/ (Phase 5b-PR1;
-  // phase5-tts-strangler.md §5b.4): production code talks to the engine
+  // The TTS engine composition root is private to src/app/tts/
+  // (phase5-tts-strangler.md §5b.4): production code talks to the engine
   // through the TtsController command facade (useAudioCommands in components,
   // getTtsController elsewhere in app/), never through getAudioPlayer()
   // directly. This override re-grants the import inside src/app/tts/ itself —
@@ -338,12 +337,11 @@ export default tseslint.config(
       ],
     },
   },
-  // Sync transport owns no UX copy (Phase 4 §D3, master plan rule 3): the
+  // Sync transport owns no UX copy (phase4-sync-strangler.md §D3): the
   // toast store is banned for production sync modules — transports emit
   // typed SyncEvents (src/domains/sync/events.ts) and the ONE subscriber,
   // src/app/sync/wireSyncEvents.ts, maps them to user-facing strings.
-  // Error level: the repo was migrated clean when this landed (P4-3a).
-  // Tests stay exempt (they spy on the toast store to pin the mapping).
+  // Error level. Tests stay exempt (they spy on the toast store to pin the mapping).
   // Flat-config rule entries replace, so the cross-root pattern and the
   // zustand/idb bans are restated here.
   {
@@ -375,22 +373,18 @@ export default tseslint.config(
       ],
     },
   },
-  // Phase 6 epubjs boundary (master plan §2 rule 8, born at ERROR): only the
+  // epubjs boundary (master plan §2 rule 8, born at ERROR): only the
   // reader engine imports the epub.js RUNTIME — `EpubJsEngine.ts` is the one
   // construction entry (`createEpubJsBook`). Enforced via the TS flavor of
   // no-restricted-imports so TYPE-ONLY epubjs imports stay legal everywhere
   // (`allowTypeImports`): the remaining type users (useEpubReader's
   // hook-internal Book/Rendition plumbing, kernel/cfi/snap.ts) carry no
-  // runtime dependency — the lib/search.ts + SearchPanel `Book` passthrough
-  // died with the SearchSession reader adoption.
+  // runtime dependency.
   // Named runtime exception (carve-out block below):
   // src/domains/library/import/extract.ts (the extractor preamble —
-  // ingestion-side epubjs, sanctioned by C8 + the P7 prep-doc banner).
-  // The offscreen renderer completed its §3 relocation into
-  // src/domains/reader/engine/offscreen/ (the P6 follow-up) and is covered
-  // by the engine carve-out; src/lib/ingestion.ts left the list at the
-  // P7-library merge — the rewrite reduced it to a thin re-export façade
-  // with no epubjs import.
+  // ingestion-side epubjs, sanctioned by C8).
+  // The offscreen renderer (src/domains/reader/engine/offscreen/) is covered
+  // by the engine carve-out.
   // The `epubjs/src/epubcfi` submodule is additionally banned
   // EVERYWHERE except the kernel's quarantine shim
   // (src/kernel/cfi/epubcfiShim.ts — see cfi.kernel-boundary.test.ts).
@@ -472,9 +466,8 @@ export default tseslint.config(
   },
   // Carve-out 3: NAMED EXCEPTION — the ingestion-side epubjs runtime.
   // domains/library/import/extract.ts is the ONE extractor preamble
-  // (P7 prep-doc banner follow-up 6, sanctioned by C8). Its offscreen
-  // render dependency lives at domains/reader/engine/offscreen/ (the §3
-  // relocation landed) and rides the engine carve-out above.
+  // (sanctioned by C8). Its offscreen render dependency lives at
+  // domains/reader/engine/offscreen/ and rides the engine carve-out above.
   {
     files: [
       'src/domains/library/import/extract.ts',
@@ -496,8 +489,8 @@ export default tseslint.config(
       ],
     },
   },
-  // The `idb` ban extends to TEST files outside src/data (Phase 3 exit:
-  // zero exceptions — seed through the repos, the connection module, or
+  // The `idb` ban extends to TEST files outside src/data (zero
+  // exceptions — seed through the repos, the connection module, or
   // one-shot db.get/put/clear helpers obtained from @data/connection).
   // The zustand default-import ban deliberately does NOT apply here
   // (contract/fixture suites bind mirror stores).
@@ -514,24 +507,19 @@ export default tseslint.config(
       ],
     },
   },
-  // Readwrite-transaction ban outside the data layer (Phase 3 D8, C12):
+  // Readwrite-transaction ban outside the data layer (C12):
   // depcruise cannot see string arguments, so the ban is syntactic. A
   // readwrite transaction opened outside the write gate can overlap a Yjs
   // flush — the proven cross-context WebKit hang pair (write-gate.ts docs).
   // Reads (readonly transactions, one-shot db.get/getAll) stay free.
   //
-  // Since Phase 7 (§I) this block ALSO carries the raw-egress ban (C9/C12
+  // This block ALSO carries the raw-egress ban (C9/C12
   // rule 7): all network egress goes through
   // `NetworkGateway.egress(destinationId, …)` and same-origin/blob fetches
   // through `localFetch` (both src/kernel/net) — raw fetch/XMLHttpRequest/
-  // navigator.sendBeacon are banned everywhere else, at ERROR (the repo was
-  // migrated clean when this landed). The ONE production exemption is
-  // src/kernel/net/** itself (carve-out block below). The temporary
-  // src/lib/tts/engine|providers exemption (provider fetch sites frozen for
-  // the parallel Phase 5b/5c chain) burned down at the P7 merge: the five
-  // sites (GoogleTTSProvider ×2, PiperProvider catalog, PiperRuntime
-  // fetchWithBackoff, BaseCloudProvider.fetchAudio) route through egress()
-  // and the engine/providers blocks below restate the full selector set.
+  // navigator.sendBeacon are banned everywhere else, at ERROR. The ONE
+  // production exemption is src/kernel/net/** itself (carve-out block
+  // below). The engine/providers blocks below restate the full selector set.
   {
     files: ['src/**/*.{ts,tsx}'],
     ignores: ['src/data/**'],
@@ -565,7 +553,7 @@ export default tseslint.config(
       ],
     },
   },
-  // src/app/shortcuts carve-out (Phase 8 §E): the ONE place the window
+  // src/app/shortcuts carve-out: the ONE place the window
   // keydown listener is legal — every other production selector is
   // restated (flat-config same-named rules replace, never merge).
   {
@@ -580,21 +568,18 @@ export default tseslint.config(
       ],
     },
   },
-  // Engine-dir vi.mock ban (Phase 5; phase5-tts-strangler.md N3 + §vi.mock
-  // policy, README §4 rule 3 ratchet "vi.mock in engine/provider/data dirs →
-  // 0"): the allowlist reached ZERO at 5b-PR4. The entry-gate freeze held
-  // four modules ({@data/repos/bookContent, @data/repos/playbackCache,
-  // ../LexiconService, ../PlatformIntegration} — the post-P3 rewrite of the
-  // doc's `@db/DBService` entry); the decomposition replaced every direct
+  // Engine-dir vi.mock ban (phase5-tts-strangler.md N3 + §vi.mock policy,
+  // README §4 rule 3 ratchet "vi.mock in engine/provider/data dirs → 0"):
+  // the allowlist is EMPTY. The engine decomposition replaced every direct
   // import with EngineContext ports (BookContentPort + SessionStore), so the
-  // suites now inject in-memory fakes (FakeEngineContext, FakePlaybackBackend,
+  // suites inject in-memory fakes (FakeEngineContext, FakePlaybackBackend,
   // parityHostDb port factories, WorkerTtsEngine constructor ports) and
   // every vi.mock/vi.doMock in the directory is a lint error.
   //
   // Placement + the repeated readwrite/egress selectors are load-bearing:
   // flat config resolves same-named rules last-wins (options replace, never
-  // merge), so this block must sit AFTER the Phase 3 readwrite-transaction +
-  // Phase 7 raw-egress ban above and restate those selectors — otherwise one
+  // merge), so this block must sit AFTER the readwrite-transaction +
+  // raw-egress ban above and restate those selectors — otherwise one
   // of the rules would silently stop applying to src/lib/tts/engine/.
   // The egress selectors apply to this directory's TEST files too (unlike the
   // global test carve-out): no engine suite calls raw fetch — they stub it
@@ -620,22 +605,19 @@ export default tseslint.config(
       ],
     },
   },
-  // Provider-dir vi.mock ban (Phase 5a-PR2; phase5-tts-strangler.md §vi.mock
+  // Provider-dir vi.mock ban (phase5-tts-strangler.md §vi.mock
   // policy, README §4 rule 3 ratchet "vi.mock in engine/provider/data dirs →
   // 0"): provider suites drive providers through injected fakes (FakeAudioSink,
   // InMemoryTTSCache, FakePiperRuntime, stubbed fetch/speechSynthesis,
   // constructor-injected caches). Exactly ONE module mock remains allowed:
   //  - '@capacitor-community/text-to-speech' — a registered NATIVE plugin with
-  //    no injection seam (the providers-dir analogue of the engine-dir
-  //    PlatformIntegration entry; permanent until a Capacitor port exists).
-  // The './piper-utils' entry died at 5a-PR3 with the module itself (the
-  // injectable PiperRuntime replaced it).
+  //    no injection seam (permanent until a Capacitor port exists).
   // Same flat-config caveat as the engine block above: same-named rules are
   // last-wins, so the readwrite + raw-egress selectors are restated here.
-  // The provider fetch sites migrated onto NetworkGateway.egress() at the P7
-  // merge (their destinations: google-tts/openai-tts/lemonfox-tts/
-  // hf-piper-catalog/hf-piper-models); like the engine block, the egress ban
-  // covers this directory's test files too (suites stub fetch, never call it).
+  // The provider fetch sites go through NetworkGateway.egress() (their
+  // destinations: google-tts/openai-tts/lemonfox-tts/hf-piper-catalog/
+  // hf-piper-models); like the engine block, the egress ban covers this
+  // directory's test files too (suites stub fetch, never call it).
   {
     files: ['src/lib/tts/providers/**/*.{ts,tsx}'],
     rules: {
@@ -665,14 +647,13 @@ export default tseslint.config(
       ],
     },
   },
-  // Phase 8 close (PR-10; ADR 0001 §5 / README rule 3 per-directory model):
-  // jsx-a11y recommended flips warn→ERROR for every directory this phase
-  // rewrote — the ui/ design system, the settings shell + registry, the
-  // shortcut service, and the pill feature homes (reader pills, sync alert,
-  // chinese vocab triage). All were at ZERO warnings at the flip (the
-  // ratchet may only tighten). Test files keep the global warn baseline:
-  // harness fixtures simulate interactions on bare elements by design.
-  // Remaining directories flip with P9 (prep §Hand-offs).
+  // jsx-a11y recommended is ERROR (README rule 3 per-directory model) for the
+  // directories below — the ui/ design system, the settings shell + registry,
+  // the shortcut service, and the pill feature homes (reader pills, sync
+  // alert, chinese vocab triage). All sit at ZERO warnings (the ratchet may
+  // only tighten). Test files keep the global warn baseline: harness fixtures
+  // simulate interactions on bare elements by design. Directories not listed
+  // here stay at the global warn baseline.
   {
     files: [
       'src/components/ui/**/*.{ts,tsx}',

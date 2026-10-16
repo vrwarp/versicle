@@ -1,10 +1,7 @@
 /**
  * CfiGrouper — grouping text segments into logical blocks by CFI structure,
- * and attributing point markers to those groups (Phase 5c;
- * phase5-tts-strangler.md §5c.2). Moved beside the CFI kernel from
- * AudioContentPipeline's private methods; the inline `{rootCfi; segments;
- * fullText}` shape (re-declared three times in the legacy pipeline) becomes
- * the named {@link CfiGroup}.
+ * and attributing point markers to those groups. The `{rootCfi; segments;
+ * fullText}` group shape is the named {@link CfiGroup}.
  *
  * Kernel admission: structural types only (no ~types import); everything here
  * is CFI math over the sibling kernel modules.
@@ -38,8 +35,7 @@ export interface CfiGroup {
  * This allows content-type classification of logical blocks (tables, asides) rather than
  * fragmented sentences.
  *
- * Branch membership uses the kernel's canonical {@link cfiContains} (THE separator set) —
- * the divergent inline copies died in 5c-PR1.
+ * Branch membership uses the kernel's canonical {@link cfiContains} (THE separator set).
  */
 export function groupSegmentsByRoot(
     segments: ReadonlyArray<CfiSegment>,

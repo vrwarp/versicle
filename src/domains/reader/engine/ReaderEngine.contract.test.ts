@@ -1,12 +1,11 @@
 /**
- * ReaderEngine conformance suite (contract C7, Phase 6 §Test plan): one
- * describe block runs against BOTH implementations —
+ * ReaderEngine conformance suite (contract C7): one describe block runs
+ * against BOTH implementations —
  *
  *  - FakeReaderEngine (pure in-memory), and
- *  - EpubJsEngine over typed book/rendition doubles (jsdom; the same fixture
- *    shapes the legacy hook suites used — real epub.js cannot render inside
- *    jsdom, so the adapter logic is what this tier pins; full-renderer
- *    behavior is covered by the Playwright journeys).
+ *  - EpubJsEngine over typed book/rendition doubles (jsdom; real epub.js
+ *    cannot render inside jsdom, so the adapter logic is what this tier
+ *    pins; full-renderer behavior is covered by the Playwright journeys).
  *
  * Every clause here is part of the port contract: event shape, layer
  * isolation, unsubscribe, resolver conformance, destroy idempotence.

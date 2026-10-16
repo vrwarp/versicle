@@ -16,20 +16,21 @@ import { withSwapLock } from '../workspaces/stagedSwap';
 const logger = createLogger('CheckpointService');
 
 /**
- * The shutdown handle the destructive operations take (§D7 inversion): the
- * legacy module imported FirestoreSyncManager only to `destroy()` it before
- * wiping persistence — a circular import (the manager imported this module
- * for its pre-sync/pre-migration checkpoints). Callers that have the
- * orchestrator pass the handle instead: the boot interceptor and
- * RecoverySettingsTab via `stopSyncConnections` (app/sync/createSync.ts),
- * WorkspaceService via its injected checkpoints port.
+ * The shutdown handle the destructive operations take. This module never
+ * imports the sync orchestrator to `destroy()` it before wiping persistence:
+ * that would be a dependency cycle (the orchestrator creates its
+ * pre-sync/pre-migration checkpoints through this module, via an injected
+ * port). Callers that have the orchestrator pass the handle instead: the
+ * boot interceptor and RecoverySettingsTab via `stopSyncConnections`
+ * (app/sync/createSync.ts), WorkspaceService via its injected checkpoints
+ * port.
  */
 export interface DestructiveRestoreOptions {
   /** Sever cloud sync before the local wipe; failures are non-blocking. */
   pauseSync?: () => void | Promise<void>;
   /**
    * Revert the persisted active-workspace tie during a rollback whose
-   * migration state carries `previousWorkspaceId` (staged swaps, P4-5).
+   * migration state carries `previousWorkspaceId` (staged swaps).
    * Injected by the boot interceptor — domains/sync stays store-free.
    */
   setActiveWorkspaceId?: (id: string) => void;
@@ -41,10 +42,9 @@ export interface DestructiveRestoreOptions {
  *
  * NOTE on the `@store/yjs-provider` import: domains/ is store-free by rule
  * (depcruise `domains-no-store`), but the live doc/persistence handles are
- * that rule's one named carve-out — this module relocated as a PURE MOVE
- * (phase4-sync-strangler.md §D7). The staged swap (§D4) moved the
- * switch-path destructive apply into `stagedSwap.ts` (fully injected); the
- * checkpoint capture/restore here still legitimately needs the live doc.
+ * that rule's one named carve-out. The switch-path destructive apply lives in
+ * `stagedSwap.ts` (fully injected); the checkpoint capture/restore here
+ * legitimately needs the live doc.
  */
 export class CheckpointService {
   /**
@@ -63,7 +63,7 @@ export class CheckpointService {
 
     // The IDB transaction — including the supersede-older-protected and
     // prune-skip-protected invariants, both inside ONE gated transaction —
-    // lives in the checkpoints repo (P3-10).
+    // lives in the checkpoints repo.
     return checkpoints.add({
       timestamp: Date.now(),
       trigger,
@@ -119,13 +119,12 @@ export class CheckpointService {
    * The hard-reset path runs whenever IndexedDB exists — INCLUDING at boot,
    * where no live persistence binding has been constructed yet (the
    * RESTORING_BACKUP interceptor arm precedes `startYjsPersistence`; the
-   * wipe is then a plain database deletion). Pre-P4-5 this branched on the
-   * live binding alone, so a boot-time rollback silently fell into the
-   * in-memory soft path: nothing was persisted, the state machine was
-   * cleared anyway, and the next manual reload booted into the TARGET
-   * workspace's data — a P1b boot-sequencing regression the staged-swap
-   * crash-resume suite now pins closed. The destructive section also runs
-   * under the cross-tab swap lock (§D4), like the staged apply.
+   * wipe is then a plain database deletion). Branching on the live binding
+   * alone would drop a boot-time rollback into the in-memory soft path:
+   * nothing persisted, the state machine cleared anyway, and the next manual
+   * reload would boot into the TARGET workspace's data. The staged-swap
+   * crash-resume suite pins this. The destructive section also runs under
+   * the cross-tab swap lock (`withSwapLock`), like the staged apply.
    */
   static async restoreCheckpoint(id: number, opts?: DestructiveRestoreOptions): Promise<void> {
     const checkpoint = await checkpoints.get(id);
@@ -135,7 +134,7 @@ export class CheckpointService {
     validateSnapshot(checkpoint.blob);
 
     // 0b. Disconnect cloud sync to prevent concurrent modifications during
-    // restore (injected handle — §D7 inversion).
+    // restore (injected handle).
     await this.pauseSync(opts, 'restore');
 
     const persistence = getYjsPersistence();
@@ -156,16 +155,14 @@ export class CheckpointService {
 
         // 3. Write the snapshot durably. applySnapshot resolves only after
         // the transaction has COMMITTED (vendored y-idb writeSnapshot through
-        // the cross-context write gate) — this replaces the temp-doc +
-        // temp-IndexeddbPersistence + whenSynced dance, which was durable
-        // only via IDBDatabase.close() waiting out in-flight transactions.
+        // the cross-context write gate).
         await applySnapshot(checkpoint.blob);
 
         // 4. The restored data is durable, but the active-workspace tie may
         // still point at the abandoned switch target — revert it BEFORE the
         // state machine clears (a crash between these lines retries the
         // whole rollback; previousWorkspaceId is absent on states written by
-        // pre-P4-5 clients, which keep legacy behavior).
+        // older clients, which skip the revert).
         const migrationState = MigrationStateService.getState();
         if (migrationState?.previousWorkspaceId && opts?.setActiveWorkspaceId) {
           opts.setActiveWorkspaceId(migrationState.previousWorkspaceId);
@@ -207,13 +204,11 @@ export class CheckpointService {
     }
   }
 
-  // NOTE: the legacy `applyRemoteState` (wipe main + write a downloaded
-  // network blob + reload, called mid-switch) was ABSORBED into the staged
-  // swap (phase4-sync-strangler.md §D4): the switch path now stages the
-  // verified blob durably (stagedSwap.stageWorkspaceState) and the boot
-  // interceptor's STAGED arm performs the destructive apply idempotently
-  // (stagedSwap.applyStagedSwap). Its durability/validate-before-destroy
-  // pins moved to stagedSwap.test.ts ('regression: …' blocks, ledger rule 8).
+  // NOTE: there is no network-blob apply here. The workspace-switch path
+  // stages the verified blob durably (stagedSwap.stageWorkspaceState) and the
+  // boot interceptor's STAGED arm performs the destructive apply idempotently
+  // (stagedSwap.applyStagedSwap); its durability/validate-before-destroy
+  // pins live in stagedSwap.test.ts.
 
   /**
    * Deletes a specific checkpoint by ID.

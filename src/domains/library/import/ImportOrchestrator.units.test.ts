@@ -671,10 +671,10 @@ describe('ImportOrchestrator — ZIP expansion', () => {
 });
 
 /**
- * expandToEpubs decompressed EVERY EPUB of EVERY zip up front and the batch
- * loop then held that array for the whole run — a 40-book archive meant 40
- * inflated EPUBs resident from the first import to the last. Entries are now
- * enumerated cheaply and inflated one at a time, as their turn comes.
+ * Eagerly decompressing EVERY EPUB of EVERY zip up front would keep the whole
+ * array resident for the batch's run — a 40-book archive meant 40 inflated
+ * EPUBs held from the first import to the last. Entries are enumerated
+ * cheaply and inflated one at a time, as their turn comes.
  */
 describe('regression: ZIP entries are inflated one at a time', () => {
   const lazyZip = (names: string[], onRead: (name: string) => void) =>
@@ -746,11 +746,11 @@ describe('regression: ZIP entries are inflated one at a time', () => {
 });
 
 /**
- * The eager `expandZip` dependency defaulted to null, so `if (this.expandZip)`
- * was unreachable in production — yet every ZIP test injected it, so the whole
- * expansion block (failure attribution, case-insensitive matching,
- * byte-weighted progress, the divide-by-zero guard) pinned dead code and
- * breaking the real lazy path left the suite green. There is now ONE seam.
+ * An eager `expandZip` seam that defaulted to null would be unreachable in
+ * production, yet ZIP tests injecting it would pin dead code (failure
+ * attribution, case-insensitive matching, byte-weighted progress, the
+ * divide-by-zero guard) while breaking the real lazy path left the suite
+ * green. There is ONE seam: `listZipEpubs`.
  */
 describe('regression: the only zip seam is the lazy one production uses', () => {
   const zipFile = (name = 'books.zip', size = 100): File =>
@@ -1102,10 +1102,10 @@ describe('ImportOrchestrator.reprocess', () => {
 });
 
 describe('regression: a freshly imported book carries its stored TOC', () => {
-  // The import projection was built from the manifest alone, so the stored
-  // TOC (resolved and label-repaired at extraction) only appeared after the
-  // next boot hydrated it from static_structure: the "Generated Titles"
-  // toggle was empty and the reader could not repair junk labels from it.
+  // A projection built from the manifest alone would show the stored TOC
+  // (resolved and label-repaired at extraction) only after the next boot
+  // hydrated it from static_structure: the "Generated Titles" toggle would be
+  // empty and the reader could not repair junk labels from it.
   it('projects structure.toc as syntheticToc on NEW registration', async () => {
     const toc = [{ id: 'a', href: 'Text/a.xhtml', label: 'The Beginning' }];
     const h = build({

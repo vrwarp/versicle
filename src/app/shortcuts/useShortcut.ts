@@ -1,6 +1,6 @@
 /**
- * useShortcut — React registration hook for the KeyboardShortcutService
- * (Phase 8 §E). Registers on mount, unregisters on unmount; the handler
+ * useShortcut — React registration hook for the KeyboardShortcutService.
+ * Registers on mount, unregisters on unmount; the handler
  * and `when` predicate stay FRESH via refs, so callers pass plain inline
  * closures without re-registering (and without dev collision errors) on
  * every render.

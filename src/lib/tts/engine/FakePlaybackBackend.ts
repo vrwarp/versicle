@@ -48,7 +48,7 @@ export class FakePlaybackBackend implements PlaybackBackend {
     }
     /**
      * Arm the backend so the next play() on a non-'local' provider REJECTS once with a
-     * `ProviderPlaybackError`-named error — TTSProviderManager's post-5a-PR2 single
+     * `ProviderPlaybackError`-named error — TTSProviderManager's single
      * failure path (no self-swap, no synthetic `{type:'fallback'}` event; the engine
      * owns recovery and swaps via setProviderById). The error is built by name, not
      * class, exactly as it survives the worker boundary (Comlink keeps only

@@ -1,8 +1,7 @@
 /**
- * ArtifactConsult suite (Artifact Lane Phase B, shared-ai-cache-design.md
- * §2.4/§2.6/§2.7): drives makeArtifactConsult against a real MockBackend seeded
- * (putArtifact) with a header-format blob, plus stub backends for the §2.7 error
- * taxonomy.
+ * ArtifactConsult suite (plan/shared-ai-cache-design.md §2.4/§2.6/§2.7):
+ * drives makeArtifactConsult against a real MockBackend seeded (putArtifact)
+ * with a header-format blob, plus stub backends for the §2.7 error taxonomy.
  *
  * Pins:
  *  - probe HIT/MISS (HEAD doc present/absent for the derived contentKey);
@@ -13,7 +12,7 @@
  *    rejection);
  *  - getArtifact transient/permission errors RETHROW (NOT a miss — §2.7);
  *  - consent OFF + no per-book bit → DENIED (§2.6 hard requirement);
- *  - contentHash-absent manifest → graceful false/null (pre-P7 degrade).
+ *  - contentHash-absent manifest → graceful false/null (older manifests).
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MockBackend, clearMockArtifacts } from '@domains/sync/backend/MockBackend';
@@ -46,7 +45,7 @@ const STAMP: ArtifactStamp = {
   extractionVersion: 3,
 };
 
-/** Hand-build a header-format blob (serialize side is Phase C). */
+/** Hand-build a header-format blob (the layout documented in domains/search/artifactBlob.ts). */
 function buildBlob(
   headerStamp: ArtifactStamp,
   sections: { href: string; sectionTextHash: string; vectors: Int8Array; scales: Float32Array }[],
@@ -417,10 +416,9 @@ describe('makeArtifactConsult', () => {
     });
 
     it('shareAiCaches OFF (gate built from makeArtifactConsentGate): probe + hydrate DENIED even interactively (Phase C tighten)', async () => {
-      // The Phase-C consult wires isConsented from makeArtifactConsentGate, so a
+      // wireGoogle builds isConsented from makeArtifactConsentGate, so a
       // shareAiCaches-OFF master switch DENIES the read path regardless of the
-      // interactive gesture / preEmbed / per-book bit — a behavior change vs the
-      // Phase-B preEmbed-OR-interactive grant.
+      // interactive gesture / preEmbed / per-book bit.
       const { backend } = await seedBackend();
       const getArtifact = vi.spyOn(backend, 'getArtifact');
       const headArtifact = vi.spyOn(backend, 'headArtifact');

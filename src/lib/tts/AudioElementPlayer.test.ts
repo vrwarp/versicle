@@ -114,10 +114,10 @@ describe('AudioElementPlayer', () => {
   });
 
   describe('regression: a sink error must not strand the segment object URL', () => {
-      // playBlob/playUrl/stop/onended all revoke the current object URL; onerror
-      // only forwarded the MediaError. The engine's recovery swaps to a local
-      // provider that never touches this sink, so nothing came along to revoke
-      // it — a provider failing repeatedly stranded one blob per failure.
+      // playBlob/playUrl/stop/onended all revoke the current object URL, so
+      // onerror must too. The engine's recovery swaps to a local provider that
+      // never touches this sink, so nothing else would revoke it — a provider
+      // failing repeatedly would strand one blob per failure.
       const MEDIA_ERROR = { code: 3, message: 'decode' };
       const realRevoke = global.URL.revokeObjectURL;
       afterEach(() => { global.URL.revokeObjectURL = realRevoke; });
@@ -135,7 +135,7 @@ describe('AudioElementPlayer', () => {
           mockAudio.onerror(new Event('error'));
 
           expect(revoke).toHaveBeenCalledWith('blob:mock-url');
-          // Same argument, and still AFTER the cleanup — the order onended uses.
+          // Same argument, delivered AFTER the cleanup — the order onended uses.
           expect(onError).toHaveBeenCalledWith(MEDIA_ERROR);
           expect(revoke.mock.invocationCallOrder[0])
               .toBeLessThan(onError.mock.invocationCallOrder[0]);

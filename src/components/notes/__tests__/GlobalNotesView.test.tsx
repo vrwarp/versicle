@@ -25,8 +25,7 @@ vi.mock('@store/useAnnotationStore', () => ({
     useAnnotationStore: Object.assign(vi.fn(), {
         getState: vi.fn(),
     }),
-    // The selector moved INTO the annotation store module when the
-    // selectors.ts façade died.
+    // The selector is exported from the annotation store module itself.
     selectPendingAudioBookmarks: (state: { annotations?: Record<string, { type: string, pending?: boolean }> }) => {
         return Object.values(state.annotations || {}).filter(
             (a: { type: string, pending?: boolean }) => a.type === 'audio_bookmark' && a.pending

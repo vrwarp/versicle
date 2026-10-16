@@ -1,7 +1,7 @@
 /**
- * Gateway policy tests (Phase 7 §I, PR-N1/N3): registry membership, host
- * allowlist, offline policy, consent gate, per-destination timeout, and the
- * session counters.
+ * Gateway policy tests: registry membership, host allowlist, offline policy,
+ * consent gate, quota scheduler, per-destination timeout, and the session
+ * counters.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -77,7 +77,7 @@ describe('NetworkGateway.egress', () => {
 
   it('supports *.suffix host wildcards', async () => {
     // hf-piper-models has exact hosts; use a drive host for exact and rely on
-    // hostMatches unit coverage below for wildcards via the registry shape.
+    // hostMatches unit coverage above for wildcards via the registry shape.
     const response = await egress('drive', 'https://www.googleapis.com/drive/v3/files');
     expect(response.status).toBe(200);
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -233,8 +233,8 @@ describe('NetworkGateway.egress', () => {
     });
 
     it('releases EXACTLY ONCE on a resolved non-2xx (429/500) — the single-owner regression', async () => {
-      // The headline fix: a 429/500 RESOLVES (it does not throw), so the old
-      // catch-only release leaked the claim. The finally now frees it exactly once.
+      // A 429/500 RESOLVES (it does not throw), so a catch-only release would
+      // leak the claim. The finally must free it exactly once.
       const release = vi.fn();
       setQuotaScheduler({ acquire: vi.fn(async () => {}), release });
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('rate limited', { status: 429 })));

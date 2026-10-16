@@ -60,9 +60,9 @@ const PER_SECTION_ROWS = 20;
 /**
  * How many hits the whole-library query MATERIALIZES. Ranking yields up to
  * PER_SECTION_ROWS per section per book (~20 × sections × books — tens of
- * thousands for a real library), and every materialized hit cost a
+ * thousands for a real library), and every materialized hit costs a
  * `getExcerpt` + an `Intl.Segmenter` pass on the main thread and a card +
- * IntersectionObserver in the view. Ranking is now separated from
+ * IntersectionObserver in the view. Ranking is therefore separated from
  * materialization: tuples are ranked and CUT first, and only the survivors are
  * turned into results.
  */
@@ -189,7 +189,7 @@ export function useGlobalSearch(deps: Partial<GlobalSearchDeps> = {}) {
    * The library, read through a REF inside the callbacks. `useAllBooks()`
    * returns a new array on every library-projection recompute (a progress
    * write, a sync tick, an import), so keeping `books` in the callback's
-   * dependency list re-created `executeSearch` constantly — and the view
+   * dependency list would re-create `executeSearch` constantly — and the view
    * re-runs the whole-library query whenever that identity changes.
    */
   const booksRef = useRef<LibraryBook[]>(books);
@@ -218,7 +218,7 @@ export function useGlobalSearch(deps: Partial<GlobalSearchDeps> = {}) {
 
   /**
    * ONE engine handle per hook instance. Disposing + re-creating the worker per
-   * query re-instantiated the engine's multi-megabyte wasm every single search;
+   * query would re-instantiate the engine's multi-megabyte wasm on every search;
    * supersession is handled by the run token, not by killing the worker.
    */
   const ensureHandle = useCallback((): SearchEngineHandle => {
@@ -257,8 +257,8 @@ export function useGlobalSearch(deps: Partial<GlobalSearchDeps> = {}) {
           continue;
         }
 
-        // Fallback for books whose journal predates the stamp (or is absent):
-        // the original full-row path, unchanged.
+        // Fallback for books whose journal lacks the stamp (or is absent):
+        // read the full search-text and embeddings rows.
         const text = await searchText.get(book.id);
         if (!active) return;
         const embed = await embeddings.get(book.id);
@@ -426,8 +426,7 @@ export function useGlobalSearch(deps: Partial<GlobalSearchDeps> = {}) {
 
       // 4. Sort the LIGHTWEIGHT tuples strictly by similarity, then cut. The
       //    book-order/section-order/row-order of the ranking is preserved
-      //    pre-sort, so ties resolve exactly as they did when every hit was
-      //    materialized first.
+      //    pre-sort, so ties resolve deterministically (stable sort).
       const rankedHits: RankedHit[] = [];
       for (const bookHits of rankedByBook) {
         if (bookHits) rankedHits.push(...bookHits);
@@ -438,8 +437,8 @@ export function useGlobalSearch(deps: Partial<GlobalSearchDeps> = {}) {
       // more than TOP_K near-duplicate tuples and fills the whole page. Report
       // the cut rather than letting the view present it as the whole answer.
       // (Deliberately NOT a per-book quota: which passages the user gets is a
-      // ranking decision, not this perf change's to make, and near-duplicate
-      // overlapping chunks are a dedup problem, not a fairness one.)
+      // ranking decision, and near-duplicate overlapping chunks are a dedup
+      // problem, not a fairness one.)
       const wasCut = rankedHits.length > TOP_K;
       const survivors = wasCut ? rankedHits.slice(0, TOP_K) : rankedHits;
 
@@ -546,8 +545,8 @@ export function useGlobalSearch(deps: Partial<GlobalSearchDeps> = {}) {
     } catch (err: unknown) {
       if (!isCurrent()) return;
       // A failed run may mean a dead worker. Drop the handle so the NEXT query
-      // builds a fresh engine (what the dispose-per-query code did implicitly),
-      // while a healthy engine is still reused across successful queries.
+      // builds a fresh engine, while a healthy engine is still reused across
+      // successful queries.
       if (activeHandleRef.current === handle) {
         activeHandleRef.current = null;
         handle.dispose();
@@ -565,8 +564,8 @@ export function useGlobalSearch(deps: Partial<GlobalSearchDeps> = {}) {
   /**
    * Re-run the active query when the library's MEMBERSHIP changes (a cold-open
    * projection hydrating, an import, a delete) — but NOT on the array-identity
-   * churn of a progress write or a sync tick, which used to re-run the whole
-   * query several times per second.
+   * churn of a progress write or a sync tick, which would otherwise re-run the
+   * whole query several times per second.
    */
   const bookIdsKey = books.map((b) => b.id).join('|');
   useEffect(() => {

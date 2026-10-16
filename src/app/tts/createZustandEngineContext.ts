@@ -1,15 +1,13 @@
 /**
- * Production EngineContext wiring.
+ * Main-thread EngineContext wiring.
  *
- * Forwards every port call to the real Zustand stores and the Capacitor native bridge.
- * Behavior is identical to the pre-refactor code that called the stores directly, which
- * is why existing module-level `vi.mock('../../store/...')` mocks in the test suite keep
- * intercepting these reads/writes unchanged.
+ * Forwards every port call to the real Zustand stores and the Capacitor native bridge,
+ * which is why module-level `vi.mock('@store/...')` mocks in the test suite intercept
+ * these reads/writes.
  *
  * Every store/Capacitor access happens lazily inside a method body — never at module
- * initialization — so the static imports below cannot trigger the
- * AudioPlayerService ↔ useTTSStore circular-import hazard (the same reason the original
- * code reached for dynamic `import()`).
+ * initialization — so the static imports below cannot trigger an engine ↔ store
+ * circular-import hazard.
  */
 import { Capacitor } from '@capacitor/core';
 import { BatteryOptimization } from '@capawesome-team/capacitor-android-battery-optimization';
@@ -35,7 +33,7 @@ import { repoBookContentPort, createRepoSessionStore } from '@lib/tts/engine/rep
 import type { EngineContext } from '@lib/tts/engine/EngineContext';
 
 /**
- * Build the production EngineContext backed by live Zustand stores + Capacitor.
+ * Build the EngineContext backed by live Zustand stores + Capacitor.
  */
 export function createZustandEngineContext(): EngineContext {
     return {
@@ -128,10 +126,9 @@ export function createZustandEngineContext(): EngineContext {
                 BatteryOptimization.openBatteryOptimizationSettings(),
         },
 
-        // Storage ports (5b decomposition): the repo-backed implementations.
-        // Existing module-level `vi.mock('@data/repos/...')` mocks in lib-level
-        // pipeline tests keep intercepting these reads unchanged (the port
-        // delegates to the mocked module).
+        // Storage ports: the repo-backed implementations. Module-level
+        // `vi.mock('@data/repos/...')` mocks in lib-level pipeline tests
+        // intercept these reads (the port delegates to the mocked module).
         content: repoBookContentPort,
         session: createRepoSessionStore(),
     };

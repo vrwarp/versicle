@@ -6,8 +6,9 @@ import { drain, replicate, countUpdates } from './helpers';
 
 /**
  * Fork contract suite — `syncedKeys` whitelist (phase2-fork-surgery.md §2.1,
- * §3 cases B.1–B.6). The option is OFF by default; legacy "all non-function
- * keys" behavior stays pinned by outbound.test.ts / hydration.test.ts.
+ * §3 cases B.1–B.6). The option is OFF by default; the default "all
+ * non-function keys" behavior is pinned by the suites that do not set it
+ * (e.g. hydration.test.ts).
  */
 
 interface State {

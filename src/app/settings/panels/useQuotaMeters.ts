@@ -9,8 +9,8 @@
  * double-count. Every figure derives from the snapshot — nothing fabricated.
  *
  * Co-located (not inlined in GenAIPanel.tsx) so the panel exports only its
- * component (react-refresh/fast-refresh stays clean in the error-level
- * app/settings dir).
+ * component (`react-refresh/only-export-components` stays clean in
+ * app/settings).
  */
 import { useState, useEffect } from 'react';
 import { useGenAIStore, DEFAULT_QUOTA_LIMITS } from '@store/useGenAIStore';

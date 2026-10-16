@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { subscribeAnnouncements } from '@kernel/locale/announcer';
 
 /**
- * The screen-reader announcement outlet (Phase 8 §D, a11y item 2):
+ * The screen-reader announcement outlet:
  * two PERSISTENT visually-hidden live regions (polite + assertive),
  * mounted once in RootLayout. Non-React code announces through
  * `announce()` (src/kernel/locale/announcer.ts); this component only

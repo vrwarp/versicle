@@ -8,10 +8,10 @@
  * lookup path; it drives this worker through
  * `@domains/chinese/dictionary/workerFactory`.
  *
- * Service-worker caching still applies: a dedicated worker spawned by a
+ * Service-worker caching applies: a dedicated worker spawned by a
  * controlled page inherits that page's service-worker controller, so
  * `localFetch('/dict/cedict.json')` from here goes through the CacheFirst
- * `/dict/*` route in `src/sw.ts` exactly as it did from the page.
+ * `/dict/*` route in `src/sw.ts`.
  *
  * Mirrors src/workers/search.worker.ts.
  */

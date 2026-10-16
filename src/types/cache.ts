@@ -1,10 +1,8 @@
 /**
  * Cache domain types: transient, disposable rows (the V18 "cache" domain)
  * — render metrics, synthesized-audio blobs, session state, TTS sentence
- * preparation, table snapshots — plus the legacy locations cache row.
+ * preparation, table snapshots — plus the per-book locations view.
  *
- * Extracted from types/db.ts in the Phase 1a type split
- * (plan/overhaul/README.md §Roadmap P1; layering-deps.md LD-1).
  * Layering rule: src/types/** imports nothing internal except other
  * src/types modules, and that graph stays acyclic.
  */
@@ -38,9 +36,8 @@ export interface CacheAudioBlob {
   alignment?: Timepoint[];
   /**
    * Legacy field name for alignment data written by older builds.
-   * Read-shim only: `audioCache.getCachedSegment` (src/data/repos/audioCache.ts,
-   * the DBService carve) normalizes it onto `alignment`;
-   * new rows never write it.
+   * Read-shim only: `audioCache.getCachedSegment` (src/data/repos/audioCache.ts)
+   * normalizes it onto `alignment`; new rows never write it.
    */
   alignmentData?: Timepoint[];
   /** Creation timestamp. */
@@ -64,17 +61,16 @@ export interface CacheSessionState {
   updatedAt: number;
 }
 
+// The canonical CitationMarker lives in ./tts-content (the extraction/engine
+// consumption types live together); re-exported here so the cache-row surface
+// keeps serving it.
+export type { CitationMarker } from './tts-content';
+import type { CitationMarker } from './tts-content';
+
 /**
  * Extracted/sanitized sentences for TTS.
  * Store: 'cache_tts_preparation' (Key: `${bookId}-${sectionId}`)
  */
-
-// The canonical CitationMarker moved to ./tts-content (Phase 5c §5c.1 — the
-// extraction/engine consumption types live together); re-exported here so the
-// cache-row surface keeps serving it.
-export type { CitationMarker } from './tts-content';
-import type { CitationMarker } from './tts-content';
-
 export interface CacheTtsPreparation {
   /** Composite key. */
   id: string;
@@ -89,9 +85,10 @@ export interface CacheTtsPreparation {
   citationMarkers?: CitationMarker[];
   /**
    * Version of the sentence-extraction algorithm that produced this row
-   * (`TTS_EXTRACTION_VERSION` in `lib/tts.ts`). Absent on rows written before
-   * the NFKD/CFI offset fix (extraction v2) — those rows may carry drifted CFIs
-   * for non-ASCII text and are candidates for background re-extraction.
+   * (`TTS_EXTRACTION_VERSION` in `lib/ingestion/sentence-extraction.ts`).
+   * Absent on rows written before the NFKD/CFI offset fix (extraction v2) —
+   * those rows may carry drifted CFIs for non-ASCII text and are candidates
+   * for background re-extraction.
    */
   extractionVersion?: number;
 }
@@ -114,7 +111,8 @@ export interface TableImage {
 }
 
 /**
- * Cached location data for a book to speed up loading.
+ * Cached location data for a book to speed up loading (the `locations`
+ * field of a `cache_render_metrics` row).
  */
 export interface BookLocations {
   /** The ID of the book. */

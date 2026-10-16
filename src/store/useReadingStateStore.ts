@@ -17,8 +17,8 @@ const MERGE_TIME_WINDOW = 20 * 60 * 1000; // 20 minutes
  * `exportReadingListToCSV` writes `entry.percentage.toFixed(4)` (src/lib/csv.ts)
  * — and it is FINER than anything the UI renders (ReadingListDialog shows
  * `Math.round(percentage * 100)`). Comparing at the coarser display precision
- * let the stored value trail by up to half a percent, which the four-decimal
- * export column showed verbatim.
+ * would let the stored value trail by up to half a percent, which the
+ * four-decimal export column would show verbatim.
  */
 const PERCENTAGE_COMPARE_SCALE = 10_000;
 
@@ -58,7 +58,7 @@ const sameCfiRanges = (a: string[], b: string[]): boolean =>
  * `upsertEntry` spreads the whole entries map (O(M)) and opens a SECOND Yjs
  * transaction, and libraryViewStore subscribes to both stores — so an
  * unconditional upsert made every page turn recompute the library projection
- * twice. The write is now skipped while no user-visible field moved AND the
+ * twice. The write is skipped while no user-visible field moved AND the
  * stored entry is still fresh.
  *
  * The drift the skip can produce is therefore bounded twice over:
@@ -67,10 +67,11 @@ const sameCfiRanges = (a: string[], b: string[]): boolean =>
  * by under 1/10_000; and `lastUpdated` can trail by at most
  * READING_LIST_MIRROR_MAX_STALENESS_MS.
  *
- * fix: the entry also carries the `bookId` FK (types/user-data.ts §D). The
- * previous whole-entry rebuild omitted it, so every page turn DROPPED the FK
- * the v8 linker wrote — which pushed libraryViewStore's `useBook` reading-list
- * join off its O(1) FK lookup and back onto the O(M) scans.
+ * The entry also carries the `bookId` FK (ReadingListEntry.bookId in
+ * types/user-data.ts): a whole-entry rebuild that omitted it would DROP the FK
+ * the v8 linker wrote on every page turn — pushing libraryViewStore's
+ * `useBook` reading-list join off its O(1) FK lookup and back onto the O(M)
+ * scans.
  */
 function syncReadingListEntry(bookId: string, percentage: number, now: number): void {
     const book = useBookStore.getState().books?.[bookId];
@@ -121,8 +122,8 @@ type PerDeviceProgress = Record<string, Record<string, UserProgress>>;
 
 /**
  * Reading state store.
- * 
- * Phase 2 (Yjs Migration): This store is wrapped with yjs() middleware.
+ *
+ * This store is wrapped with yjs() middleware.
  * - `progress` (Record): Synced to yDoc.getMap('progress'), keyed by bookId then deviceId
  * - Actions (functions): Not synced, local-only
  */
@@ -218,14 +219,10 @@ export const getMostRecentProgress = (bookProgress: Record<string, UserProgress>
 
 /**
  * Replication declaration (aggregated by src/store/registry.ts).
- * Flipped to merge-defaults + scopedDiff LAST (flip wave 5,
- * phase2-fork-surgery.md §2.6 #9): the hottest write path — every page turn
- * writes here — flipped only after the pattern was proven on the other
- * eight stores and verified against selectors.perf.test.ts. The only
- * deleted canary was the selectors.ts `progressMapRaw || {}` memo; the
- * per-book `state.progress[bookId] || {}` guards in the actions below are
- * SECOND-LEVEL guards for a legitimately absent book (census ▲5), not
- * hydration fallbacks — they stay.
+ * merge-defaults + scopedDiff: this is the hottest write path — every page
+ * turn writes here. The per-book `state.progress[bookId] || {}` guards in the
+ * actions below are SECOND-LEVEL guards for a legitimately absent book, not
+ * hydration fallbacks.
  */
 export const PROGRESS_STORE_DEF: SyncedStoreDef<'progress'> = {
     name: 'progress',

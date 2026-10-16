@@ -3,7 +3,7 @@ import { SearchEngine } from './search-engine';
 import { SeededRandom, DEFAULT_FUZZ_SEED, DEFAULT_FUZZ_ITERATIONS } from '@test/fuzz-utils';
 import type { SearchSection } from '~types/search';
 
-/** Legacy `search()` died with the SearchSession adoption; scan via searchDetailed. */
+/** Scans via `searchDetailed` and returns its per-occurrence results. */
 const search = (engine: SearchEngine, bookId: string, query: string) =>
     engine.searchDetailed(bookId, query).results;
 

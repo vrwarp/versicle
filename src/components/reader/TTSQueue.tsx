@@ -23,7 +23,7 @@ export const TTSQueue: React.FC = () => {
     const contentLang = useBook(currentBookId)?.language;
     // Engine commands come from the TtsController facade (stable identity).
     const { jumpTo } = useAudioCommands();
-    // Reduced motion (Phase 8 §K): the follow-scroll is JS-driven motion —
+    // Reduced motion: the follow-scroll is JS-driven motion —
     // CSS cannot reach scrollIntoView's behavior option.
     const reducedMotion = useReducedMotion();
     const activeRef = useRef<HTMLButtonElement>(null);

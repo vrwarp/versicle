@@ -1,13 +1,11 @@
 /**
- * TraditionalConverter — the simplified→traditional display pass
- * (Phase 6 §7.3, prep/phase6-reader-engine.md PR-10).
+ * TraditionalConverter — the simplified→traditional display pass.
  *
- * KEEPER semantics preserved from the legacy pass (analysis/chinese.md):
- * in-place `nodeValue` mutation with an `_originalText` cache on the text
+ * In-place `nodeValue` mutation with an `_originalText` cache on the text
  * node for clean restore — DOM structure (and therefore every computed CFI)
  * is never touched.
  *
- * CH-7 guard, new here: the conversion is applied ONLY when it preserves
+ * CH-7 guard: the conversion is applied ONLY when it preserves
  * the code-unit length. OpenCC cn→tw is single-char (length-preserving) by
  * configuration, but a violation would silently corrupt CFI/Range offsets
  * computed against the displayed text — so a mismatch skips the node and
@@ -60,7 +58,7 @@ export function __setOpenCCForTests(stub: OpenCCConverter, simpStub?: OpenCCConv
   if (simpStub) simplifier = simpStub;
 }
 
-/** The `_originalText` cache rides on the text node itself (legacy shape). */
+/** The `_originalText` cache rides on the text node itself. */
 interface CachedTextNode extends Text {
   _originalText?: string | null;
 }

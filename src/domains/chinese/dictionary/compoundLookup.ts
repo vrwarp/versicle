@@ -1,15 +1,13 @@
 /**
- * compoundLookup — adjacent compound-word resolution inside a selection
- * (Phase 6 §7.4, prep doc PR-11; moved from the inline `getCompoundWord`
- * in CompassPill.tsx and made pure + async-lookup friendly).
+ * compoundLookup — adjacent compound-word resolution inside a selection:
+ * pure, with an injected async (batched) dictionary lookup.
  *
- * Semantics preserved from the legacy helper: candidate windows reach up
- * to 4 characters left and 4 right of the focused character; the LONGEST
- * dictionary hit wins, earliest start breaking ties (the legacy iteration
- * order kept the first strictly-longer hit). One deliberate fix, in line
- * with CH-1: windows are CODE-POINT windows (`Array.from`), so a selection
- * containing astral Han or emoji no longer slices through surrogate pairs
- * — the triage card already indexes tiles by code point.
+ * Candidate windows reach up to 4 characters left and 4 right of the focused
+ * character; the LONGEST dictionary hit wins, earliest start breaking ties
+ * (the iteration order keeps the first strictly-longer hit). Windows are
+ * CODE-POINT windows (`Array.from`), so a selection containing astral Han or
+ * emoji is never sliced through a surrogate pair — the triage card indexes
+ * tiles by code point.
  */
 import type { DictEntryTuple } from '@data/repos/dictionary';
 
@@ -40,7 +38,7 @@ function candidatesFrom(chars: readonly string[], charIndex: number): string[] {
 /**
  * All multi-character candidate windows (length > 1) around `charIndex`
  * (a CODE-POINT index into `text`), ordered by start asc, end asc — the
- * legacy scan order, which the picker relies on for tie-breaking.
+ * scan order the picker relies on for tie-breaking.
  */
 export function compoundCandidates(text: string, charIndex: number): string[] {
   return candidatesFrom(Array.from(text), charIndex);
@@ -89,9 +87,9 @@ export async function findCompoundWord(
  * one per character. Per-index resolution is identical to the single-index
  * function — same windows, same longest-wins/earliest-start tie-break.
  *
- * The triage card used to await one `getCompound` per Han character in the
- * selection, each opening its own transaction AND re-splitting the whole
- * selection (quadratic in the selection length).
+ * Awaiting one `getCompound` per Han character in a selection would open a
+ * transaction per character AND re-split the whole selection each time
+ * (quadratic in the selection length).
  */
 export async function findCompoundWords(
   text: string,

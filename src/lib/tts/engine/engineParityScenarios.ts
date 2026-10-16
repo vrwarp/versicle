@@ -9,23 +9,22 @@
  * drift between the transports fails one side of the suite. Scenarios poll with vi.waitFor so
  * the same code tolerates the worker transport's async message hops.
  *
- * ## Phase 5 entry gate (plan/overhaul/prep/phase5-tts-strangler.md §0)
+ * ## Scenarios (plan/overhaul/prep/phase5-tts-strangler.md §0)
  *
- * Scenarios P1–P11 are the original suite, kept verbatim. P12–P23 expand the contract to the
- * behaviors the 5a/5b/5c strangler touches: restore, skip masks, table adaptations, section
- * navigation, dragnet capture, provider fallback, analysis dedup, and queue identity.
+ * Scenarios P1–P11 cover the core playback surface (play, provider events, pause/stop, jumpTo,
+ * errors, voices, voice/speed/provider routing). P12–P23 extend the contract to restore, skip
+ * masks, table adaptations, section navigation, dragnet capture, provider fallback, analysis
+ * dedup, and queue identity.
  *
- * Both documented `it.fails` riders have flipped green:
- *   - P21 single-replay flipped at 5a-PR2: providers signal a failure exactly once
- *     (reject-only), the manager rethrows typed without self-swapping, and the engine
- *     recovers through one sequenced `recoverWithLocalProvider` task — the S2 double-fire
- *     (and its double replay) is structurally dead.
- *   - P14 identity flipped at 5b-PR2: the immutable QueueModel (copy-on-write, the renamed
- *     PlaybackStateManager) makes every post-mask queue a FRESH array; the in-place
- *     mutation the rider documented is gone. The same PR replaced the four positional
- *     notification paths with the single PlaybackSnapshot{seq, queueId} channel, so P23's
- *     worker leg now pins identity-PRESERVING broadcasts (queue attached only when the
- *     queueId changes; consumers cache it otherwise).
+ * What the riders pin:
+ *   - P21 single-replay: providers signal a failure exactly once (reject-only), the manager
+ *     rethrows typed without self-swapping, and the engine recovers through one sequenced
+ *     `recoverWithLocalProvider` task — a double-fire (and its double replay) cannot happen.
+ *   - P14 identity: the immutable QueueModel (copy-on-write) makes every post-mask queue a
+ *     FRESH array; no published queue is mutated in place.
+ *   - P23 identity: the single PlaybackSnapshot{seq, queueId} channel makes the worker leg
+ *     pin identity-PRESERVING broadcasts (queue attached only when the queueId changes;
+ *     consumers cache it otherwise).
  *
  * Absorption (README §4 rule 8): the named `describe('regression: …')` blocks below carry the
  * surviving assertions of per-bug suites deleted in the same commit. See
@@ -101,7 +100,6 @@ export interface ParityHarness {
         setSpeed(speed: number): Promise<void> | void;
         setProviderById(providerId: string): Promise<void> | void;
         getVoices(): Promise<TTSVoice[]>;
-        // --- Phase 5 gate extensions (§0.1) ---
         setBookId(bookId: string | null): Promise<void> | void;
         loadSection(index: number, autoPlay?: boolean): Promise<void> | void;
         /** Fire-and-forget on both transports — P18 depends on NOT awaiting completion. */
@@ -115,11 +113,10 @@ export interface ParityHarness {
         stopCount(): number;
         providerIds(): string[];
         setVoices(voices: TTSVoice[]): void;
-        // --- Phase 5 gate extensions (§0.1) ---
         /**
          * Arm the backend so the next play() on a non-'local' provider REJECTS once with a
-         * `ProviderPlaybackError`-named error — TTSProviderManager's single failure path
-         * (5a-PR2): no self-swap, no synthetic 'fallback' event; the engine recovers via
+         * `ProviderPlaybackError`-named error — TTSProviderManager's single failure path:
+         * no self-swap, no synthetic 'fallback' event; the engine recovers via
          * one sequenced task and swaps through setProviderById.
          */
         failNextPlay(error: { message: string }): void;
@@ -129,7 +126,7 @@ export interface ParityHarness {
         earcons(): string[];
     };
     /**
-     * Host-state seams (§0.1): fakes in-process; replicated updates / host-port maps on the
+     * Host-state seams: fakes in-process; replicated updates / host-port maps on the
      * worker. Async seams return promises the scenarios await so replication lands before the
      * engine reads it.
      */
@@ -196,7 +193,7 @@ const CFI_REF_HEAD = 'epubcfi(/6/4!/4/6/1:0)';
 const CFI_REF_ITEM = 'epubcfi(/6/4!/4/6/1:32)';
 /** A point CFI covering both table sentences by path prefix (mapSentencesToAdaptations). */
 const TABLE_ROOT = 'epubcfi(/6/4!/4/4)';
-/** The reference group's rootCfi exactly as groupSentencesByRoot finalizes it. */
+/** The reference group's rootCfi exactly as groupSegmentsByRoot finalizes it. */
 const REF_GROUP_ROOT = generateCfiRange(CFI_REF_HEAD, CFI_REF_ITEM);
 
 const SENT_BODY: ParitySentence = { text: 'Body paragraph of the chapter under test.', cfi: CFI_BODY };
@@ -421,7 +418,7 @@ export function describeEngineParity(
                         expect(h.snapshots().some((s) => s.index === 1 && s.queueLen === seeded.length)).toBe(true));
 
                     // Stale flags persisted by a prior session are cleared on restore
-                    // (AudioPlayerService.restoreQueue stale-isSkipped cleanup) — with genAI
+                    // (PlaybackController.restoreQueue stale-isSkipped cleanup) — with genAI
                     // disabled nothing re-applies them, so the end state is fully unskipped.
                     expect(restored.map((q) => q.isSkipped ?? false)).toEqual(seeded.map(() => false));
                 }));
@@ -535,10 +532,9 @@ export function describeEngineParity(
                 }));
 
             if (kind === 'in-process') {
-                // Flipped green at 5b-PR2 (was the documented it.fails rider): the immutable
-                // QueueModel applies the mask copy-on-write, so the post-mask broadcast
-                // delivers a FRESH array — the previously published queue is never mutated
-                // in place (the S4 debt this rider was the executable spec for).
+                // The immutable QueueModel applies the mask copy-on-write, so the post-mask
+                // broadcast delivers a FRESH array — the previously published queue is never
+                // mutated in place.
                 it('identity rider: the post-mask queue is a fresh array (copy-on-write)', () =>
                     withHarness(async (h) => {
                         const bookId = 'book-mask-identity';
@@ -620,7 +616,7 @@ export function describeEngineParity(
                     // PINS CURRENT BEHAVIOR: the disable path re-applies an empty skip mask
                     // (which unskips the adaptation sibling) but applyTableAdaptations([])
                     // cannot restore the original anchor text — the replacement is permanent
-                    // until the section reloads. 5b's immutable QueueModel revisits this.
+                    // until the section reloads.
                     // (The predicate requires the adapted text so it cannot match a stale
                     // pre-adaptation broadcast on the worker transport.)
                     const cleared = await waitForQueue(h, (q) =>
@@ -739,9 +735,8 @@ export function describeEngineParity(
                     await h.engine.setBookId('book-B');
                     releaseA();
 
-                    // The stale task must bail on the epoch checkpoint (5b-PR3; formerly
-                    // the originalBookId guard) without touching the DB or the queue;
-                    // book B keeps working normally afterwards.
+                    // The stale task must bail on the epoch checkpoint without touching
+                    // the DB or the queue; book B keeps working normally afterwards.
                     await h.engine.loadSection(0, false);
                     await waitForQueue(h, (q) => q.some((i) => i.text.includes('Book B sentence')));
                     expect(h.host.contentFetchCount('book-A', 'sec-a1')).toBe(0);
@@ -836,13 +831,11 @@ export function describeEngineParity(
 
             it('P20 dragnet invalidation: a section change between pause and play suppresses the capture', () =>
                 withHarness(async (h) => {
-                    // Section-change invalidation is INTERNAL since 5b-PR4 (the
-                    // DragnetGesture unit disarms on the engine's own section
-                    // navigation) — the external clearPauseGesture API and its
-                    // ReaderView/useTTS call sites are gone. The durable behavior
-                    // is unchanged: a chapter change between a pause and a play is
-                    // deliberate navigation, not a resume gesture, so no stale
-                    // audio-bookmark may be captured.
+                    // Section-change invalidation is INTERNAL (the DragnetGesture
+                    // unit disarms on the engine's own section navigation): a
+                    // chapter change between a pause and a play is deliberate
+                    // navigation, not a resume gesture, so no stale audio-bookmark
+                    // may be captured.
                     await h.host.setGenAISettings(GENAI_DISABLED);
                     h.host.seedSections(DRAGNET_BOOK, [
                         { sectionId: 'dn-a', title: 'Alpha', characterCount: 120 },
@@ -904,11 +897,10 @@ export function describeEngineParity(
                     expect(h.snapshots().some((s) => s.error !== null)).toBe(false);
                 }));
 
-            // Flipped green at 5a-PR2 (was the documented it.fails rider for the S2
-            // double-fire): providers reject exactly once, the manager rethrows typed
-            // without self-swapping, and the engine recovers through ONE sequenced
+            // Providers reject exactly once, the manager rethrows typed without
+            // self-swapping, and the engine recovers through ONE sequenced
             // recoverWithLocalProvider task — so the failed sentence replays exactly
-            // once (2 synthesis calls total, not the legacy 3).
+            // once (2 synthesis calls total).
             it('single-replay rider: the failed sentence is replayed exactly once', () =>
                 withHarness(async (h) => {
                     await driveFallback(h);
@@ -988,11 +980,10 @@ export function describeEngineParity(
                             // Content parity holds on every broadcast …
                             expect(ref.map((i) => ({ text: i.text, cfi: i.cfi }))).toEqual(
                                 QUEUE.map((i) => ({ text: i.text, cfi: i.cfi })));
-                            // … and since 5b-PR2 the snapshot channel attaches the queue
-                            // only when its queueId changes: status churn re-uses the
-                            // consumer's cached array, so identity is STABLE between
-                            // queue changes even across structured clone (updated from
-                            // the gate-era fresh-clone-per-broadcast pin).
+                            // … and the snapshot channel attaches the queue only when its
+                            // queueId changes: status churn re-uses the consumer's cached
+                            // array, so identity is STABLE between queue changes even
+                            // across structured clone.
                             expect(ref).toBe(refs[0]);
                         }
                     }));

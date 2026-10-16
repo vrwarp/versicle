@@ -1,13 +1,12 @@
 /**
  * GenAI activity-log persistence wiring: mirrors the store's in-memory log
  * ring buffer into the `versicle-genai-logs` side database (the data-layer
- * {@link genaiLogsRepo}) so the logs survive app restarts — the
- * in-memory-only buffer kept losing them on every reload.
+ * {@link genaiLogsRepo}) so the logs survive app restarts.
  *
- * This module is the app-layer seam (README §2 rule 3): the store never
- * touches IDB and the repo never touches the store; the composition root
- * wires the two here via {@link initGenAILogPersistence} (called once from
- * wireGoogle):
+ * This module is the app-layer seam (plan/overhaul/README.md §2 rule 3): the
+ * store never touches IDB and the repo never touches the store; the
+ * composition root wires the two here via {@link initGenAILogPersistence}
+ * (called once from wireGoogle):
  *
  *  1. hydrate — load the persisted entries and PREPEND them into the store
  *     (deduped by id, capped at maxLogs) via `hydrateLogs`;
@@ -18,7 +17,7 @@
  *
  * The repo is fail-soft and serializes its own writes, so a persistence
  * failure (private browsing, quota) never breaks logging itself — the
- * in-memory buffer keeps working exactly as before. Entries arrive
+ * in-memory buffer keeps working regardless. Entries arrive
  * PRE-REDACTED from the clients (domains/google/genai/logging.ts), so no
  * inlineData/base64 image bytes are ever persisted.
  */
@@ -75,10 +74,10 @@ export function initGenAILogPersistence(): Promise<void> {
       genaiLogsRepo.append(entry, state.maxLogs);
     }
     // Re-key the set to what the buffer STILL holds. The ring buffer trims from
-    // the front, so ids of trimmed entries used to stay in this set forever —
-    // one leaked string per log entry for the life of the session. Rebuilding
-    // bounds it by maxLogs, and a trimmed id can never come back (ids are
-    // minted per entry), so nothing is ever re-appended.
+    // the front, so ids of trimmed entries would otherwise stay in this set
+    // forever — one leaked string per log entry for the life of the session.
+    // Rebuilding bounds it by maxLogs, and a trimmed id can never come back
+    // (ids are minted per entry), so nothing is ever re-appended.
     knownIds.clear();
     for (const entry of logs) knownIds.add(entry.id);
   });

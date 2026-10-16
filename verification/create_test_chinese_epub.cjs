@@ -60,13 +60,13 @@ async function create() {
 }
 
 /**
- * P6 entry-gate fixture (prep/phase6-reader-engine.md §Fixture needs): a
+ * Astral-plane fixture (prep/phase6-reader-engine.md §Fixture needs): a
  * SECOND book carrying astral-plane Han (U+20000 𠀀, CJK Ext-B — a surrogate
  * pair in UTF-16), an emoji, and mixed BMP lines, for the CH-1 pinyin
  * alignment characterization (test_characterization_pinyin.spec.ts).
  *
  * Deliberately a separate file: test_chinese.epub stays byte-identical so
- * the pre-existing chinese journeys are not invalidated by a fixture rebuild.
+ * the other chinese journeys are not invalidated by a fixture rebuild.
  */
 async function createAstral() {
   const zip = new JSZip();
@@ -110,12 +110,12 @@ async function createAstral() {
   </body>
 </html>`);
 
-  // Line 1: astral Han 𠀀 (U+20000) followed by BMP Han — pins the off-by-one
-  //         pinyin shift and the trailing-char starvation (CH-1).
-  // Line 2: emoji mid-sentence — pins the same starvation after a non-Han
-  //         astral char.
-  // Line 3: plain BMP control line — alignment must be exact here both
-  //         before and after the CH-1 fix.
+  // Line 1: astral Han 𠀀 (U+20000) followed by BMP Han — guards against the
+  //         off-by-one pinyin shift and the trailing-char starvation (CH-1).
+  // Line 2: emoji mid-sentence — guards against the same starvation after a
+  //         non-Han astral char.
+  // Line 3: plain BMP control line — alignment must be exact here regardless
+  //         of astral handling.
   zip.folder('OEBPS').file('chapter1.xhtml', `<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>

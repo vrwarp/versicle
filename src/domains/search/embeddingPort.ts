@@ -1,26 +1,26 @@
 /**
- * The embedding/repo PORT shapes the search-side semantic query path consumes
- * (Increment D). Declared HERE (not imported from @domains/google) so
- * domains/search stays inside its own boundary — the app reader controller
- * injects the real @domains/google embedding facade + repos, exactly like the
- * EmbeddingIndexer's injected ports (EmbeddingIndexer.ts:31-49).
+ * The embedding/repo PORT shapes the search-side semantic query path consumes.
+ * Declared HERE (not imported from @domains/google) so domains/search stays
+ * inside its own boundary — the app reader controller injects the real
+ * @domains/google embedding facade + repos, exactly like the EmbeddingIndexer's
+ * injected ports (see the `*Port` interfaces in EmbeddingIndexer.ts).
  */
 import type { CacheEmbeddingsRow, CacheEmbedJobsRow } from '@data/rows/cache';
 
 /**
  * The quantization scheme stamp the indexer writes and BOTH the read
  * (semanticRank) and index (EmbeddingIndexer) paths compare against (design
- * §8.2). It is the single literal carried on every persisted row
- * (cache.ts:`quant`); a future scheme change bumps this constant, and a stored
- * row whose `quant` no longer matches is treated as INVALID (re-embed, never
- * convert — incompatible spaces).
+ * §8.2 of plan/semantic-search-design.md). It is the single literal carried on
+ * every persisted row (`quant` in @data/rows/cache); a future scheme change
+ * bumps this constant, and a stored row whose `quant` no longer matches is
+ * treated as INVALID (re-embed, never convert — incompatible spaces).
  */
 export const CURRENT_QUANT: CacheEmbeddingsRow['quant'] = 'int8-pervec';
 
 /**
  * The embedding task profile (mirrors @domains/google EmbeddingProfile —
- * contract.ts:20): `document` for corpus indexing, `query` for search-time
- * lookup. The asymmetric pair is what makes the cosine meaningful.
+ * genai/embedding/contract.ts): `document` for corpus indexing, `query` for
+ * search-time lookup. The asymmetric pair is what makes the cosine meaningful.
  */
 export type EmbeddingProfile = 'document' | 'query';
 
@@ -37,7 +37,7 @@ export interface EmbeddingClientPort {
 /**
  * A `cache_embeddings` row as the repo READ path hands it over: the persisted
  * binary buffers are already re-wrapped as the typed-array views the cosine
- * ranking consumes (embeddings.ts:46 CacheEmbeddingsView).
+ * ranking consumes (CacheEmbeddingsView in @data/repos/embeddings).
  */
 export type EmbeddedRowView = Omit<CacheEmbeddingsRow, 'sections'> & {
   sections: (Omit<CacheEmbeddingsRow['sections'][number], 'vectors' | 'scales'> & {
@@ -61,7 +61,7 @@ export interface EmbeddingsSourcePort {
   getJob?(bookId: string): Promise<CacheEmbedJobsRow | undefined>;
 }
 
-/** The B3 int8 quantizer port (SearchEngine.quantizeInt8PerVector). */
+/** The int8 per-vector quantizer port (SearchEngine.quantizeInt8PerVector). */
 export type QuantizePort = (vec: Float32Array) => { vectors: Int8Array; scale: number };
 
 /** Semantic on/off + {model, dims}, read per call from the app store (injected). */

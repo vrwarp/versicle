@@ -1,8 +1,8 @@
 /**
- * GenAIClient contract (Phase 7 §H; C9). The interface the per-feature
- * modules (./features/*) and the legacy GenAIService façade consume;
- * implementations: GeminiClient (REST via the kernel NetworkGateway) and
- * MockGenAIClient (composition-root/test builds only — boundary rule 9).
+ * GenAIClient contract (C9). The interface the per-feature modules
+ * (./features/*) and the app-layer TTS GenAI port (src/app/tts/genaiPort.ts)
+ * consume; implementations: GeminiClient (REST via the kernel NetworkGateway)
+ * and MockGenAIClient (composition-root/test builds only — boundary rule 9).
  */
 
 /** Gemini JSON-mode response schema type names (SDK-compatible, lowercase). */
@@ -27,9 +27,9 @@ export type GenAIPrompt =
 export interface GenAIRequestContext {
   /**
    * The book whose content this request transmits — feeds the gateway's
-   * per-book consent gate. Optional today: the TTS pipeline's EngineContext
-   * port does not carry bookId yet (P5c narrows it); absent bookId resolves
-   * per the app-installed consent resolver's legacy-allow rule.
+   * per-book consent gate. Optional: the TTS analysis callers thread it
+   * through the EngineContext GenAI port; a call without one is allowed by
+   * the app-installed consent resolver (src/app/google/aiConsent.ts).
    */
   bookId?: string;
   bookTitle?: string;
@@ -60,7 +60,7 @@ export interface GenAIRequest<T> {
 
 export interface GenAIClient {
   generateStructured<T>(request: GenAIRequest<T>): Promise<T>;
-  /** Plain-text generation (legacy GenAIService.generateContent surface). */
+  /** Plain-text generation. */
   generateText(prompt: string, context?: GenAIRequestContext): Promise<string>;
   /** Whether the client currently holds a usable configuration. */
   isConfigured(): boolean;
@@ -73,8 +73,7 @@ export interface GenAIConfig {
 }
 
 /**
- * Read per call (never cached): kills the mutable-singleton clobber where
- * the TTS pipeline's hardcoded configure(apiKey, 'gemini-1.5-flash')
- * switched every subsequent request's model (GG-8).
+ * Read per call (never cached): every request sees the live model selection,
+ * so no caller can clobber it through a mutable singleton config (GG-8).
  */
 export type GenAIConfigProvider = () => GenAIConfig;

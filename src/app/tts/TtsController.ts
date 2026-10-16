@@ -1,38 +1,35 @@
 /**
- * TtsController — the app-layer command facade over the TTS engine (Phase 5b;
- * plan/overhaul/prep/phase5-tts-strangler.md §5b.4).
+ * TtsController — the app-layer command facade over the TTS engine
+ * (plan/overhaul/prep/phase5-tts-strangler.md §5b.4).
  *
- * Engine commands used to live as `useTTSStore` actions that wrapped
- * `getAudioPlayer()` — engine plumbing inside a persisted settings store. This
- * controller absorbs all of them, so the stores are pure state and the engine is
- * reached from exactly one place:
+ * Engine commands live here, not in the persisted settings store, so the
+ * stores are pure state and the engine is reached from exactly one place:
  *
  *  - **Commands** (play/pause/stop/seek/jumpTo/preview/voice management/section
  *    navigation/dragnet invalidation): exposed as bound functions; UI components
  *    call them via the {@link useAudioCommands} hook.
  *  - **Engine → store mirror**: `initialize()` subscribes to the engine's
  *    PlaybackSnapshot stream and writes status/queue/index/cfi/error/download
- *    state into the EPHEMERAL `useTTSPlaybackStore` (5b-PR3 split) — including
- *    the tested `isAudiblePlayback` flicker derivation.
+ *    state into the EPHEMERAL `useTTSPlaybackStore` — including the tested
+ *    `isAudiblePlayback` flicker derivation.
  *  - **Store → engine settings sync**: `initialize()` watches the PERSISTED
  *    `useTTSSettingsStore` (rate/voice via the active profile, language, preroll,
  *    background audio, provider, API keys, Bible-lexicon flag) and pushes
- *    changes — replacing the engine calls that used to run inside store setters
- *    and `onRehydrateStorage` (R9 complete).
+ *    changes.
  *  - **Voice resolution**: the active-voice fallback algorithm (saved profile
- *    voice → language match → English → first available) moved here from the
- *    legacy store's setActiveLanguage/loadVoices — it needs both the persisted
- *    profile and the runtime voice list, which now live in different stores.
+ *    voice → language match → English → first available) — it needs both the
+ *    persisted profile and the runtime voice list, which live in different
+ *    stores.
  *
  * Because the playback mirror lives in a store that is never persisted and never
  * replicated, an engine broadcast cannot re-enter the settings replication slice:
- * the S6 echo loop is structurally dead (replication.test.ts pins it).
+ * the engine → settings → worker echo loop is structurally impossible
+ * (replication.test.ts pins it).
  *
  * `initialize()` runs as the `tts/initialize` boot task (src/app/boot/
  * deviceRegistration.ts) — by then the persisted store has rehydrated (including
  * the tts-storage → tts-settings migration), so the initial push replays the
- * persisted settings into the engine exactly like the old `onRehydrateStorage`
- * side effects did.
+ * persisted settings into the engine.
  */
 import { getAudioPlayer } from './mainThreadAudioPlayer';
 import { diagnostics } from '@data/repos/diagnostics';
@@ -104,9 +101,8 @@ export class TtsController {
 
         const settings = useTTSSettingsStore.getState();
 
-        // Replay the persisted settings into the engine (moved verbatim from the
-        // legacy store's onRehydrateStorage side effects; actives derive from the
-        // active profile since the split).
+        // Replay the persisted settings into the engine (the active rate/voice
+        // derive from the active profile).
         this.engine.setBackgroundAudioMode(settings.backgroundAudioMode);
         this.engine.setBackgroundVolume(settings.whiteNoiseVolume);
         this.engine.setPrerollEnabled(settings.prerollEnabled);
@@ -122,8 +118,8 @@ export class TtsController {
         // and subscribed. UI gates on this.
         void this.engine.whenReady().then(() => useTTSPlaybackStore.setState({ engineReady: true }));
 
-        // Engine → store mirror (the single PlaybackSnapshot channel, 5b-PR2),
-        // writing into the EPHEMERAL playback store (5b-PR3). The handle delivers
+        // Engine → store mirror (the single PlaybackSnapshot channel), writing
+        // into the EPHEMERAL playback store. The handle delivers
         // FULL snapshots (queue re-attached from its cache when a broadcast
         // omitted it), so the queue spread below only guards against partial
         // snapshots from injected test engines.
@@ -146,16 +142,14 @@ export class TtsController {
             });
         });
 
-        // Store → engine settings sync (replaces the engine calls that lived in
-        // the legacy store's setters). Each push fires only when its field
+        // Store → engine settings sync. Each push fires only when its field
         // actually changed. Engine-originated mirror writes land in the PLAYBACK
         // store, which has no subscription here — they cannot echo back as
         // commands (or as replication pushes).
         useTTSSettingsStore.subscribe((s, prev) => {
             if (s.activeLanguage !== prev.activeLanguage) {
                 this.engine.setLanguage(s.activeLanguage);
-                // Re-resolve the active voice against the loaded voice list (the
-                // legacy setActiveLanguage fallback, now controller-owned).
+                // Re-resolve the active voice against the loaded voice list.
                 this.resolveActiveVoice();
             }
             const rate = selectActiveRate(s);
@@ -182,14 +176,12 @@ export class TtsController {
                 LexiconService.getInstance().setGlobalBibleLexiconEnabled(s.isBibleLexiconEnabled);
             }
             if (s.providerId !== prev.providerId) {
-                // Provider switch: re-init the provider and reload its voices
-                // (the legacy setProviderId → loadVoices chain).
+                // Provider switch: re-init the provider and reload its voices.
                 void this.loadVoices();
             } else if (s.apiKeys !== prev.apiKeys
                 && s.providerId in s.apiKeys
                 && s.apiKeys[s.providerId as keyof typeof s.apiKeys] !== prev.apiKeys[s.providerId as keyof typeof prev.apiKeys]) {
-                // API key committed for the ACTIVE provider: force a re-init
-                // (the legacy setApiKey → setProviderId(providerId) chain). The id
+                // API key committed for the ACTIVE provider: force a re-init. The id
                 // is unchanged, so the idempotence guard must be invalidated by
                 // hand — the provider instance really does have to be rebuilt.
                 this.appliedProviderId = null;
@@ -199,7 +191,7 @@ export class TtsController {
     }
 
     /**
-     * The voice-fallback algorithm of the legacy setActiveLanguage: prefer the
+     * The voice-fallback algorithm for a language change: prefer the
      * profile's saved voice for the active language, else the first voice
      * matching the language; RETAIN the saved id when the list is not loaded
      * yet (the voice-recall regression). Warns when the loaded list has no
@@ -234,7 +226,7 @@ export class TtsController {
     // --- Playback commands (bound: components destructure them from useAudioCommands) ---
 
     play = (): void => {
-        // Ask-on-first-TTS-play per-book AI consent (P9; the gate is at the
+        // Ask-on-first-TTS-play per-book AI consent (the gate is at the
         // egress boundary — playback itself NEVER blocks on the answer, the
         // dialog just resolves before the pipeline can reach the model).
         void this.withAiConsent(() => void this.engine.play());
@@ -295,7 +287,7 @@ export class TtsController {
         return this.engine.skipToPreviousSection();
     };
 
-    // --- Diagnostics (S9: the LIVE buffer/stats and the snapshot capture go
+    // --- Diagnostics (the LIVE buffer/stats and the snapshot capture go
     // over the engine handle — in production the WORKER-side flight recorder,
     // the one that actually sees engine traffic; never the main-thread module
     // singleton. The PERSISTED snapshots are plain IndexedDB rows shared by
@@ -348,9 +340,8 @@ export class TtsController {
     /**
      * (Re-)apply the configured provider on the engine, load its voice list into
      * the playback store, and re-select the best voice for the active language
-     * (saved profile voice → language match → English → first). Moved verbatim
-     * from the legacy `useTTSStore.loadVoices` action, with the resolved voice
-     * landing in the playback store and the id in the settings profile.
+     * (saved profile voice → language match → English → first). The resolved
+     * voice lands in the playback store and its id in the settings profile.
      *
      * Safe to call while audio is playing: the provider swap is skipped when the
      * requested provider is already the applied one (see {@link appliedProviderId}).
