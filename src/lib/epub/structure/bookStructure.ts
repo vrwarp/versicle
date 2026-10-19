@@ -6,6 +6,7 @@
  * module never imports jszip or epub.js (they ride lazy chunks).
  */
 import type { NavigationItem } from '~types/book';
+import { mayBeCopyrightPage, pageLines, parseCopyrightLines, type CopyrightMetadata } from './copyrightPage';
 import { chooseCover, findCoverCandidates, type CoverCandidate, type CoverChoice, type ImageProbe } from './coverResolver';
 import { probeImage } from './imageProbe';
 import { parseMarkup } from './markup';
@@ -13,7 +14,7 @@ import { parseNavDocument, parseNcxDocument, type ParsedNav } from './navParser'
 import { PackageIndex } from './packageIndex';
 import { parsePackageDocument } from './packageModel';
 import { chooseTocSource, type TocChoice } from './tocLabels';
-import { resolveToc } from './tocResolver';
+import { resolveToc, resolveTocHref } from './tocResolver';
 
 export interface ArchivePort {
   /** Text of a zip entry by zip path (as written; may be percent-encoded). */
@@ -118,4 +119,53 @@ export async function resolveStructureCover(
     probe,
   );
   return { pick: second.pick, rejected: [...first.rejected, ...second.rejected], candidates: all };
+}
+
+/** Front-matter spine documents scanned for a copyright page, then back matter. */
+const COPYRIGHT_SCAN_FRONT = 12;
+const COPYRIGHT_SCAN_BACK = 4;
+
+/**
+ * Title/author from the copyright page — the fallback for a package with no
+ * `dc:creator` or a file-name `dc:title`. Declared copyright pages (guide,
+ * landmarks, a TOC entry labelled "Copyright") are read first, then the
+ * first and last few spine documents. The first page yielding anything wins.
+ */
+export async function resolveStructureCopyright(
+  structure: BookStructure,
+  archive: ArchivePort,
+  toc: readonly NavigationItem[] = [],
+): Promise<CopyrightMetadata> {
+  const { index, nav } = structure;
+  const declared: string[] = [];
+  for (const ref of index.model.guide) {
+    if (ref.type.toLowerCase() === 'copyright-page') declared.push(ref.href);
+  }
+  for (const lm of nav?.landmarks ?? []) {
+    if (lm.type !== 'copyright-page') continue;
+    const href = resolveTocHref(lm.href, { index, tocPath: index.model.navPath, order: 'raw' });
+    if (href) declared.push(href);
+  }
+  const visit = (items: readonly NavigationItem[]) => {
+    for (const item of items) {
+      if (/^\s*copyright\b/i.test(item.label) && item.href) declared.push(item.href);
+      if (item.subitems) visit(item.subitems);
+    }
+  };
+  visit(toc);
+
+  const spine = index.spine;
+  const scanned = [
+    ...spine.slice(0, COPYRIGHT_SCAN_FRONT),
+    ...spine.slice(Math.max(COPYRIGHT_SCAN_FRONT, spine.length - COPYRIGHT_SCAN_BACK)),
+  ];
+  const order = [...new Set([...declared.map((h) => h.split('#')[0]), ...scanned])];
+
+  for (const href of order) {
+    const text = await readTextSafe(archive, index.toZipPath(href));
+    if (!text || !mayBeCopyrightPage(text)) continue;
+    const found = parseCopyrightLines(pageLines(parseMarkup(text, 'application/xhtml+xml')));
+    if (found.title || found.author) return found;
+  }
+  return {};
 }
