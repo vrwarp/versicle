@@ -26,6 +26,8 @@ interface BookShape {
   coverUrl?: string | null;
   destroyed?: number;
   openedRejects?: boolean;
+  /** Zip entries: when set, the book exposes an archive (package structure is read). */
+  files?: Record<string, string>;
 }
 
 let bookShape: BookShape;
@@ -43,6 +45,15 @@ vi.mock('epubjs', () => ({
         navigation: Promise.resolve(bookShape.navigation),
       },
       coverUrl: async () => bookShape.coverUrl ?? null,
+      ...(bookShape.files
+        ? {
+            archive: {
+              getText: (url: string) => Promise.resolve(bookShape.files![url.slice(1)]),
+              getBlob: () => Promise.resolve(undefined),
+            },
+            container: { packagePath: 'OEBPS/content.opf' },
+          }
+        : {}),
       destroy: () => destroyCalls.push('destroy'),
     };
   },
@@ -189,6 +200,59 @@ describe('extractPreamble — OPF metadata', () => {
     await expect(
       extractPreamble(makeEpubFile(), { cover: 'raw', signal: controller.signal })
     ).rejects.toThrow('Extraction cancelled');
+  });
+});
+
+describe('extractPreamble — copyright page fallback', () => {
+  const page = (body: string) =>
+    `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>x</title></head><body>${body}</body></html>`;
+  const sigilExport = (): Record<string, string> => ({
+    'OEBPS/content.opf': `<?xml version="1.0" encoding="utf-8"?>
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Reasonable Faith.501159.int</dc:title></metadata>
+  <manifest><item id="c" href="copy.xhtml" media-type="application/xhtml+xml"/></manifest>
+  <spine><itemref idref="c"/></spine>
+</package>`,
+    'OEBPS/copy.xhtml': page(
+      '<p>Reasonable Faith: Christian Truth and Apologetics</p><p>Copyright © 1984, 1994, 2008 by William Lane Craig</p>',
+    ),
+  });
+
+  it('fills a missing creator and a file-name title from the copyright page; raw fields stay OPF', async () => {
+    bookShape.metadata = { title: 'Reasonable Faith.501159.int', language: 'en' };
+    bookShape.files = sigilExport();
+
+    const preamble = await extractPreamble(makeEpubFile(), { cover: 'raw' });
+
+    expect(preamble).toMatchObject({
+      rawTitle: 'Reasonable Faith.501159.int',
+      rawAuthor: 'Unknown Author',
+      title: 'Reasonable Faith: Christian Truth and Apologetics',
+      author: 'William Lane Craig',
+    });
+  });
+
+  it('keeps good OPF metadata as-is', async () => {
+    bookShape.metadata = { title: 'Real Title', creator: 'Real Author', language: 'en' };
+    bookShape.files = sigilExport();
+
+    const preamble = await extractPreamble(makeEpubFile(), { cover: 'raw' });
+
+    expect(preamble).toMatchObject({ title: 'Real Title', author: 'Real Author' });
+  });
+
+  it('reports the fallback metadata but hashes the raw OPF form into the legacy fingerprint', async () => {
+    bookShape.metadata = { title: 'Reasonable Faith.501159.int', language: 'en' };
+    const plain = await extractBook(makeEpubFile(), { depth: 'metadata' });
+    bookShape.files = sigilExport();
+    const withFallback = await extractBook(makeEpubFile(), { depth: 'metadata' });
+
+    expect(plain.author).toBe('Unknown Author');
+    expect(withFallback).toMatchObject({
+      title: 'Reasonable Faith: Christian Truth and Apologetics',
+      author: 'William Lane Craig',
+    });
+    expect(withFallback.legacyFingerprint).toBe(plain.legacyFingerprint);
   });
 });
 

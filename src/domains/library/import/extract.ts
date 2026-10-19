@@ -35,6 +35,7 @@ import { archiveOfEpubJsBook } from './epubArchive';
 // Type-only: the structure resolvers load lazily at first import (like
 // epubjs below) — this module rides the eager LibraryView graph.
 import type { BookStructure } from '@lib/epub/structure/bookStructure';
+import { isPlaceholderTitle } from '@lib/epub/structure/copyrightPage';
 
 const logger = createLogger('Ingestion');
 
@@ -137,6 +138,13 @@ export interface BookPreamble {
   /** Raw (unsanitized) OPF metadata — the legacy fingerprint hashes these. */
   rawTitle: string;
   rawAuthor: string;
+  /**
+   * Display title/author (unsanitized): the OPF's, or the copyright page's
+   * when the OPF has no creator or only a file-name title. Never hashed —
+   * the fingerprint must keep matching books imported before the fallback.
+   */
+  title: string;
+  author: string;
   rawDescription: string;
   language: string;
   coverBlob?: Blob;
@@ -164,9 +172,13 @@ export async function extractPreamble(file: Blob, options: PreambleOptions): Pro
     // malformed books (plan/epub-toc-cover-hardening.md). `null` only for a
     // non-archived book, where epub.js's own answers are used unchanged.
     const archive = archiveOfEpubJsBook(book);
-    const { readBookStructure, resolveStructureCover, resolveStructureToc, resolveForeignToc } = await import(
-      '@lib/epub/structure/bookStructure'
-    );
+    const {
+      readBookStructure,
+      resolveStructureCover,
+      resolveStructureToc,
+      resolveForeignToc,
+      resolveStructureCopyright,
+    } = await import('@lib/epub/structure/bookStructure');
     let structure: BookStructure | null = null;
     if (archive) {
       try {
@@ -250,9 +262,30 @@ export async function extractPreamble(file: Blob, options: PreambleOptions): Pro
       toc = structure && raw.length > 0 ? resolveForeignToc(structure, raw) : raw;
     }
 
+    const rawTitle: string = metadata.title || 'Untitled';
+    const rawAuthor: string = metadata.creator || 'Unknown Author';
+    let title = rawTitle;
+    let author = rawAuthor;
+    const needsTitle = isPlaceholderTitle(metadata.title);
+    const needsAuthor = !metadata.creator?.trim();
+    if (structure && archive && (needsTitle || needsAuthor)) {
+      try {
+        const fallback = await resolveStructureCopyright(structure, archive.port, toc);
+        if (needsTitle && fallback.title) title = fallback.title;
+        if (needsAuthor && fallback.author) author = fallback.author;
+        if (title !== rawTitle || author !== rawAuthor) {
+          logger.info(`Metadata from copyright page: "${title}" by ${author}`);
+        }
+      } catch (error) {
+        logger.warn('Failed to read copyright page metadata:', error);
+      }
+    }
+
     return {
-      rawTitle: metadata.title || 'Untitled',
-      rawAuthor: metadata.creator || 'Unknown Author',
+      rawTitle,
+      rawAuthor,
+      title,
+      author,
       rawDescription: metadata.description || '',
       language,
       coverBlob: thumbnailBlob || coverBlob,
@@ -395,8 +428,8 @@ export async function extractBook(file: File, opts: ExtractBookOptions): Promise
     // Sanitize the metadata candidate (sanitize-at-ingest boundary).
     const candidateMetadata = {
       id: 'pending-book-id',
-      title: preamble.rawTitle,
-      author: preamble.rawAuthor,
+      title: preamble.title,
+      author: preamble.author,
       description: preamble.rawDescription,
       addedAt: Date.now(),
     };
