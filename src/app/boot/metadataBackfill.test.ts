@@ -6,6 +6,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { StaticManifestRow } from '@data/rows/static';
 import { bookContent } from '@data/repos/bookContent';
 import {
+  MAX_ATTEMPTS,
+  METADATA_BACKFILL_ATTEMPTS,
   METADATA_BACKFILL_FLAG,
   isPlaceholderAuthor,
   metadataBackfillTask,
@@ -79,6 +81,18 @@ describe('runMetadataBackfill', () => {
     expect(d.saved).toEqual([['b', { author: 'Jane Doe' }]]);
   });
 
+  it('counts a book whose file cannot be read as scanned and failed, and keeps going', async () => {
+    const d = deps({
+      listManifests: async () => [row('unreadable', 'T', 'Unknown Author'), row('both', 'X.123456.int', 'Unknown Author')],
+      getBookFile: async (id) => {
+        if (id === 'unreadable') throw new Error('read failed');
+        return new Blob([id]);
+      },
+    });
+    expect(await runMetadataBackfill(d)).toEqual({ scanned: 2, fixed: 1, failed: 1 });
+    expect(d.saved.map(([id]) => id)).toEqual(['both']);
+  });
+
   it('stops when told to', async () => {
     const d = deps({ shouldContinue: () => false });
     expect(await runMetadataBackfill(d)).toEqual({ scanned: 0, fixed: 0, failed: 0 });
@@ -109,11 +123,51 @@ describe('metadataBackfillTask', () => {
 
   beforeEach(() => {
     localStorage.removeItem(METADATA_BACKFILL_FLAG);
+    localStorage.removeItem(METADATA_BACKFILL_ATTEMPTS);
   });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
     localStorage.removeItem(METADATA_BACKFILL_FLAG);
+    localStorage.removeItem(METADATA_BACKFILL_ATTEMPTS);
+  });
+
+  /** One boot whose only book always fails to extract. */
+  const failingBoot = async () => {
+    const before = localStorage.getItem(METADATA_BACKFILL_ATTEMPTS);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(bookContent, 'listManifests').mockResolvedValue([row('b', 'T', 'Unknown Author')]);
+    vi.spyOn(bookContent, 'getBookFile').mockRejectedValue(new Error('read failed'));
+    const { ctx: c } = ctx();
+    metadataBackfillTask.run(c as never);
+    // Settled: the pass either set the flag or advanced the attempt count.
+    await vi.waitFor(() => {
+      const settled =
+        localStorage.getItem(METADATA_BACKFILL_FLAG) === '1' ||
+        localStorage.getItem(METADATA_BACKFILL_ATTEMPTS) !== before;
+      expect(settled).toBe(true);
+    });
+  };
+
+  it('retries on later boots while a book fails, then gives up after MAX_ATTEMPTS passes', async () => {
+    for (let pass = 1; pass < MAX_ATTEMPTS; pass++) {
+      await failingBoot();
+      expect(localStorage.getItem(METADATA_BACKFILL_FLAG)).toBeNull();
+      expect(localStorage.getItem(METADATA_BACKFILL_ATTEMPTS)).toBe(String(pass));
+      vi.restoreAllMocks();
+    }
+    await failingBoot();
+    expect(localStorage.getItem(METADATA_BACKFILL_FLAG)).toBe('1');
+    expect(localStorage.getItem(METADATA_BACKFILL_ATTEMPTS)).toBeNull();
+  });
+
+  it('a clean pass after a failed one sets the flag and clears the attempt count', async () => {
+    localStorage.setItem(METADATA_BACKFILL_ATTEMPTS, '1');
+    vi.spyOn(bookContent, 'listManifests').mockResolvedValue([]);
+    const { ctx: c } = ctx();
+    metadataBackfillTask.run(c as never);
+    await vi.waitFor(() => expect(localStorage.getItem(METADATA_BACKFILL_FLAG)).toBe('1'));
+    expect(localStorage.getItem(METADATA_BACKFILL_ATTEMPTS)).toBeNull();
   });
 
   it('runs once on idle and then sets the per-device flag', async () => {

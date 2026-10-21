@@ -24,6 +24,7 @@ import { useNavigationGuard } from '@hooks/useNavigationGuard';
 import { BackButtonPriority } from '@store/useBackNavigationStore';
 import { createLogger } from '@lib/logger';
 import { rescanCovers } from '@app/boot/coverBackfill';
+import { rescanBookMetadata } from '@app/boot/metadataBackfill';
 
 const logger = createLogger('DataPanel');
 
@@ -48,6 +49,8 @@ const DataPanel: React.FC = () => {
   const [isClearing, setIsClearing] = useState(false);
   const [isRescanningCovers, setIsRescanningCovers] = useState(false);
   const [coverRescanResult, setCoverRescanResult] = useState<string | null>(null);
+  const [isRescanningMetadata, setIsRescanningMetadata] = useState(false);
+  const [metadataRescanResult, setMetadataRescanResult] = useState<string | null>(null);
 
   // The reading-list overlay closes on hardware back BEFORE the settings
   // overlay does (the settings close is plain history navigation; this
@@ -226,6 +229,26 @@ const DataPanel: React.FC = () => {
     }
   };
 
+  const handleRescanMetadata = async () => {
+    setIsRescanningMetadata(true);
+    setMetadataRescanResult(null);
+    try {
+      const { scanned, fixed, failed } = await rescanBookMetadata();
+      const books = (n: number) => `${n} book${n === 1 ? '' : 's'}`;
+      setMetadataRescanResult(
+        scanned === 0
+          ? 'No book on this device is missing its title or author.'
+          : `Fixed ${fixed} of ${books(scanned)} missing a title or author.` +
+              (failed > 0 ? ` ${books(failed)} could not be read.` : ''),
+      );
+    } catch (e) {
+      logger.error('Book info re-scan failed', e);
+      setMetadataRescanResult('Book info re-scan failed.');
+    } finally {
+      setIsRescanningMetadata(false);
+    }
+  };
+
   const handleExportLight = async () => {
     try {
       setBackupStatus('Exporting metadata...');
@@ -303,6 +326,9 @@ const DataPanel: React.FC = () => {
         onRescanCovers={handleRescanCovers}
         isRescanningCovers={isRescanningCovers}
         coverRescanResult={coverRescanResult}
+        onRescanMetadata={handleRescanMetadata}
+        isRescanningMetadata={isRescanningMetadata}
+        metadataRescanResult={metadataRescanResult}
         onClearAllData={handleClearAllData}
         isClearing={isClearing}
       />

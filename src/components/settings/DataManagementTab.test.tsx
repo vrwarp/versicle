@@ -55,6 +55,24 @@ describe('DataManagementTab', () => {
         expect(screen.getByText('Regenerate All Metadata')).toBeInTheDocument();
     });
 
+    it('re-scan book info: hidden without a handler, clickable, then busy and reporting', () => {
+        const { rerender } = render(<DataManagementTab {...defaultProps} />);
+        expect(screen.queryByTestId('rescan-metadata-button')).toBeNull();
+
+        const onRescanMetadata = vi.fn();
+        rerender(<DataManagementTab {...defaultProps} onRescanMetadata={onRescanMetadata} />);
+        fireEvent.click(screen.getByText('Re-scan Book Info'));
+        expect(onRescanMetadata).toHaveBeenCalledTimes(1);
+
+        rerender(<DataManagementTab {...defaultProps} onRescanMetadata={onRescanMetadata} isRescanningMetadata={true} />);
+        expect(screen.getByTestId('rescan-metadata-button')).toBeDisabled();
+
+        rerender(
+            <DataManagementTab {...defaultProps} onRescanMetadata={onRescanMetadata} metadataRescanResult="Fixed 1 of 1 book missing a title or author." />,
+        );
+        expect(screen.getByTestId('rescan-metadata-result')).toHaveTextContent('Fixed 1 of 1 book');
+    });
+
     it('shows scanning state', () => {
         render(<DataManagementTab {...defaultProps} isScanning={true} />);
 

@@ -7,6 +7,9 @@
  * never rewrites title/author, so this pass re-runs the import preamble for
  * every local book still carrying a placeholder, on idle, once per device
  * (localStorage flag), and writes back only what the fallback recovered.
+ * A pass in which any book failed to extract is retried on later boots, up
+ * to {@link MAX_ATTEMPTS} passes. The Data settings panel's "Re-scan Book
+ * Info" button runs the same pass on demand.
  *
  * {@link runMetadataBackfill} is pure/injectable (the suite drives it with
  * fakes); the boot task binds the real repos/stores.
@@ -25,6 +28,10 @@ const logger = createLogger('MetadataBackfill');
 
 /** Bump to re-run the automatic pass on every device (e.g. after resolver improvements). */
 export const METADATA_BACKFILL_FLAG = 'versicle.metadataBackfill.v1';
+/** Passes attempted so far while some book keeps failing (cleared by the flag). */
+export const METADATA_BACKFILL_ATTEMPTS = `${METADATA_BACKFILL_FLAG}.attempts`;
+/** After this many passes with failures the flag is set anyway: a corrupt EPUB must not cost every boot. */
+export const MAX_ATTEMPTS = 3;
 
 const UNKNOWN_AUTHOR = 'Unknown Author';
 
@@ -64,10 +71,12 @@ export async function runMetadataBackfill(deps: MetadataBackfillDeps): Promise<M
   );
   for (const row of candidates) {
     if (!deps.shouldContinue()) break;
-    const file = await deps.getBookFile(row.bookId);
-    if (!file) continue; // offloaded: a restore re-imports through the new fallback
-    result.scanned++;
+    let counted = false;
     try {
+      const file = await deps.getBookFile(row.bookId);
+      if (!file) continue; // offloaded: a restore re-imports through the new fallback
+      result.scanned++;
+      counted = true;
       const extracted = await deps.extractMetadata(file instanceof Blob ? file : new Blob([file]));
       const recovered: RecoveredMetadata = {};
       if (isPlaceholderTitle(row.title) && !isPlaceholderTitle(extracted.title)) {
@@ -81,6 +90,8 @@ export async function runMetadataBackfill(deps: MetadataBackfillDeps): Promise<M
         result.fixed++;
       }
     } catch (error) {
+      // A book whose file could not even be read was still examined.
+      if (!counted) result.scanned++;
       result.failed++;
       logger.warn(`Metadata backfill failed for ${row.bookId}:`, error);
     }
@@ -127,6 +138,11 @@ function liveDeps(shouldContinue: () => boolean): MetadataBackfillDeps {
   };
 }
 
+/** Manual "Re-scan Book Info" (Data settings): runs regardless of the flag. */
+export function rescanBookMetadata(): Promise<MetadataBackfillResult> {
+  return runMetadataBackfill(liveDeps(() => true));
+}
+
 function readFlag(): boolean {
   try {
     return localStorage.getItem(METADATA_BACKFILL_FLAG) === '1';
@@ -135,11 +151,24 @@ function readFlag(): boolean {
   }
 }
 
-function writeFlag(): void {
+/**
+ * Settle a completed pass: done when nothing failed, or once the attempt
+ * budget is spent; otherwise count the attempt so the next boot retries.
+ * Returns whether another pass will run.
+ */
+function recordPass(result: MetadataBackfillResult): boolean {
   try {
-    localStorage.setItem(METADATA_BACKFILL_FLAG, '1');
+    const attempts = Number(localStorage.getItem(METADATA_BACKFILL_ATTEMPTS) ?? '0') + 1;
+    if (result.failed === 0 || attempts >= MAX_ATTEMPTS) {
+      localStorage.setItem(METADATA_BACKFILL_FLAG, '1');
+      localStorage.removeItem(METADATA_BACKFILL_ATTEMPTS);
+      return false;
+    }
+    localStorage.setItem(METADATA_BACKFILL_ATTEMPTS, String(attempts));
+    return true;
   } catch {
     // Unavailable storage: the pass re-runs next boot, and finds nothing new.
+    return true;
   }
 }
 
@@ -154,8 +183,11 @@ export const metadataBackfillTask: BootTask = {
         .then((result) => {
           // A cancelled pass (teardown mid-run) stays unflagged and resumes next boot.
           if (cancelled) return;
-          writeFlag();
+          const retry = recordPass(result);
           if (result.fixed > 0) logger.info(`Recovered metadata for ${result.fixed} of ${result.scanned} book(s)`);
+          if (result.failed > 0) {
+            logger.warn(`Metadata backfill: ${result.failed} book(s) failed${retry ? '; will retry next boot' : ''}`);
+          }
         })
         .catch((error) => logger.warn('Metadata backfill failed; will retry next boot:', error));
     };

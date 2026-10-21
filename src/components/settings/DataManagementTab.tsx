@@ -27,6 +27,9 @@ export interface DataManagementTabProps {
     onRescanCovers?: () => void;
     isRescanningCovers?: boolean;
     coverRescanResult?: string | null;
+    onRescanMetadata?: () => void;
+    isRescanningMetadata?: boolean;
+    metadataRescanResult?: string | null;
     // Danger Zone
     onClearAllData: () => void;
     isClearing?: boolean;
@@ -51,6 +54,9 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
     onRescanCovers,
     isRescanningCovers = false,
     coverRescanResult = null,
+    onRescanMetadata,
+    isRescanningMetadata = false,
+    metadataRescanResult = null,
     onClearAllData,
     isClearing = false
 }) => {
@@ -199,6 +205,26 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                     )}
                     {coverRescanResult && (
                         <p className="text-sm text-muted-foreground" data-testid="rescan-covers-result">{coverRescanResult}</p>
+                    )}
+                    {onRescanMetadata && (
+                        <Button
+                            onClick={onRescanMetadata}
+                            variant="outline"
+                            disabled={isRescanningMetadata}
+                            className="gap-2"
+                            data-testid="rescan-metadata-button"
+                        >
+                            {isRescanningMetadata && (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                                    <span className="sr-only" aria-live="polite">Scanning book info...</span>
+                                </>
+                            )}
+                            <span aria-hidden={isRescanningMetadata}>{isRescanningMetadata ? "Scanning book info..." : "Re-scan Book Info"}</span>
+                        </Button>
+                    )}
+                    {metadataRescanResult && (
+                        <p className="text-sm text-muted-foreground" data-testid="rescan-metadata-result">{metadataRescanResult}</p>
                     )}
                 </div>
             </div>
