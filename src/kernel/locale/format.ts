@@ -107,7 +107,8 @@ const BYTE_UNITS = ['byte', 'kilobyte', 'megabyte', 'gigabyte', 'terabyte'] as c
  */
 export function formatBytes(bytes: number, locale?: string): string {
   const abs = Math.abs(bytes);
-  const exponent = abs < 1 ? 0 : Math.min(Math.floor(Math.log(abs) / Math.log(1024)), BYTE_UNITS.length - 1);
+  // `!(abs >= 1)` (not `abs < 1`) so NaN lands on bytes instead of indexing past BYTE_UNITS.
+  const exponent = !(abs >= 1) ? 0 : Math.min(Math.floor(Math.log(abs) / Math.log(1024)), BYTE_UNITS.length - 1);
   const value = bytes / 1024 ** exponent;
   return numberFormat(
     { style: 'unit', unit: BYTE_UNITS[exponent], unitDisplay: 'short', maximumFractionDigits: exponent === 0 ? 0 : 1 },

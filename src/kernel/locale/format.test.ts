@@ -54,6 +54,13 @@ describe('kernel/locale formatters (pinned locales)', () => {
     expect(formatBytes(3 * 1024 ** 3, 'en-US')).toBe('3 GB');
   });
 
+  describe('regression: formatBytes with a non-finite input', () => {
+    it('formats NaN as bytes instead of throwing on an undefined unit', () => {
+      expect(() => formatBytes(Number.NaN, 'en-US')).not.toThrow();
+      expect(formatBytes(Number.NaN, 'en-US')).toBe('NaN byte');
+    });
+  });
+
   it('formatPercent: 0..1 ratio in', () => {
     expect(formatPercent(0.42, 'en-US')).toBe('42%');
     expect(formatPercent(1, 'en-US')).toBe('100%');
