@@ -101,7 +101,8 @@ docker build -t versicle-verify -f Dockerfile.verification .
 mkdir -p verification/screenshots
 mkdir -p test-results
 
-# Run the verification container and capture exit code
+# Run the verification container and capture exit code. `set -e` would exit on a
+# failing `docker run` before the status was recorded, so capture it explicitly.
 echo "🏃 Running verification tests..."
 # We mount the screenshots directory to persist artifacts.
 # --ipc=host: Playwright's recommended setting for browsers in Docker. The default
@@ -109,6 +110,7 @@ echo "🏃 Running verification tests..."
 #   crashed" failures (notably in WebKit on long, memory-heavy journeys).
 # test-results/ is mounted too so Playwright traces (trace: 'on-first-retry')
 # and failure context survive the container — CI uploads them on failure.
+EXIT_CODE=0
 docker run --rm \
   --ipc=host \
   -v "$(pwd)/verification/screenshots:/app/verification/screenshots" \
@@ -116,12 +118,9 @@ docker run --rm \
   -e BASE_URL=http://localhost:5173 \
   -e CI=1 \
   $DEBUG_ENV \
-  versicle-verify "${PASSTHROUGH_ARGS[@]}"
+  versicle-verify "${PASSTHROUGH_ARGS[@]}" || EXIT_CODE=$?
 
-# Capture the exit code from docker run
-EXIT_CODE=$?
-
-# Echo it for visibility (but this doesn't affect the script's exit code)
+# Echo it for visibility
 echo "🏁 Verification tests completed with exit code: $EXIT_CODE"
 
 # Exit with the same code
