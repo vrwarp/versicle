@@ -19,6 +19,7 @@ export const DataRecoveryView: React.FC = () => {
         setErrorMsg(null);
         setRawData(null);
 
+        const tempDoc = new Y.Doc();
         try {
             // Read the persisted state through the data layer's snapshot
             // primitive (one merged update via the exclusive write gate) —
@@ -29,7 +30,6 @@ export const DataRecoveryView: React.FC = () => {
                 throw new Error("The local 'versicle-yjs' database holds no data.");
             }
 
-            const tempDoc = new Y.Doc();
             Y.applyUpdate(tempDoc, update);
 
             // Extract all root types (assuming maps and arrays)
@@ -52,13 +52,13 @@ export const DataRecoveryView: React.FC = () => {
 
             setRawData(extractedData);
             setStatus('success');
-
-            tempDoc.destroy();
-
         } catch (err: unknown) {
             logger.error('Failed to load raw Yjs data for recovery', err);
             setErrorMsg(err instanceof Error ? err.message : 'Unknown error occurred.');
             setStatus('error');
+        } finally {
+            // Also reached when decoding/serialising throws mid-way.
+            tempDoc.destroy();
         }
     };
 
