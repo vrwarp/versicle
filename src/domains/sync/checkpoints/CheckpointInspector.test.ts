@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as Y from 'yjs';
 import { CheckpointInspector } from './CheckpointInspector';
 import { getYDoc } from '@store/yjs-provider';
@@ -267,5 +267,30 @@ describe('CheckpointInspector', () => {
 
       expect(CheckpointInspector.diffCheckpoint(blob).library.unchangedCount).toBe(1);
     });
+  });
+});
+
+describe('regression: CheckpointInspector scratch-doc hygiene', () => {
+  it('destroys the ephemeral checkpoint doc after a successful diff', () => {
+    const src = new Y.Doc();
+    src.getMap('library').set('book', 'x');
+    const blob = Y.encodeStateAsUpdate(src);
+    const destroy = vi.spyOn(Y.Doc.prototype, 'destroy');
+    destroy.mockClear();
+
+    CheckpointInspector.diffCheckpoint(blob);
+
+    expect(destroy).toHaveBeenCalledTimes(1);
+    destroy.mockRestore();
+  });
+
+  it('destroys the ephemeral checkpoint doc when the blob is malformed', () => {
+    const destroy = vi.spyOn(Y.Doc.prototype, 'destroy');
+    destroy.mockClear();
+
+    expect(() => CheckpointInspector.diffCheckpoint(new Uint8Array([255, 255, 255]))).toThrow();
+
+    expect(destroy).toHaveBeenCalledTimes(1);
+    destroy.mockRestore();
   });
 });

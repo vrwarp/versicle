@@ -23,22 +23,28 @@ export class CheckpointInspector {
   static diffCheckpoint(checkpointBlob: Uint8Array): Record<string, DiffResult> {
     // 1. Hydrate blob into an ephemeral doc
     const tempDoc = new Y.Doc();
-    Y.applyUpdate(tempDoc, checkpointBlob);
+    try {
+      Y.applyUpdate(tempDoc, checkpointBlob);
 
-    // 2. Convert both to JSON
-    const liveJson = this.docToJson(getYDoc());
-    const checkpointJson = this.docToJson(tempDoc);
+      // 2. Convert both to JSON
+      const liveJson = this.docToJson(getYDoc());
+      const checkpointJson = this.docToJson(tempDoc);
 
-    const diffs: Record<string, DiffResult> = {};
-    // Iterate known shared types
-    const allStores = new Set([...Object.keys(liveJson), ...Object.keys(checkpointJson)]);
+      const diffs: Record<string, DiffResult> = {};
+      // Iterate known shared types
+      const allStores = new Set([...Object.keys(liveJson), ...Object.keys(checkpointJson)]);
 
-    // 3. Diff each store individually
-    for (const store of allStores) {
-      diffs[store] = this.deepDiff(liveJson[store], checkpointJson[store]);
+      // 3. Diff each store individually
+      for (const store of allStores) {
+        diffs[store] = this.deepDiff(liveJson[store], checkpointJson[store]);
+      }
+
+      return diffs;
+    } finally {
+      // The diff is plain JSON by now; release the scratch doc (also on a
+      // malformed blob, where applyUpdate throws).
+      tempDoc.destroy();
     }
-
-    return diffs;
   }
 
   private static docToJson(doc: Y.Doc): Record<string, unknown> {
