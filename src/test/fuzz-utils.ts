@@ -18,7 +18,9 @@ export class SeededRandom {
     private static readonly M = 2 ** 31;
 
     constructor(seed: number) {
-        this.seed = seed % SeededRandom.M;
+        // Normalise into [0, M): JS `%` keeps the sign of the dividend, and a
+        // negative state would make next() return values outside [0, 1).
+        this.seed = ((seed % SeededRandom.M) + SeededRandom.M) % SeededRandom.M;
     }
 
     /**

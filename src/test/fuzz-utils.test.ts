@@ -113,4 +113,28 @@ describe('SeededRandom', () => {
             expect(cfi).toMatch(/\)$/);
         }
     });
+
+    describe('regression: negative seeds', () => {
+        it('keeps next() inside [0, 1) and nextInt() inside its bounds', () => {
+            const rng = new SeededRandom(-12345);
+            for (let i = 0; i < 1000; i++) {
+                const val = rng.next();
+                expect(val).toBeGreaterThanOrEqual(0);
+                expect(val).toBeLessThan(1);
+            }
+            for (let i = 0; i < 1000; i++) {
+                const n = rng.nextInt(3, 7);
+                expect(n).toBeGreaterThanOrEqual(3);
+                expect(n).toBeLessThanOrEqual(7);
+            }
+        });
+
+        it('is deterministic for a given negative seed', () => {
+            const a = new SeededRandom(-1);
+            const b = new SeededRandom(-1);
+            for (let i = 0; i < 50; i++) {
+                expect(a.next()).toBe(b.next());
+            }
+        });
+    });
 });
