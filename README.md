@@ -12,9 +12,9 @@
     *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
     *   **Cloud TTS**: Connect your own API keys (OpenAI, Google, LemonFox) for studio-quality narration.
     *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content (by identifying reference boundaries), and narrate adapted tables. Includes **Smart Rotation** to maximize free quotas and prevent rate limits.
-*   **Dual Sync**:
+*   **Sync**:
     *   **Real-time**: Synchronize progress instantly across devices using Firestore.
-    *   **Native Backup**: Seamless integration with Android's built-in backup system.
+    *   **Cloud Library**: Scan and import EPUBs directly from your Google Drive.
 *   **Data Ownership**: Export your data at any time. Full backups (ZIP) or Metadata (JSON).
 
 ## Tech Stack
