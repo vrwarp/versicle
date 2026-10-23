@@ -178,6 +178,14 @@ export const ReadingHistoryPanel: React.FC<Props> = ({ bookId, engine, onNavigat
                         key={idx}
                         className="p-3 hover:bg-muted cursor-pointer transition-colors"
                         onClick={() => onNavigate(item.targetCfi, item.endCfi)}
+                        onKeyDown={(e) => {
+                            // role="button" promises keyboard activation (Enter / Space).
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                onNavigate(item.targetCfi, item.endCfi);
+                            }
+                        }}
+                        tabIndex={0}
                         role="button"
                         aria-label={`Jump to ${item.label}`}
                         data-testid={`history-item-${idx}`}
