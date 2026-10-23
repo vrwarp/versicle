@@ -106,4 +106,22 @@ describe('DeviceList', () => {
         const removeButtons = screen.getAllByLabelText('Remove device');
         expect(removeButtons.length).toBeGreaterThan(0);
     });
+    describe('regression: rename button hover reveal', () => {
+        it('puts the group class on an ancestor of the hover-revealed rename button', () => {
+            render(
+                <DeviceList
+                    devices={mockDevices}
+                    currentDeviceId="device-1"
+                    onRename={mockOnRename}
+                    onDelete={mockOnDelete}
+                    onClone={mockOnClone}
+                />
+            );
+
+            // group-hover:* only works when an ancestor carries `group`.
+            const renameButton = screen.getAllByLabelText('Rename device')[0];
+            expect(renameButton.className).toContain('group-hover:opacity-100');
+            expect(renameButton.closest('.group')).not.toBeNull();
+        });
+    });
 });
