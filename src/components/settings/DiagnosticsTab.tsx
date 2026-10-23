@@ -35,13 +35,20 @@ export const DiagnosticsTab: React.FC = () => {
 
     const loadSnapshots = async () => {
         setIsRefreshing(true);
-        const [list, exported] = await Promise.all([
-            audio.listDiagnosticSnapshots(),
-            audio.exportDiagnostics(),
-        ]);
-        setSnapshots(list);
-        setStats(exported.stats);
-        setIsRefreshing(false);
+        try {
+            const [list, exported] = await Promise.all([
+                audio.listDiagnosticSnapshots(),
+                audio.exportDiagnostics(),
+            ]);
+            setSnapshots(list);
+            setStats(exported.stats);
+        } catch (error) {
+            // Also runs from the mount effect: a failed engine read must not
+            // leave the Refresh button disabled or escape as an unhandled rejection.
+            console.error('Failed to load diagnostics:', error);
+        } finally {
+            setIsRefreshing(false);
+        }
     };
 
     useEffect(() => {
@@ -52,9 +59,14 @@ export const DiagnosticsTab: React.FC = () => {
 
     const handleManualSnapshot = async () => {
         setIsCapturing(true);
-        await audio.triggerDiagnosticsSnapshot('manual', 'User triggered snapshot');
-        await loadSnapshots();
-        setIsCapturing(false);
+        try {
+            await audio.triggerDiagnosticsSnapshot('manual', 'User triggered snapshot');
+            await loadSnapshots();
+        } catch (error) {
+            console.error('Failed to capture diagnostics snapshot:', error);
+        } finally {
+            setIsCapturing(false);
+        }
     };
 
     const handleDeleteSnapshot = async (id: string) => {
