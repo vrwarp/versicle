@@ -236,4 +236,29 @@ describe('MockFireProvider', () => {
             }).not.toThrow();
         });
     });
+
+    describe('regression: saves preserve the workspace tombstone', () => {
+        it('keeps isDeleted/deletedAt written by MockBackend when the provider saves', () => {
+            localStorage.setItem(
+                'versicle_mock_firestore_snapshot',
+                JSON.stringify({
+                    'test/path': { isDeleted: true, deletedAt: 123 },
+                    'other/path': { snapshotBase64: 'AA==', lastModified: 1, path: 'other/path' },
+                })
+            );
+            const provider = new MockFireProvider({
+                firebaseApp: mockApp,
+                ydoc,
+                path: 'test/path',
+                maxWaitTime: 50
+            });
+
+            provider.destroy(); // final save
+
+            const data = MockFireProvider.getMockStorageData();
+            expect(data?.['test/path']).toMatchObject({ isDeleted: true, deletedAt: 123, path: 'test/path' });
+            expect(data?.['test/path']?.snapshotBase64).toEqual(expect.any(String));
+            expect(data?.['other/path']?.snapshotBase64).toBe('AA==');
+        });
+    });
 });
