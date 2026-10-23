@@ -75,7 +75,10 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
-      const base64data = reader.result as string;
+      // loadend also fires after a failed read (result === null); onerror has
+      // already rejected, so don't throw a second time from this handler.
+      if (reader.error || typeof reader.result !== 'string') return;
+      const base64data = reader.result;
       // Remove data URL prefix (e.g., "data:image/png;base64,")
       resolve(base64data.split(',')[1]);
     };
