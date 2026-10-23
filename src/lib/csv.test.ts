@@ -58,4 +58,31 @@ describe('CSV Util', () => {
         // Filename should be generated from ISBN or title-author
         expect(imported[0].filename).toBe('isbn-0812550706');
     });
+
+    describe('regression: unparseable numeric/date cells never produce NaN', () => {
+        const header = 'Title,Author,ISBN,My Rating,Exclusive Shelf,Date Read,Filename,Percentage';
+
+        it('falls back for an invalid percentage, date and rating', () => {
+            const before = Date.now();
+            const [entry] = parseReadingListCSV(`${header}\nT,A,,abc,read,not-a-date,f.epub,n/a`);
+
+            expect(entry.percentage).toBe(1.0); // inferred from the "read" shelf
+            expect(Number.isNaN(entry.lastUpdated)).toBe(false);
+            expect(entry.lastUpdated).toBeGreaterThanOrEqual(before);
+            expect(entry.rating).toBeUndefined();
+        });
+
+        it('infers 0 for an invalid percentage on a non-read shelf', () => {
+            const [entry] = parseReadingListCSV(`${header}\nT,A,,,to-read,,f.epub,n/a`);
+            expect(entry.percentage).toBe(0);
+        });
+
+        it('does not throw when exporting an entry with an invalid lastUpdated', () => {
+            const csv = exportReadingListToCSV([{
+                filename: 'f.epub', title: 'T', author: 'A', percentage: 1,
+                lastUpdated: NaN, status: 'read'
+            }]);
+            expect(csv).toContain('f.epub');
+        });
+    });
 });
