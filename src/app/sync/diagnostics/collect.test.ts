@@ -329,6 +329,18 @@ describe('collectSyncDiagnostics', () => {
 
     expect(report.remote).toStrictEqual({ error: 'Error: boom' });
   });
+
+  describe('regression: a throwing orchestrator never fails the whole export', () => {
+    it('records the failure in the uploads and orchestrator sections instead of rejecting', async () => {
+      h.orchestrator = fakeOrchestrator({ getDiagnostics: () => { throw new Error('diag boom'); } });
+
+      const report = await collectSyncDiagnostics({ remoteTimeoutMs: 1 });
+
+      expect(report.uploads).toStrictEqual({ error: 'Error: diag boom' });
+      expect(report.orchestrator).toStrictEqual({ error: 'Error: diag boom' });
+      expect(report.format).toBe(2);
+    });
+  });
 });
 
 describe('uploadHealth', () => {

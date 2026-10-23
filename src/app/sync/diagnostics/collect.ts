@@ -213,7 +213,7 @@ export async function collectSyncDiagnostics(opts?: {
     generatedAt: now,
     generatedAtIso: new Date(now).toISOString(),
     verdicts: 'verdicts' in integrity ? integrity.verdicts : integrity,
-    uploads: uploadHealth(orchestrator ? orchestrator.getDiagnostics() : null, remote, now),
+    uploads: await safely(() => uploadHealth(orchestrator ? orchestrator.getDiagnostics() : null, remote, now)),
     libraries: await safely(libraries),
     environment: await safely(environment),
     devices: await safely(devices),
