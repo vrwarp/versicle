@@ -6,8 +6,7 @@
  * Kernel admission: structural types only (no ~types import); everything here
  * is CFI math over the sibling kernel modules.
  */
-import { getParentCfi } from './contains';
-import { cfiContains } from './contains';
+import { cfiContains, getParentCfi } from './contains';
 import { generateCfiRange } from './merge';
 import { parseCfiRange } from './parse';
 import type { PreprocessedRoot } from './parse';
