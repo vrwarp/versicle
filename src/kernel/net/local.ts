@@ -13,11 +13,14 @@
 
 function isLocalUrl(url: string): boolean {
   if (url.startsWith('blob:') || url.startsWith('data:')) return true;
-  // Relative URLs are same-origin by construction.
-  if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) return true;
+  // Path-relative URLs are same-origin by construction. Network-path
+  // references (`//host/x`, and the backslash variants URL parsers normalise to `/`)
+  // are NOT: they carry their own host, so they fall through to the origin check.
+  const isNetworkPath = /^[/\\]{2}/.test(url.trimStart());
+  if (!isNetworkPath && !/^[a-z][a-z0-9+.-]*:/i.test(url)) return true;
   if (typeof location !== 'undefined') {
     try {
-      return new URL(url).origin === location.origin;
+      return new URL(url, location.href).origin === location.origin;
     } catch {
       return false;
     }
