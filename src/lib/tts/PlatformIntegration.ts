@@ -155,10 +155,7 @@ export class PlatformIntegration implements MediaPlatform {
         // On web it is the cosmetic navigator.mediaSession.playbackState enum (no
         // timeline/foreground gate); scrubber motion is driven by setPositionState, not
         // this line. 'none' is reserved for a genuine stop.
-        this.mediaSessionManager.setPlaybackState(
-            (status === 'playing' || status === 'loading' || status === 'completed') ? 'playing'
-                : (status === 'paused' ? 'paused' : 'none')
-        );
+        this.mediaSessionManager.setPlaybackState(mediaState);
 
         if (status === 'playing' || status === 'loading' || status === 'completed') {
             this.backgroundAudio.play(this.backgroundAudioMode);
