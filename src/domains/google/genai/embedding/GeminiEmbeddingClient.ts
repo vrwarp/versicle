@@ -30,7 +30,7 @@
  */
 import { egress, retryAfterMs, type EgressFn } from '@kernel/net';
 import { msUntilNextPtDay, type QuotaGovernor } from '@kernel/quota';
-import { GenAIHttpError } from '../errors';
+import { GenAIHttpError, GenAIInvalidResponseError } from '../errors';
 import { type GenAILogSink } from '../logging';
 import { parseQuotaSignals } from '../quotaSignals';
 import type {
@@ -256,6 +256,14 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
 
     const body = (await response.json()) as BatchEmbedContentsResponseBody;
     const embeddings = body.embeddings ?? [];
+    // `embeddings[]` is matched to `texts` by position; a short/long reply
+    // would silently attach vectors to the wrong texts.
+    if (embeddings.length !== texts.length) {
+      throw new GenAIInvalidResponseError(
+        `Embedding batch returned ${embeddings.length} vectors for ${texts.length} texts`,
+        { method: 'embedBatch', expected: texts.length, received: embeddings.length },
+      );
+    }
     return embeddings.map((e) => Float32Array.from(e.values ?? []));
   }
 
