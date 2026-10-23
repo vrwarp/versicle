@@ -115,6 +115,19 @@ describe('selectors', () => {
       expect(result.current[0].readingListEntry?.filename).toBe('original.epub');
     });
 
+    it('regression: duplicate reading-list entries for one bookId resolve first-wins, like useBook', () => {
+      seedBooks({ b1: makeInventoryItem({ bookId: 'b1', title: 'Some Title', author: 'Someone' }) });
+      seedEntries({
+        'first.epub': entry({ filename: 'first.epub', title: 'X', author: 'Y', percentage: 0.3, bookId: 'b1' }),
+        'second.epub': entry({ filename: 'second.epub', title: 'Z', author: 'W', percentage: 0.6, bookId: 'b1' }),
+      });
+
+      const { result: all } = renderHook(() => useAllBooks());
+      const { result: single } = renderHook(() => useBook('b1'));
+      expect(all.current[0].readingListEntry?.filename).toBe('first.epub');
+      expect(single.current?.progress).toBe(all.current[0].progress);
+    });
+
     it('should fallback to title/author matching for reading list progress if sourceFilename is missing', () => {
       seedBooks({ b1: makeInventoryItem({ bookId: 'b1', title: 'Moby Dick', author: 'Melville' }) });
       seedEntries({

@@ -174,7 +174,9 @@ function recomputeLibraryView(): void {
     for (const key in entries) {
       if (!Object.prototype.hasOwnProperty.call(entries, key)) continue;
       const entry = entries[key];
-      if (entry.bookId) fkMap.set(entry.bookId, entry);
+      // First match wins — same as readingListIndex (useBook) and matchMap, so
+      // the library card and the reader resolve the same entry.
+      if (entry.bookId && !fkMap.has(entry.bookId)) fkMap.set(entry.bookId, entry);
       const matchKey = generateMatchKey(entry.title, entry.author);
       if (matchKey && !matchMap.has(matchKey)) matchMap.set(matchKey, entry);
     }
