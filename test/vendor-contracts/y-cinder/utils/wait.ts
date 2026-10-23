@@ -39,7 +39,7 @@ export async function waitFor<T>(
     const interval = options.interval ?? DEFAULT_INTERVAL;
     const start = Date.now();
     let lastValue: T | undefined;
-    let lastError: any;
+    let lastError: unknown;
 
     while (Date.now() - start < timeout) {
         try {
@@ -67,7 +67,7 @@ export async function waitFor<T>(
             details = `\nLast value: [Unable to stringify]`;
         }
     } else if (lastError) {
-        details = `\nLast error: ${lastError.message}`;
+        details = `\nLast error: ${lastError instanceof Error ? lastError.message : String(lastError)}`;
     }
 
     if (options.onFailure) {

@@ -27,6 +27,26 @@ describe('Wait Utilities', () => {
         ).rejects.toThrow(/Last value: wrong-value/);
     });
 
+    describe('regression: last error reporting', () => {
+        it('reports the message of an Error thrown by the getter', async () => {
+            await expect(
+                waitForConditionTruthy(
+                    () => { throw new Error('getter exploded'); },
+                    { timeout: 50, interval: 10 }
+                )
+            ).rejects.toThrow(/Last error: getter exploded/);
+        });
+
+        it('reports a non-Error throw instead of printing "undefined"', async () => {
+            await expect(
+                waitForConditionTruthy(
+                    () => { throw 'plain string failure'; },
+                    { timeout: 50, interval: 10 }
+                )
+            ).rejects.toThrow(/Last error: plain string failure/);
+        });
+    });
+
     it('should throw with truncated value for large objects', async () => {
         const largeStr = 'a'.repeat(300);
 
