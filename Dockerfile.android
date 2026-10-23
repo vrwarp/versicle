@@ -44,7 +44,7 @@ RUN rm -f local.properties
 # are pinned to github URLs that npm records as git+ssh in the lockfile. This build container
 # has no SSH key, so rewrite github ssh -> https (the repos are public and clone without auth).
 RUN git config --global url."https://github.com/".insteadOf "ssh://git@github.com/" && \
-    git config --global url."https://github.com/".insteadOf "git@github.com:"
+    git config --global --add url."https://github.com/".insteadOf "git@github.com:"
 
 # Install npm dependencies. This also clones and prepare-builds the @jofr/capacitor-media-session
 # git dependency (npm runs its `prepare` hook to produce dist/ on install).
