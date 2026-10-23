@@ -23,6 +23,12 @@ vi.mock('@data/repos/drivePreviews', () => ({
     },
 }));
 
+const mockDisconnect = vi.fn();
+vi.mock('@domains/google', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@domains/google')>()),
+    getGoogleAuthClient: () => ({ disconnect: mockDisconnect, connect: vi.fn() }),
+}));
+
 vi.mock('../ui/ConfirmDialog', () => ({
     useConfirm: () => mockConfirm,
 }));
@@ -155,5 +161,22 @@ describe('SyncSettingsTab — Drive preview cache', () => {
         );
         // Not stuck in the clearing state, and the stats re-read still ran.
         await waitFor(() => expect(clearButton()).toBeEnabled());
+    });
+
+    describe('regression: Drive disconnect failures are surfaced', () => {
+        it('toasts instead of failing silently when disconnect rejects', async () => {
+            mockDisconnect.mockRejectedValue(new Error('revoke failed'));
+            vi.spyOn(console, 'error').mockImplementation(() => {});
+            render(<SyncSettingsTab {...defaultProps} />);
+
+            fireEvent.click(screen.getByRole('button', { name: /^disconnect$/i }));
+
+            await waitFor(() =>
+                expect(mockShowToast).toHaveBeenCalledWith(
+                    'Failed to disconnect Google Drive. Please try again.',
+                    'error',
+                ),
+            );
+        });
     });
 });

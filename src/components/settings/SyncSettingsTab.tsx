@@ -302,7 +302,9 @@ export const SyncSettingsTab: React.FC<SyncSettingsTabProps> = ({
         try {
             await getGoogleAuthClient().disconnect('drive');
         } catch (error) {
+            // Mirror handleDriveConnect: the user clicked and is watching for the outcome.
             console.error("Failed to disconnect Drive", error);
+            showToast('Failed to disconnect Google Drive. Please try again.', 'error');
         }
     };
 
