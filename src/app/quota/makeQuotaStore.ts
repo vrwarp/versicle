@@ -29,6 +29,12 @@ export function makeQuotaStore(
   repo: QuotaCounterRepo,
   publishOwnSpend?: (ratePool: string, usage: DailyUsage) => void,
 ): QuotaStore {
+  // Persists run strictly one after another: each is a load-modify-save of the
+  // single shared row, so two concurrent persists (different rate pools, or two
+  // commits in a row) would both read the same snapshot and the later save
+  // would silently drop the earlier pool's update.
+  let persistQueue: Promise<void> = Promise.resolve();
+
   return {
     loadDailyUsage: async (ratePool: string): Promise<DailyUsage | null> => {
       const row = await repo.load();
@@ -73,7 +79,7 @@ export function makeQuotaStore(
         await repo.save(activeRow);
       };
 
-      void persist().catch(() => {});
+      persistQueue = persistQueue.then(persist).catch(() => {});
       // Mirror this device's own daily spend onto its synced device record so
       // other devices can keep the shared per-project Gemini quota correct.
       // Fire-and-forget, never throws — same contract as the repo write.
