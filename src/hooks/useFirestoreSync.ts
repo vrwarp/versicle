@@ -14,7 +14,10 @@
 import { useEffect, useCallback, useMemo } from 'react';
 import { getSyncOrchestratorAsync } from '@app/sync/createSync';
 import { useSyncStore } from '@store/useSyncStore';
+import { createLogger } from '@lib/logger';
 import { isMockFirestoreEnabled } from '../test-flags';
+
+const logger = createLogger('useFirestoreSync');
 
 export const useFirestoreSync = () => {
     const firebaseEnabled = useSyncStore(state => state.firebaseEnabled);
@@ -44,7 +47,9 @@ export const useFirestoreSync = () => {
         // Idempotent for the already-started boot case; picks up
         // settings-time enablement without a reload. The await covers the
         // first-use composition (the firebase chunk loads on enablement).
-        void getSyncOrchestratorAsync().then((orchestrator) => orchestrator.start());
+        void getSyncOrchestratorAsync()
+            .then((orchestrator) => orchestrator.start())
+            .catch((error) => logger.error('Failed to start sync orchestrator:', error));
     }, [firebaseEnabled, isConfigured]);
 
     /**
