@@ -19,7 +19,7 @@ export const DriveFolderPicker: React.FC<DriveFolderPickerProps> = ({ onSelect, 
         isLoading,
         error,
         openFolder,
-        navigateUp,
+        navigateToCrumb,
         refresh
     } = useDriveBrowser();
 
@@ -74,7 +74,7 @@ export const DriveFolderPicker: React.FC<DriveFolderPickerProps> = ({ onSelect, 
                                         <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
                                     )}
                                     <button
-                                        onClick={() => !isLast && navigateUp()}
+                                        onClick={() => !isLast && navigateToCrumb(index)}
                                         disabled={isLast}
                                         className={cn(
                                             "hover:underline transition-colors shrink-0 text-sm rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

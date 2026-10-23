@@ -16,6 +16,7 @@ vi.mock('./useDriveBrowser', () => ({
 describe('DriveFolderPicker', () => {
     const mockOpenFolder = vi.fn();
     const mockNavigateUp = vi.fn();
+    const mockNavigateToCrumb = vi.fn();
     const mockRefresh = vi.fn();
     const mockOnSelect = vi.fn();
     const mockOnCancel = vi.fn();
@@ -33,6 +34,7 @@ describe('DriveFolderPicker', () => {
         error: null,
         openFolder: mockOpenFolder,
         navigateUp: mockNavigateUp,
+        navigateToCrumb: mockNavigateToCrumb,
         refresh: mockRefresh
     };
 
@@ -55,6 +57,25 @@ describe('DriveFolderPicker', () => {
 
         fireEvent.click(screen.getByText('Folder 2'));
         expect(mockOpenFolder).toHaveBeenCalledWith('f2', 'Folder 2');
+    });
+
+    describe('regression: breadcrumb navigation targets the clicked ancestor', () => {
+        it('jumps to the clicked crumb by index, not just one level up', () => {
+            vi.mocked(useDriveBrowser).mockReturnValue({
+                ...defaultHookValues,
+                currentFolderId: 'f2',
+                breadcrumbs: [
+                    { id: 'root', name: 'My Drive' },
+                    { id: 'f1', name: 'SubFolder' },
+                    { id: 'f2', name: 'Deeper' }
+                ]
+            });
+            render(<DriveFolderPicker onSelect={mockOnSelect} onCancel={mockOnCancel} />);
+
+            fireEvent.click(screen.getByRole('button', { name: 'Navigate to My Drive' }));
+            expect(mockNavigateToCrumb).toHaveBeenCalledWith(0);
+            expect(mockNavigateUp).not.toHaveBeenCalled();
+        });
     });
 
     it('calls onSelect when "Select This Folder" is clicked', async () => {

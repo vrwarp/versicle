@@ -102,4 +102,45 @@ describe('regression: useDriveBrowser navigation (ex-DriveLogic.test.ts)', () =>
         expect(result.current.breadcrumbs).toHaveLength(1);
         await waitFor(() => expect(result.current.isLoading).toBe(false));
     });
+
+    it('regression: navigateToCrumb jumps straight to a distant ancestor', async () => {
+        listFolders.mockResolvedValue([]);
+
+        const { result } = renderHook(() => useDriveBrowser());
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        act(() => {
+            result.current.openFolder('a', 'A');
+        });
+        act(() => {
+            result.current.openFolder('b', 'B');
+        });
+        expect(result.current.breadcrumbs.map(c => c.id)).toEqual(['root', 'a', 'b']);
+
+        act(() => {
+            result.current.navigateToCrumb(0);
+        });
+        expect(result.current.currentFolderId).toBe('root');
+        expect(result.current.breadcrumbs.map(c => c.id)).toEqual(['root']);
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+    });
+
+    it('navigateToCrumb ignores the current crumb and out-of-range indexes', async () => {
+        listFolders.mockResolvedValue([]);
+
+        const { result } = renderHook(() => useDriveBrowser());
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+        act(() => {
+            result.current.openFolder('a', 'A');
+        });
+        act(() => {
+            result.current.navigateToCrumb(1); // current folder
+            result.current.navigateToCrumb(-1);
+            result.current.navigateToCrumb(5);
+        });
+        expect(result.current.currentFolderId).toBe('a');
+        expect(result.current.breadcrumbs).toHaveLength(2);
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+    });
 });
