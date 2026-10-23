@@ -43,6 +43,19 @@ describe('Toast (presentational item, Phase 8 §D)', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
+    describe('regression: re-render with a new onClose restarted the dismiss timer', () => {
+        it('keeps the original deadline and calls the latest onClose', () => {
+            const first = vi.fn();
+            const second = vi.fn();
+            const { rerender } = render(<Toast message="m" duration={3000} onClose={first} />);
+            act(() => { vi.advanceTimersByTime(2000); });
+            rerender(<Toast message="m" duration={3000} onClose={second} />);
+            act(() => { vi.advanceTimersByTime(1000); });
+            expect(first).not.toHaveBeenCalled();
+            expect(second).toHaveBeenCalledTimes(1);
+        });
+    });
+
     it('never dismisses with duration 0 / Infinity (persistent toast)', () => {
         const onClose = vi.fn();
         render(<Toast message="stay" duration={0} onClose={onClose} />);
