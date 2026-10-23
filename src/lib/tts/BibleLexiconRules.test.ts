@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { loadBibleLexicon } from './bible-lexicon';
 import { lexiconApplier } from './LexiconApplier';
 import type { LexiconRule } from '~types/user-data';
@@ -45,5 +45,31 @@ describe('Bible Lexicon Rules', () => {
         const text = "It was 1 a.m.";
         const result = lexiconApplier.applyLexicon(text, rules);
         expect(result).toBe(text);
+    });
+});
+
+describe('regression: loadBibleLexicon does not cache a failed load', () => {
+    afterEach(() => {
+        vi.doUnmock('./bible-lexicon.json');
+        vi.resetModules();
+    });
+
+    it('retries the dynamic import after the first attempt rejects', async () => {
+        vi.resetModules();
+        let attempts = 0;
+        const data = { abbreviations: ['Gen'], rules: [] };
+        vi.doMock('./bible-lexicon.json', () => ({
+            // Reading `default` happens inside the loader's .then(); throwing there
+            // rejects the load exactly like a failed chunk fetch would.
+            get default() {
+                attempts++;
+                if (attempts === 1) throw new Error('chunk load failed');
+                return data;
+            },
+        }));
+        const { loadBibleLexicon: freshLoad } = await import('./bible-lexicon');
+
+        await expect(freshLoad()).rejects.toThrow('chunk load failed');
+        await expect(freshLoad()).resolves.toEqual({ abbreviations: ['Gen'], rules: [] });
     });
 });
