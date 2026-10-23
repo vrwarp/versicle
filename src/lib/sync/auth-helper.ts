@@ -51,12 +51,17 @@ export const signInWithGoogle = async (): Promise<UserCredential | undefined | v
  */
 export const signOutWithGoogle = async (auth: Auth): Promise<void> => {
     // 1. Disconnect all services (revoke tokens if possible)
+    // Each service is guarded on its own so one failing disconnect cannot
+    // leave the remaining services (and their cached tokens) connected.
     try {
         const client = getGoogleAuthClient();
         const connectedServices = useGoogleServicesStore.getState().connectedServices;
         for (const serviceId of connectedServices) {
-            if (serviceId in GOOGLE_SERVICES) {
+            if (!(serviceId in GOOGLE_SERVICES)) continue;
+            try {
                 await client.disconnect(serviceId as GoogleServiceId);
+            } catch (e) {
+                console.warn(`Failed to disconnect ${serviceId} during signout`, e);
             }
         }
     } catch (e) {
