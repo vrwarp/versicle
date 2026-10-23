@@ -180,10 +180,10 @@ describe('ReaderCommandsProvider', () => {
   it('does NOT re-render memoized consumers when the provider re-renders with the same commands and engine', () => {
     const commands = makeCommands();
     const engine = { id: 'e' } as unknown as ReaderEngine;
-    let renders = 0;
+    const onRender = vi.fn();
     const Counted = React.memo(function Counted() {
       useReaderCommands();
-      renders += 1;
+      onRender();
       return null;
     });
 
@@ -192,21 +192,21 @@ describe('ReaderCommandsProvider', () => {
         <Counted />
       </ReaderCommandsProvider>
     );
-    expect(renders).toBe(1);
+    expect(onRender).toHaveBeenCalledTimes(1);
 
     view.rerender(
       <ReaderCommandsProvider commands={commands} engine={engine}>
         <Counted />
       </ReaderCommandsProvider>
     );
-    expect(renders).toBe(1);
+    expect(onRender).toHaveBeenCalledTimes(1);
 
     view.rerender(
       <ReaderCommandsProvider commands={makeCommands('next')} engine={engine}>
         <Counted />
       </ReaderCommandsProvider>
     );
-    expect(renders).toBe(2);
+    expect(onRender).toHaveBeenCalledTimes(2);
     view.unmount();
   });
 });
