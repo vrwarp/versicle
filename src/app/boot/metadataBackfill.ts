@@ -64,7 +64,15 @@ export async function runMetadataBackfill(deps: MetadataBackfillDeps): Promise<M
   );
   for (const row of candidates) {
     if (!deps.shouldContinue()) break;
-    const file = await deps.getBookFile(row.bookId);
+    let file: Blob | ArrayBuffer | undefined;
+    try {
+      file = await deps.getBookFile(row.bookId);
+    } catch (error) {
+      // One unreadable book must not abort the pass for every book after it.
+      result.failed++;
+      logger.warn(`Metadata backfill could not read ${row.bookId}:`, error);
+      continue;
+    }
     if (!file) continue; // offloaded: a restore re-imports through the new fallback
     result.scanned++;
     try {

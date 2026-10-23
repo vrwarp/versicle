@@ -70,6 +70,21 @@ describe('runMetadataBackfill', () => {
     expect(result).toEqual({ scanned: 5, fixed: 3, failed: 1 });
   });
 
+  describe('regression: an unreadable book does not abort the pass', () => {
+    it('counts it as failed and still backfills the books after it', async () => {
+      const d = deps({
+        listManifests: async () => [row('unreadable', 'X', 'Unknown Author'), row('no-author', 'Reasonable Faith', 'Unknown Author')],
+        getBookFile: async (id) => {
+          if (id === 'unreadable') throw new Error('idb read failed');
+          return new Blob([id]);
+        },
+      });
+      const result = await runMetadataBackfill(d);
+      expect(d.saved).toEqual([['no-author', { author: 'William Lane Craig' }]]);
+      expect(result).toEqual({ scanned: 1, fixed: 1, failed: 1 });
+    });
+  });
+
   it('sanitizes recovered values like import does', async () => {
     const d = deps({
       listManifests: async () => [row('b', 'T', 'Unknown Author')],
