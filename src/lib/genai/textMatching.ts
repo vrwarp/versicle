@@ -24,8 +24,14 @@ export function findApproximateMatch(text: string, query: string): { start: numb
     // 2. Case-insensitive match
     const lowerText = text.toLowerCase();
     const lowerQuery = query.toLowerCase();
-    const caseIdx = lowerText.indexOf(lowerQuery);
-    if (caseIdx !== -1) return { start: caseIdx, end: caseIdx + query.length };
+    // Some characters change length when lower-cased (e.g. 'İ' -> 'i' + U+0307),
+    // which would shift every index into the original text. Only trust this
+    // shortcut when both strings keep their length; otherwise the regex pass
+    // below does the case-insensitive search on the original text.
+    if (lowerText.length === text.length && lowerQuery.length === query.length) {
+        const caseIdx = lowerText.indexOf(lowerQuery);
+        if (caseIdx !== -1) return { start: caseIdx, end: caseIdx + query.length };
+    }
 
     // 3. Flexible whitespace match
     // Construct a regex that allows variable whitespace
