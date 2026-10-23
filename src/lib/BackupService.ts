@@ -101,6 +101,9 @@ type BackupManifestRow = { bookId: string } & Record<string, unknown>;
  */
 const RESTORE_CONCURRENCY = 2;
 
+/** Extension of each book file inside a full-backup archive's `files/` folder. */
+const EPUB_EXTENSION = '.epub';
+
 /** base64 window size (bytes on the encode side). */
 const BASE64_CHUNK_BYTES = 0x8000;
 /** …and on the decode side, a multiple of 4 (one base64 quantum). */
@@ -483,8 +486,9 @@ export class BackupService {
         // gate stays saturated.
         const entries: { bookId: string; zipFile: JSZip.JSZipObject }[] = [];
         filesFolder.forEach((relativePath, zipFile) => {
-          if (relativePath.endsWith('.epub')) {
-            entries.push({ bookId: relativePath.replace('.epub', ''), zipFile });
+          if (relativePath.endsWith(EPUB_EXTENSION)) {
+            // Strip only the trailing extension (an id may contain ".epub" elsewhere).
+            entries.push({ bookId: relativePath.slice(0, -EPUB_EXTENSION.length), zipFile });
           }
         });
 

@@ -321,6 +321,21 @@ describe('regression: full backup streams instead of accumulating', () => {
     expect(peak).toBeGreaterThan(0);
     expect(peak).toBeLessThanOrEqual(2);
   });
+
+  it('derives the book id by stripping only the trailing .epub extension', async () => {
+    vi.mocked(bookContent.getBookFile).mockResolvedValue(new Uint8Array([1, 2, 3]).buffer);
+
+    await service.createFullBackup();
+    const { data } = vi.mocked(exportFile).mock.calls[0][0];
+
+    const zip = await JSZip.loadAsync(data as Blob);
+    zip.file('files/a.epub.b.epub', new Uint8Array([9]));
+    const manifestText = await zip.file('manifest.json')!.async('string');
+    await service.processManifest(JSON.parse(manifestText) as BackupManifestV3, zip);
+
+    const ids = vi.mocked(bookContent.restoreResource).mock.calls.map(([bookId]) => bookId);
+    expect(ids).toContain('a.epub.b');
+  });
 });
 
 describe('BackupService (v2 - Yjs Snapshots)', () => {
