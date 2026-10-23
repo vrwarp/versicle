@@ -38,12 +38,16 @@ interface DialogProps {
 export const Dialog: React.FC<DialogProps> = ({ isOpen, onClose, title, description, children, footer, hideCloseButton, className, contentClassName }) => {
   return (
     <Modal open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <ModalContent className={`max-w-md ${className || ''}`} hideCloseButton={hideCloseButton}>
+      {/* Without a description, opt out of aria-describedby (Radix's documented
+          escape hatch) rather than announcing a meaningless placeholder. */}
+      <ModalContent
+        className={`max-w-md ${className || ''}`}
+        hideCloseButton={hideCloseButton}
+        {...(description ? {} : { 'aria-describedby': undefined })}
+      >
         <ModalHeader>
           <ModalTitle>{title}</ModalTitle>
-          <ModalDescription className={description ? "" : "sr-only"}>
-            {description || "Dialog Content"}
-          </ModalDescription>
+          {description && <ModalDescription>{description}</ModalDescription>}
         </ModalHeader>
         <div className={cn("mb-6 text-foreground min-w-0", contentClassName)}>{children}</div>
         {footer && <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 w-full">{footer}</div>}
