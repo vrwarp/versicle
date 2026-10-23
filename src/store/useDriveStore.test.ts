@@ -24,6 +24,27 @@ describe('useDriveStore', () => {
     });
 });
 
+describe('regression: findFile does not match arbitrary files for an empty title', () => {
+    const file = (id: string, name: string) => ({
+        id, name, size: 1, modifiedTime: '2024-01-01T00:00:00Z', mimeType: 'application/epub+zip',
+    });
+
+    beforeEach(() => {
+        useDriveStore.getState().clearLinkedFolder();
+        useDriveStore.getState().setScannedFiles([file('a', 'Alpha.epub'), file('b', 'Project Hail Mary.epub')]);
+    });
+
+    it('returns undefined for an empty or blank title with no filename match', () => {
+        expect(useDriveStore.getState().findFile('')).toBeUndefined();
+        expect(useDriveStore.getState().findFile('   ', 'missing.epub')).toBeUndefined();
+    });
+
+    it('still prefers an exact filename and falls back to title containment', () => {
+        expect(useDriveStore.getState().findFile('', 'Alpha.epub')?.id).toBe('a');
+        expect(useDriveStore.getState().findFile('project hail mary')?.id).toBe('b');
+    });
+});
+
 
 /**
  * The scanned `index` is persisted (5–6 fields per row, thousands of rows
