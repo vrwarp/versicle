@@ -45,5 +45,11 @@ describe('RingRecorder', () => {
       expect(r.getStats().capacity).toBe(1);
       expect(r.export().map((e) => e.ev)).toEqual(['e4']);
     });
+
+    it('falls back to the default capacity for a non-finite value', () => {
+      const def = new RingRecorder().getStats().capacity;
+      expect(new RingRecorder({ capacity: NaN }).getStats().capacity).toBe(def);
+      expect(new RingRecorder({ capacity: Infinity }).getStats().capacity).toBe(def);
+    });
   });
 });

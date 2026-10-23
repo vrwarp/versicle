@@ -573,7 +573,7 @@ describe('import flows characterization', () => {
         });
         useBookStore.setState({
           books: {
-            b1: makeInventoryItem({ bookId: 'b1', perceptualPalette: { vibrant: [1, 2, 3] } }),
+            b1: makeInventoryItem({ bookId: 'b1', perceptualPalette: { standout: 1, background: 2, deltaE: 3 } }),
           },
         });
 
@@ -581,7 +581,7 @@ describe('import flows characterization', () => {
 
         const item = useBookStore.getState().books['b1'];
         expect(item?.coverPalette).toEqual([9, 9, 9]);
-        expect(item?.perceptualPalette).toEqual({ vibrant: [1, 2, 3] });
+        expect(item?.perceptualPalette).toEqual({ standout: 1, background: 2, deltaE: 3 });
       });
     });
 

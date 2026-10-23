@@ -35,6 +35,7 @@ describe('localFetch', () => {
       '\\\\evil.example/x',
       '/\\evil.example/x',
       ' //evil.example/x',
+      '  https://evil.example/x',
     ])('rejects %s without fetching', async (url) => {
       await expect(localFetch(url)).rejects.toThrow(/localFetch only serves/);
       expect(fetchMock).not.toHaveBeenCalled();
