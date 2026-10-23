@@ -32,7 +32,7 @@
 *   **Mobile**: Capacitor 7.1.1 (Android) + `@capacitor/filesystem` + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login` + `@capacitor-community/text-to-speech`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4.1.18 + Radix UI
-*   **Tools**: `browser-image-compression`, `JSZip`, `lucide-react`, `react-lazy-load-image-component`, `react-window`, `dompurify`, `@google/generative-ai`, `y-cinder`, `y-indexeddb`, `piper-wasm`, `uuid`
+*   **Tools**: `browser-image-compression`, `JSZip`, `lucide-react`, `react-lazy-load-image-component`, `react-window`, `dompurify`, `@google/generative-ai`, `y-cinder`, `y-idb`, `uuid`
 *   **Dev Tools**: `vite-plugin-mkcert` (Local HTTPS)
 
 ## Features
@@ -99,7 +99,7 @@
 *   **Checkpoint Forensics**: Inspect the exact data difference between your live state and any backup checkpoint.
 *   **Flight Data Recorders**: Captures "Black Box" snapshots of application state (Zustand) during unexpected errors or manually via the Diagnostics UI for post-mortem debugging.
 *   **Safe Mode**: A fallback UI that activates on critical database initialization failures, allowing users to export debug info or perform a factory reset to recover usability.
-*   **Schema Quarantine (`ObsoleteLockView`)**: A safety mechanism that locks the app and severs cloud connections if a remote database with a newer schema version (currently V9 for CRDT schema, and V28 for local IndexedDB) is detected, preventing outdated clients from corrupting upgraded data structures.
+*   **Schema Quarantine (`ObsoleteLockView`)**: A safety mechanism that locks the app and severs cloud connections if a remote database with a newer schema version (currently V9 for CRDT schema, and V31 for local IndexedDB) is detected, preventing outdated clients from corrupting upgraded data structures.
 
 ## Setup & Development
 
@@ -111,11 +111,11 @@
 ### Installation
 
 1.  Clone the repository.
-2.  Install dependencies (automatically sets up Piper WASM assets):
+2.  Install dependencies:
     ```bash
     npm install
     ```
-    *Note: The `postinstall` script runs `npm run prepare-piper` to copy necessary WASM assets to `public/piper`.*
+    *Note: The `postinstall` script runs `patch-package` to apply the dependency patches in `patches/`. The Piper WASM runtime is vendored in `third-party/piper/` and served at `/piper/**` (no copy step), and `npm run dev` / `npm run build` compile `public/dict/cedict.json` on first use via `npm run compile-dict`.*
 
 3.  (Optional) Read `AGENTS.md` for AI assistant guidelines.
 
