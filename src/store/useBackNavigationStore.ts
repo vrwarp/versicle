@@ -49,7 +49,10 @@ export const useBackNavigationStore = create<BackNavigationState>((set) => ({
     handlers: [],
     registerHandler: (id, handler, priority) =>
         set((state) => ({
-            handlers: [...state.handlers, { id, handler, priority }].sort((a, b) => b.priority - a.priority),
+            // Re-registering an id replaces its entry rather than stacking a
+            // duplicate (which would run the same handler twice).
+            handlers: [...state.handlers.filter((h) => h.id !== id), { id, handler, priority }]
+                .sort((a, b) => b.priority - a.priority),
         })),
     unregisterHandler: (id) =>
         set((state) => ({
