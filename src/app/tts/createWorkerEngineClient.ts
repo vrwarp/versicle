@@ -92,6 +92,9 @@ export interface WorkerEngineClient {
     dispose(): void;
 }
 
+/** How long a guarded worker call may take before it is reported as hung. */
+const WORKER_GUARD_TIMEOUT_MS = 15000;
+
 /**
  * Spin up the TTS engine in a Worker and wire it to the main-thread backend + stores.
  */
@@ -113,12 +116,19 @@ export async function createWorkerEngineClient(): Promise<WorkerEngineClient> {
     const engine = Comlink.wrap<WorkerTtsEngine>(worker);
 
     const withWorkerGuard = async <T>(label: string, op: Promise<T>): Promise<T> => {
-        return Promise.race([
-            op,
-            new Promise<T>((_, reject) =>
-                setTimeout(() => reject(new Error(`TTS worker ${label} timed out${workerError ? `: ${workerError}` : ''}`)), 15000),
-            ),
-        ]);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<never>((_, reject) => {
+            timer = setTimeout(
+                () => reject(new Error(`TTS worker ${label} timed out${workerError ? `: ${workerError}` : ''}`)),
+                WORKER_GUARD_TIMEOUT_MS,
+            );
+        });
+        try {
+            return await Promise.race([op, timeout]);
+        } finally {
+            // Don't leave a dangling timer per guarded call once the op has settled.
+            clearTimeout(timer);
+        }
     };
 
     // The real audio backend lives on the main thread; its events are forwarded into the
