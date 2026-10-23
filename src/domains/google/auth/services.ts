@@ -35,7 +35,10 @@ export interface GoogleLoginOptions {
 }
 
 export function getScopesForService(serviceId: string): readonly string[] {
-  const config = GOOGLE_SERVICES[serviceId as GoogleServiceId];
-  if (!config) throw new GoogleUnknownServiceError(serviceId);
-  return config.scopes;
+  // Own-property check: a bare lookup would accept inherited keys such as
+  // 'constructor' / 'toString' and hand back `undefined` scopes.
+  if (!Object.prototype.hasOwnProperty.call(GOOGLE_SERVICES, serviceId)) {
+    throw new GoogleUnknownServiceError(serviceId);
+  }
+  return GOOGLE_SERVICES[serviceId as GoogleServiceId].scopes;
 }
