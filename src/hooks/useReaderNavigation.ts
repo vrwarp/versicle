@@ -1,18 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useTTSPlaybackStore } from '@store/useTTSPlaybackStore';
-import { useReaderUIStore } from '@store/useReaderUIStore';
-
-/**
- * Drop out of audio-follow mode when the user manually scrolls during
- * playback (the maps "you swiped away from the route" signal). No-op when
- * audio is idle, or already not following — so normal reading never churns
- * the store.
- */
-function breakAudioFollowOnUserScroll() {
-    if (useTTSPlaybackStore.getState().status === 'stopped') return;
-    const ui = useReaderUIStore.getState();
-    if (ui.followingAudio) ui.setFollowingAudio(false);
-}
+import { breakAudioFollowOnUserScroll } from './useAudioFollowDetach';
 
 interface UseReaderNavigationProps {
     readerViewMode: 'paginated' | 'scrolled';

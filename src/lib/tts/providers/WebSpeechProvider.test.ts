@@ -184,6 +184,47 @@ describe('WebSpeechProvider', () => {
       });
   });
 
+  describe('regression: playEarcon on a suspended context', () => {
+      it('resumes once and swallows a rejected resume() (no unhandled rejection)', async () => {
+          const resume = vi.fn().mockRejectedValue(new Error('InvalidStateError'));
+          const ctx = {
+              state: 'suspended',
+              currentTime: 0,
+              resume,
+              close: vi.fn().mockResolvedValue(undefined),
+              destination: {},
+              createOscillator: vi.fn(() => ({
+                  type: 'sine',
+                  frequency: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+                  connect: vi.fn(),
+                  start: vi.fn(),
+                  stop: vi.fn(),
+                  onended: null,
+              })),
+              createGain: vi.fn(() => ({
+                  gain: {
+                      setValueAtTime: vi.fn(),
+                      linearRampToValueAtTime: vi.fn(),
+                      exponentialRampToValueAtTime: vi.fn(),
+                      setTargetAtTime: vi.fn(),
+                      cancelScheduledValues: vi.fn(),
+                  },
+                  connect: vi.fn(),
+                  disconnect: vi.fn(),
+              })),
+          };
+          vi.stubGlobal('AudioContext', vi.fn(function () { return ctx; }));
+          try {
+              provider.playEarcon('bookmark_captured');
+              // Let the rejected promise settle; an unswallowed rejection fails the run.
+              await new Promise((r) => setTimeout(r, 0));
+              expect(resume).toHaveBeenCalledTimes(1);
+          } finally {
+              vi.unstubAllGlobals();
+          }
+      });
+  });
+
   describe('playback controls', () => {
       it('stop should cancel synthesis', () => {
           provider.stop();

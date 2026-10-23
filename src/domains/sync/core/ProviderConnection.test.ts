@@ -512,3 +512,24 @@ describe('ProviderConnection.detach', () => {
     ).toBe(true);
   });
 });
+
+describe('regression: async destroy rejection on detach', () => {
+  it('logs a rejected (async) destroy instead of leaking an unhandled rejection', async () => {
+    const base = makeConnection();
+    const conn: SyncConnection = {
+      ...base,
+      destroy: () => Promise.reject(new Error('final commit failed')),
+    };
+    harness.provider.attach(backendFor(conn), 'ws_1', OPTS);
+
+    expect(() => harness.provider.detach()).not.toThrow();
+
+    expect(harness.provider.isAttached()).toBe(false);
+    expect(harness.statuses.at(-1)).toBe('disconnected');
+    await vi.waitFor(() =>
+      expect(
+        harness.errorLogs.some((a) => a.some((x) => String(x).includes('Error destroying provider')))
+      ).toBe(true)
+    );
+  });
+});

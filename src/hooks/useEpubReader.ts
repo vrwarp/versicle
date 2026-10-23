@@ -520,9 +520,15 @@ export function useEpubReader(
       const currentLoc = (r.location as typeof r.location | undefined)?.start?.cfi || options.initialLocation;
       if (currentLoc) {
         const redisplayStart = performance.now();
-        void Promise.resolve(r.display(currentLoc)).then(() => {
-          measureSince('reader:initial-theme-redisplay', redisplayStart);
-        });
+        void Promise.resolve(r.display(currentLoc))
+          .then(() => {
+            measureSince('reader:initial-theme-redisplay', redisplayStart);
+          })
+          .catch((err) => {
+            // A redisplay torn down by a book switch/unmount must not surface
+            // as an unhandled rejection.
+            logger.warn('Initial theme redisplay failed:', err);
+          });
       }
     }
   }, [

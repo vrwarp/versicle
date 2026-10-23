@@ -188,6 +188,33 @@ describe('ReadingHistoryPanel', () => {
     expect(onNavigate).toHaveBeenCalledWith('epubcfi(/6/14!/4/2/1:0)', 'epubcfi(/6/14!/4/2/1:0)');
   });
 
+  describe('regression: keyboard activation of history items', () => {
+    it('focuses items and navigates on Enter and Space', () => {
+      (useBookProgress as any).mockReturnValue({
+        completedRanges: [],
+        readingSessions: [{
+          cfiRange: 'epubcfi(/6/14!/4/2/1:0)',
+          startTime: Date.now(),
+          endTime: Date.now(),
+          type: 'page',
+          label: 'Chapter One'
+        } as ReadingSession]
+      });
+
+      const onNavigate = vi.fn();
+      render(<ReadingHistoryPanel bookId="book1" engine={mockEngine} onNavigate={onNavigate} />);
+
+      const item = screen.getByTestId('history-item-0');
+      expect(item).toHaveAttribute('tabindex', '0');
+
+      fireEvent.keyDown(item, { key: 'Enter' });
+      fireEvent.keyDown(item, { key: ' ' });
+      fireEvent.keyDown(item, { key: 'a' });
+      expect(onNavigate).toHaveBeenCalledTimes(2);
+      expect(onNavigate).toHaveBeenCalledWith('epubcfi(/6/14!/4/2/1:0)', 'epubcfi(/6/14!/4/2/1:0)');
+    });
+  });
+
   it('calls onNavigate with correct targetCfi and parsed endCfi when range contains comma', () => {
     const sessions: ReadingSession[] = [{
       cfiRange: 'epubcfi(/6/14!/4/2,/1:0,/3:50)',

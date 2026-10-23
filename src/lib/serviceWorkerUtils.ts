@@ -1,3 +1,6 @@
+/** How long the boot gate waits for `serviceWorker.ready` before giving up. */
+const READY_TIMEOUT_MS = 3000;
+
 /**
  * Registration-failure signal for the boot gate. `navigator.serviceWorker.ready`
  * NEVER settles when registration fails (it waits for an active registration
@@ -45,12 +48,21 @@ export async function waitForServiceWorkerController(
     // (e.g., in WebKit/Playwright test environments with serviceWorkers:'block'),
     // and against the registration-failure signal so a failed registration
     // releases the boot gate immediately instead of after the full timeout.
-    const timeout = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 3000));
-    const result = await Promise.race([
-        navigatorArg.serviceWorker.ready.then(() => 'ready' as const),
-        registrationFailedPromise,
-        timeout,
-    ]);
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<'timeout'>((resolve) => {
+        timeoutId = setTimeout(() => resolve('timeout'), READY_TIMEOUT_MS);
+    });
+    let result: 'ready' | 'failed' | 'timeout';
+    try {
+        result = await Promise.race([
+            navigatorArg.serviceWorker.ready.then(() => 'ready' as const),
+            registrationFailedPromise,
+            timeout,
+        ]);
+    } finally {
+        // Don't leave the 3s timer pending once the race is decided.
+        clearTimeout(timeoutId);
+    }
     if (result !== 'ready') {
         return;
     }

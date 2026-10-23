@@ -7,7 +7,7 @@
  * referenceStartIndex -2 must not classify EVERY group as 'reference' and
  * poison the synced contentAnalysis map.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SeededRandom } from '@test/fuzz-utils';
 import { GenAIInvalidResponseError } from '../errors';
 import { MockGenAIClient } from '../MockGenAIClient';
@@ -19,7 +19,7 @@ import {
   buildResponseSchema,
   type ReferenceDetectionNode,
 } from './referenceDetection';
-import { validateTableAdaptations } from './tableAdaptation';
+import { validateTableAdaptations, generateTableAdaptations } from './tableAdaptation';
 import { validateLibraryMappings, mapReadingListToLibrary } from './libraryMapping';
 
 describe('referenceDetection validation', () => {
@@ -321,5 +321,58 @@ describe('regression: referenceDetection HINT B (linked note block)', () => {
     expect(String(requests[0].prompt)).not.toContain('HINT');
     expect((requests[0].responseSchema as { required: string[] }).required).not.toContain('agreedWithHeuristic');
     expect(result.agreedWithHeuristic).toBeNull();
+  });
+});
+
+describe('regression: referenceDetection front-text truncation', () => {
+  it('does not append an ellipsis to front text that is exactly at the word cap (trailing space)', async () => {
+    const requests: GenAIRequest<unknown>[] = [];
+    const client: GenAIClient = {
+      isConfigured: () => true,
+      generateText: async () => '',
+      generateStructured: async <T,>(request: GenAIRequest<T>) => {
+        requests.push(request as GenAIRequest<unknown>);
+        return request.validate({ justification: 'none', referenceStartIndex: -1 });
+      },
+    };
+    const nodes: ReferenceDetectionNode[] = [
+      { id: '0', sampleText: 'one two three four five six seven eight ' },
+      { id: '1', sampleText: 'one two three four five six seven eight nine ten' },
+    ];
+    await detectReferenceSection(client, nodes, { enumeratorCandidate: -1, leadingMarkerCandidate: -1 });
+    const prompt = String(requests[0].prompt);
+    expect(prompt).toContain('"sampleText":"one two three four five six seven eight"');
+    expect(prompt).toContain('"sampleText":"one two three four five six seven eight…"');
+  });
+});
+
+describe('regression: tableAdaptation image read failure', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('rejects with the read error and does not throw from the loadend handler', async () => {
+    const readError = new Error('read failed');
+    let loadendThrew: unknown;
+    class FailingReader {
+      result: string | null = null;
+      error: Error | null = null;
+      onerror: ((e: unknown) => void) | null = null;
+      onloadend: (() => void) | null = null;
+      readAsDataURL(): void {
+        this.error = readError;
+        // Spec order: error, then loadend (with result === null).
+        this.onerror?.(readError);
+        try {
+          this.onloadend?.();
+        } catch (e) {
+          loadendThrew = e;
+        }
+      }
+    }
+    vi.stubGlobal('FileReader', FailingReader);
+    const client = new MockGenAIClient({ response: [], delayMs: 0 });
+    await expect(
+      generateTableAdaptations(client, [{ rootCfi: 'c1', imageBlob: new Blob(['x']) }]),
+    ).rejects.toBe(readError);
+    expect(loadendThrew).toBeUndefined();
   });
 });

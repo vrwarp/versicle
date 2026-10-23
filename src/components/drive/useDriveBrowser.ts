@@ -14,6 +14,8 @@ interface UseDriveBrowserReturn {
     error: Error | null;
     openFolder: (id: string, name: string) => void;
     navigateUp: () => void;
+    /** Jump to the ancestor at `index` in `breadcrumbs`, dropping every level below it. */
+    navigateToCrumb: (index: number) => void;
     refresh: () => void;
 }
 
@@ -57,16 +59,16 @@ export const useDriveBrowser = (initialFolderId = 'root'): UseDriveBrowserReturn
         setCurrentFolderId(id);
     };
 
-    const navigateUp = () => {
-        if (breadcrumbs.length <= 1) return;
+    const navigateToCrumb = (index: number) => {
+        // Only strict ancestors are valid targets; the last crumb is the current folder.
+        if (index < 0 || index >= breadcrumbs.length - 1) return;
 
-        const newBreadcrumbs = [...breadcrumbs];
-        newBreadcrumbs.pop(); // Remove current
-        const parent = newBreadcrumbs[newBreadcrumbs.length - 1];
-
+        const newBreadcrumbs = breadcrumbs.slice(0, index + 1);
         setBreadcrumbs(newBreadcrumbs);
-        setCurrentFolderId(parent.id);
+        setCurrentFolderId(newBreadcrumbs[index].id);
     };
+
+    const navigateUp = () => navigateToCrumb(breadcrumbs.length - 2);
 
     const refresh = () => {
         fetchItems(currentFolderId);
@@ -80,6 +82,7 @@ export const useDriveBrowser = (initialFolderId = 'root'): UseDriveBrowserReturn
         error,
         openFolder,
         navigateUp,
+        navigateToCrumb,
         refresh
     };
 };

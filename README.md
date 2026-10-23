@@ -12,9 +12,9 @@
     *   **Offline TTS**: Use local Neural voices (Piper) for free, unlimited offline listening.
     *   **Cloud TTS**: Connect your own API keys (OpenAI, Google, LemonFox) for studio-quality narration.
     *   **AI Enhanced**: Use Google Gemini to generate smart Tables of Content, filter content (by identifying reference boundaries), and narrate adapted tables. Includes **Smart Rotation** to maximize free quotas and prevent rate limits.
-*   **Dual Sync**:
+*   **Sync**:
     *   **Real-time**: Synchronize progress instantly across devices using Firestore.
-    *   **Native Backup**: Seamless integration with Android's built-in backup system.
+    *   **Cloud Library**: Scan and import EPUBs directly from your Google Drive.
 *   **Data Ownership**: Export your data at any time. Full backups (ZIP) or Metadata (JSON).
 
 ## Tech Stack
@@ -24,15 +24,15 @@
 *   **Testing**: Vitest 4.0.16
 *   **Linting**: ESLint 9.39.2
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (github:vrwarp/zustand-middleware-yjs#master)
-*   **Sync**: `y-cinder` (github:vrwarp/y-cinder#main / Firestore 11.10.0) + Android Backup Service + Google Drive API
+*   **Sync**: `y-cinder` (github:vrwarp/y-cinder#main / Firestore 11.10.0) + Google Drive API
 *   **Storage**: IndexedDB (via `idb`) with Web Locks API (`navigator.locks`) for safe cross-context execution and deadlock prevention
 *   **Parsing**: epub.js + PapaParse (CSV) + `opencc-js` + `pinyin-pro`
 *   **Audio**: Piper (WASM) / Web Speech API / LemonFox.ai
-*   **AI**: Google Gemini 2.5 (Flash Lite / Flash) via `@google/generative-ai`
+*   **AI**: Google Gemini (rotating Flash / Flash Lite models) via the Gemini REST API (`src/domains/google/genai/GeminiClient.ts`, routed through the egress gateway)
 *   **Mobile**: Capacitor 7.1.1 (Android) + `@capacitor/filesystem` + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login` + `@capacitor-community/text-to-speech`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4.1.18 + Radix UI
-*   **Tools**: `browser-image-compression`, `JSZip`, `lucide-react`, `react-lazy-load-image-component`, `react-window`, `dompurify`, `@google/generative-ai`, `y-cinder`, `y-indexeddb`, `piper-wasm`, `uuid`
+*   **Tools**: `browser-image-compression`, `JSZip`, `lucide-react`, `react-lazy-load-image-component`, `dompurify`, `y-cinder`, `y-idb`, `uuid`
 *   **Dev Tools**: `vite-plugin-mkcert` (Local HTTPS)
 
 ## Features
@@ -74,9 +74,8 @@
 
 ### Management (The "Engine Room")
 *   **Sync & Cloud**:
-    *   **Dual Sync**:
+    *   **Cloud Sync**:
         *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates.
-        *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
         *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses a smart **Heuristic Sync** (`viewedByMeTime` vs `lastScanTime`) to skip unnecessary expensive API scans, and optimizes memory by mapping heavy API objects to a lightweight file indexing strategy to speed up "New Book" diffing. Forces a full scan if the Cloud Index is empty. Automatically syncs recursive folders.
     *   **Workspace Context Switching**: Safely handles migrating states between remote workspaces, securely bridging page reloads and offering recovery from dangling backups.
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
@@ -99,7 +98,7 @@
 *   **Checkpoint Forensics**: Inspect the exact data difference between your live state and any backup checkpoint.
 *   **Flight Data Recorders**: Captures "Black Box" snapshots of application state (Zustand) during unexpected errors or manually via the Diagnostics UI for post-mortem debugging.
 *   **Safe Mode**: A fallback UI that activates on critical database initialization failures, allowing users to export debug info or perform a factory reset to recover usability.
-*   **Schema Quarantine (`ObsoleteLockView`)**: A safety mechanism that locks the app and severs cloud connections if a remote database with a newer schema version (currently V9 for CRDT schema, and V28 for local IndexedDB) is detected, preventing outdated clients from corrupting upgraded data structures.
+*   **Schema Quarantine (`ObsoleteLockView`)**: A safety mechanism that locks the app and severs cloud connections if a remote database with a newer schema version (currently V9 for CRDT schema, and V31 for local IndexedDB) is detected, preventing outdated clients from corrupting upgraded data structures.
 
 ## Setup & Development
 
@@ -111,11 +110,11 @@
 ### Installation
 
 1.  Clone the repository.
-2.  Install dependencies (automatically sets up Piper WASM assets):
+2.  Install dependencies:
     ```bash
     npm install
     ```
-    *Note: The `postinstall` script runs `npm run prepare-piper` to copy necessary WASM assets to `public/piper`.*
+    *Note: The `postinstall` script runs `patch-package` to apply the dependency patches in `patches/`. The Piper WASM runtime is vendored in `third-party/piper/` and served at `/piper/**` (no copy step), and `npm run dev` / `npm run build` compile `public/dict/cedict.json` on first use via `npm run compile-dict`.*
 
 3.  (Optional) Read `AGENTS.md` for AI assistant guidelines.
 

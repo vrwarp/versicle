@@ -58,6 +58,14 @@ describe('Dialog', () => {
     expect(screen.getByText('Test Description')).toBeInTheDocument();
   });
 
+  describe('regression: placeholder description was announced to screen readers', () => {
+    it('renders no description element when none is provided', () => {
+      render(<Dialog isOpen={true} onClose={() => {}} title="Test Title" />);
+      expect(screen.queryByText('Dialog Content')).toBeNull();
+      expect(screen.getByRole('dialog')).not.toHaveAttribute('aria-describedby');
+    });
+  });
+
   it('renders children content', () => {
     render(
       <Dialog isOpen={true} onClose={() => {}} title="Test Title" description="Test Description">

@@ -57,6 +57,10 @@ export const syncInitTask: BootTask = {
     }
     // Intentionally NOT awaited: start() may touch the network and boot
     // must never block on sync completion (pinned by App_Boot.test.tsx).
-    void getSyncOrchestratorAsync().then((orchestrator) => orchestrator.start());
+    // A rejection (chunk load, start() throwing) is logged here rather than
+    // surfacing as an unhandled rejection from a fire-and-forget promise.
+    void getSyncOrchestratorAsync()
+      .then((orchestrator) => orchestrator.start())
+      .catch((err) => logger.warn('Sync start failed:', err));
   },
 };

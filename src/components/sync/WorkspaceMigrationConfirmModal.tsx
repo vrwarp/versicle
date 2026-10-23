@@ -25,6 +25,8 @@ export const WorkspaceMigrationConfirmModal: React.FC<WorkspaceMigrationConfirmM
     onResolved,
 }) => {
     const [isProcessing, setIsProcessing] = React.useState(false);
+    const titleId = React.useId();
+    const descriptionId = React.useId();
 
     const handleConfirm = async () => {
         setIsProcessing(true);
@@ -67,9 +69,15 @@ export const WorkspaceMigrationConfirmModal: React.FC<WorkspaceMigrationConfirmM
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-background border border-border rounded-xl p-6 max-w-md w-full mx-4 shadow-xl space-y-4">
-                <h2 className="text-lg font-semibold">Finalize Workspace Switch?</h2>
-                <p className="text-sm text-muted-foreground">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                aria-describedby={descriptionId}
+                className="bg-background border border-border rounded-xl p-6 max-w-md w-full mx-4 shadow-xl space-y-4"
+            >
+                <h2 id={titleId} className="text-lg font-semibold">Finalize Workspace Switch?</h2>
+                <p id={descriptionId} className="text-sm text-muted-foreground">
                     You've switched to workspace <strong className="text-foreground">{targetWorkspaceId}</strong>.
                     Review the data below. If everything looks correct, finalize the connection.
                 </p>

@@ -27,6 +27,9 @@ import { rescanCovers } from '@app/boot/coverBackfill';
 
 const logger = createLogger('DataPanel');
 
+/** How long a failed CSV import's message stays up before the overlay closes. */
+const CSV_FAILURE_DISMISS_MS = 2000;
+
 const DataPanel: React.FC = () => {
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -84,52 +87,65 @@ const DataPanel: React.FC = () => {
     navigate('/');
   };
 
+  /** Show a failure message on the import overlay, then dismiss it. */
+  const failCsvImport = () => {
+    setCsvImportMessage('Failed to import CSV.');
+    setTimeout(() => setIsCsvImporting(false), CSV_FAILURE_DISMISS_MS);
+  };
+
   const handleImportReadingListFile = async (file: File) => {
     setIsCsvImporting(true);
     setCsvImportComplete(false);
     setCsvImportMessage('Reading file...');
 
     const reader = new FileReader();
+    // Without these two paths an unreadable or empty file left the full-screen
+    // overlay up forever (nothing ever cleared isCsvImporting).
+    reader.onerror = () => {
+      logger.error('CSV import failed: file could not be read', reader.error);
+      failCsvImport();
+    };
     reader.onload = async (ev) => {
       const text = ev.target?.result as string;
-      if (text) {
-        try {
-          setCsvImportMessage('Parsing CSV...');
-          await new Promise(r => setTimeout(r, 500));
-          const entries = parseReadingListCSV(text);
+      if (!text) {
+        failCsvImport();
+        return;
+      }
+      try {
+        setCsvImportMessage('Parsing CSV...');
+        await new Promise(r => setTimeout(r, 500));
+        const entries = parseReadingListCSV(text);
 
-          setCsvImportMessage(`Importing ${entries.length} entries and syncing with library...`);
-          await new Promise(r => setTimeout(r, 500));
+        setCsvImportMessage(`Importing ${entries.length} entries and syncing with library...`);
+        await new Promise(r => setTimeout(r, 500));
 
-          const store = useReadingListStore.getState();
-          const rsStore = useReadingStateStore.getState();
+        const store = useReadingListStore.getState();
+        const rsStore = useReadingStateStore.getState();
 
-          // Pre-compute a mapping of sourceFilename -> bookId to avoid O(N*M) lookups in the loop
-          const libraryBooks = useBookStore.getState().books;
-          const filenameToBookId: Record<string, string> = {};
-          for (const book of Object.values(libraryBooks)) {
-            if (book && book.sourceFilename && !filenameToBookId[book.sourceFilename]) {
-              // Only set if not already set (first match wins)
-              filenameToBookId[book.sourceFilename] = book.bookId;
-            }
+        // Pre-compute a mapping of sourceFilename -> bookId to avoid O(N*M) lookups in the loop
+        const libraryBooks = useBookStore.getState().books;
+        const filenameToBookId: Record<string, string> = {};
+        for (const book of Object.values(libraryBooks)) {
+          if (book && book.sourceFilename && !filenameToBookId[book.sourceFilename]) {
+            // Only set if not already set (first match wins)
+            filenameToBookId[book.sourceFilename] = book.bookId;
           }
-
-          for (const entry of entries) {
-            store.upsertEntry(entry);
-            if (entry.percentage !== undefined) {
-              const bookId = filenameToBookId[entry.filename];
-              const targetId = bookId || entry.filename;
-              rsStore.updateLocation(targetId, '', entry.percentage);
-            }
-          }
-
-          setCsvImportMessage(`Successfully imported ${entries.length} entries.`);
-          setCsvImportComplete(true);
-        } catch (err) {
-          logger.error('CSV import failed', err);
-          setCsvImportMessage('Failed to import CSV.');
-          setTimeout(() => setIsCsvImporting(false), 2000);
         }
+
+        for (const entry of entries) {
+          store.upsertEntry(entry);
+          if (entry.percentage !== undefined) {
+            const bookId = filenameToBookId[entry.filename];
+            const targetId = bookId || entry.filename;
+            rsStore.updateLocation(targetId, '', entry.percentage);
+          }
+        }
+
+        setCsvImportMessage(`Successfully imported ${entries.length} entries.`);
+        setCsvImportComplete(true);
+      } catch (err) {
+        logger.error('CSV import failed', err);
+        failCsvImport();
       }
     };
     reader.readAsText(file);

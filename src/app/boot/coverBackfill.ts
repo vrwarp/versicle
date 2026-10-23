@@ -65,7 +65,15 @@ export async function runCoverBackfill(deps: CoverBackfillDeps): Promise<CoverBa
   const missing = (await deps.listManifests()).filter((row) => !hasStoredCover(row));
   for (const row of missing) {
     if (!deps.shouldContinue()) break;
-    const file = await deps.getBookFile(row.bookId);
+    let file: Blob | ArrayBuffer | undefined;
+    try {
+      file = await deps.getBookFile(row.bookId);
+    } catch (error) {
+      // One unreadable book must not abort the pass for every book after it.
+      result.failed++;
+      logger.warn(`Cover backfill could not read ${row.bookId}:`, error);
+      continue;
+    }
     if (!file) continue; // offloaded: the next import/restore extracts it
     result.scanned++;
     try {

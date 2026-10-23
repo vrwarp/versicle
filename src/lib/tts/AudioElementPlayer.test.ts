@@ -158,4 +158,45 @@ describe('AudioElementPlayer', () => {
           expect(onError).toHaveBeenCalledTimes(1);
       });
   });
+  describe('regression: Web Audio promises must not escape as unhandled rejections', () => {
+      // resume()/close() reject on a closed context. Both are best-effort
+      // (ducking / teardown), so a rejection must be swallowed, not surfaced.
+      it('playEarcon tolerates a rejecting resume() and destroy() a rejecting close()', async () => {
+          const param = {
+              value: 1,
+              cancelScheduledValues: vi.fn(),
+              setValueAtTime: vi.fn(),
+              linearRampToValueAtTime: vi.fn(),
+              exponentialRampToValueAtTime: vi.fn(),
+          };
+          // A rejection handler must be attached to each returned promise.
+          const resumeResult = Promise.reject(new Error('closed'));
+          const closeResult = Promise.reject(new Error('already closed'));
+          const resumeThen = vi.spyOn(resumeResult, 'then');
+          const closeThen = vi.spyOn(closeResult, 'then');
+          const node = () => ({ connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn(), frequency: param, gain: param });
+          const ctx = {
+              state: 'suspended',
+              currentTime: 0,
+              destination: {},
+              resume: vi.fn(() => resumeResult),
+              close: vi.fn(() => closeResult),
+              createGain: vi.fn(node),
+              createOscillator: vi.fn(node),
+              createMediaElementSource: vi.fn(node),
+          };
+          vi.stubGlobal('AudioContext', function () { return ctx; });
+          // jsdom's window is the global here; make sure the lookup sees the stub.
+          (window as unknown as { AudioContext: unknown }).AudioContext = (globalThis as unknown as { AudioContext: unknown }).AudioContext;
+
+          player.playEarcon('bookmark_captured');
+          player.destroy();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
+          expect(ctx.resume).toHaveBeenCalled();
+          expect(ctx.close).toHaveBeenCalled();
+          expect(resumeThen).toHaveBeenCalledWith(undefined, expect.any(Function));
+          expect(closeThen).toHaveBeenCalledWith(undefined, expect.any(Function));
+      });
+  });
 });

@@ -9,7 +9,7 @@ import { useReaderUIStore } from '@store/useReaderUIStore';
  * reading never churns the store. (Module-scope: the listeners below all
  * share one debounced-by-state implementation.)
  */
-function breakAudioFollowOnUserScroll() {
+export function breakAudioFollowOnUserScroll() {
     if (useTTSPlaybackStore.getState().status === 'stopped') return;
     const ui = useReaderUIStore.getState();
     if (ui.followingAudio) ui.setFollowingAudio(false);

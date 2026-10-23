@@ -118,4 +118,13 @@ describe('findApproximateMatch', () => {
             expect(findApproximateMatch('text', undefined)).toBeNull();
         });
     });
+
+    describe('regression: case folding that changes string length', () => {
+        it('reports indices into the original text when an earlier character lower-cases to two code units', () => {
+            const text = 'İstanbul and ISTANBUL';
+            const match = findApproximateMatch(text, 'istanbul');
+            expect(match).toEqual({ start: 13, end: 21 });
+            expect(text.slice(match!.start, match!.end)).toBe('ISTANBUL');
+        });
+    });
 });

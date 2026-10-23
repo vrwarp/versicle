@@ -33,18 +33,6 @@ import { presentError } from '@app/errors/presentError';
 import { LibrarySearchBar, type LibrarySearchBarRef } from './LibrarySearchBar';
 import { compareTitles } from '@kernel/locale/format';
 
-/**
- * The main library view component.
- * Displays the user's collection of books in a responsive grid or list and allows importing new books.
- * Handles fetching books from the store.
- *
- * The view context is ROUTE state, not a synced preference — `/` renders
- * the library, `/notes` renders this same shell in notes context (the
- * header Select navigates). The notes view itself is lazy so it stays out
- * of the boot-surface chunk.
- *
- * @returns A React component rendering the library interface.
- */
 const logger = createLogger('LibraryView');
 
 /** Header dropdown value → route. The shell renders every one of these. */
@@ -92,6 +80,18 @@ interface LibraryViewProps {
   context?: 'library' | 'notes' | 'search' | 'drive';
 }
 
+/**
+ * The main library view component.
+ * Displays the user's collection of books in a responsive grid or list and allows importing new books.
+ * Handles fetching books from the store.
+ *
+ * The view context is ROUTE state, not a synced preference — `/` renders
+ * the library, `/notes` renders this same shell in notes context (the
+ * header Select navigates). The notes view itself is lazy so it stays out
+ * of the boot-surface chunk.
+ *
+ * @returns A React component rendering the library interface.
+ */
 export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' }) => {
   // OPTIMIZATION: Use useShallow to prevent re-renders when importProgress/uploadProgress changes
   const books = useAllBooks();
@@ -242,19 +242,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
     }
   }, [navigate, staticMetadata, offloadedBookIds, handleRestore]);
 
+  // Missing-file (ghost / offloaded) books are routed to the restore flow by
+  // handleBookOpen itself.
+  // Do NOT auto-update location. Let the Reader View's Smart Resume Toast handle the prompt.
   const handleResumeReading = useCallback((book: BookMetadata) => {
-    // Check if file is missing (Ghost or Offloaded)
-    const isGhost = !staticMetadata[book.id] && !offloadedBookIds.has(book.id);
-    const isOffloaded = book.isOffloaded || offloadedBookIds.has(book.id);
-
-    if (isGhost || isOffloaded) {
-      handleBookOpen(book);
-      return;
-    }
-
-    // Do NOT auto-update location. Let the Reader View's Smart Resume Toast handle the prompt.
     handleBookOpen(book);
-  }, [handleBookOpen, staticMetadata, offloadedBookIds]);
+  }, [handleBookOpen]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {

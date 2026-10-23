@@ -16,6 +16,7 @@ for i in $(seq 1 $RETRIES); do
     fi
     if [ "$i" -eq "$RETRIES" ]; then
         echo "❌ Timeout waiting for application to start."
+        kill $PID
         exit 1
     fi
     sleep 1
@@ -24,8 +25,10 @@ done
 # 3. Run Verification Tests
 echo "🧪 Running verification suite..."
 # We pass all arguments ($@) to the playwright test runner.
-npx playwright test "$@"
-EXIT_CODE=$?
+# `set -e` would exit right here on a failing run, skipping the cleanup and
+# the exit-code report below, so capture the status explicitly.
+EXIT_CODE=0
+npx playwright test "$@" || EXIT_CODE=$?
 
 # 4. Cleanup and Exit
 echo "🏁 Tests finished with exit code $EXIT_CODE"

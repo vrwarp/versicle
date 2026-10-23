@@ -23,6 +23,18 @@ describe('useBackNavigationStore', () => {
         expect(handlers[0].handler).toBe(handler2);
     });
 
+    it('replaces the entry when the same id is registered again', () => {
+        const first = vi.fn();
+        const second = vi.fn();
+        useBackNavigationStore.getState().registerHandler('1', first, BackButtonPriority.DEFAULT);
+        useBackNavigationStore.getState().registerHandler('1', second, BackButtonPriority.MODAL);
+
+        const handlers = useBackNavigationStore.getState().handlers;
+        expect(handlers).toHaveLength(1);
+        expect(handlers[0].handler).toBe(second);
+        expect(handlers[0].priority).toBe(BackButtonPriority.MODAL);
+    });
+
     it('should unregister handlers', () => {
         const handler = vi.fn();
         useBackNavigationStore.getState().registerHandler('1', handler, BackButtonPriority.DEFAULT);

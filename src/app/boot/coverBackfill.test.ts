@@ -58,6 +58,21 @@ describe('runCoverBackfill', () => {
     expect(d.saved).toEqual(['needs-cover']);
   });
 
+  describe('regression: an unreadable book does not abort the pass', () => {
+    it('counts it as failed and still backfills the books after it', async () => {
+      const d = deps({
+        listManifests: async () => [row('unreadable'), row('needs-cover')],
+        getBookFile: async (id) => {
+          if (id === 'unreadable') throw new Error('idb read failed');
+          return new Blob([id]);
+        },
+      });
+      const result = await runCoverBackfill(d);
+      expect(d.saved).toEqual(['needs-cover']);
+      expect(result).toEqual({ scanned: 1, found: 1, failed: 1 });
+    });
+  });
+
   it('stops when told to', async () => {
     const d = deps({ shouldContinue: () => false });
     expect(await runCoverBackfill(d)).toEqual({ scanned: 0, found: 0, failed: 0 });

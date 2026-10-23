@@ -127,7 +127,7 @@ export class MaintenanceService {
           let knownFilename = blobFilename || books[bookId].sourceFilename || null;
 
           // Special case handling for 'book.epub' which is a placeholder name.
-          if (knownFilename == 'book.epub') {
+          if (knownFilename === 'book.epub') {
             knownFilename = null;
           }
 

@@ -128,6 +128,10 @@ describe('GoogleAuthClient contract', () => {
       );
       expect(login).not.toHaveBeenCalled();
       expect(() => getScopesForService('nope')).toThrow(GoogleUnknownServiceError);
+      // regression: inherited Object.prototype keys are not services.
+      for (const inherited of ['constructor', 'toString', '__proto__']) {
+        expect(() => getScopesForService(inherited)).toThrow(GoogleUnknownServiceError);
+      }
     });
   });
 

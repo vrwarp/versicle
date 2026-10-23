@@ -60,7 +60,10 @@ export function exportReadingListToCSV(entries: ReadingListEntry[]): string {
              shelf = 'currently-reading';
         }
 
-        const dateRead = (shelf === 'read' && entry.lastUpdated) ? new Date(entry.lastUpdated).toISOString().split('T')[0] : '';
+        // toISOString() throws RangeError on an invalid (NaN) timestamp.
+        const dateRead = (shelf === 'read' && Number.isFinite(entry.lastUpdated) && entry.lastUpdated)
+            ? new Date(entry.lastUpdated).toISOString().split('T')[0]
+            : '';
         const filename = entry.filename || '';
         const percentage = entry.percentage.toFixed(4);
 
@@ -140,9 +143,11 @@ export function parseReadingListCSV(csv: string): ReadingListEntry[] {
              else finalFilename = `${title}-${author}`.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         }
 
+        // An unparseable value (e.g. "n/a") is treated like a missing one so NaN never reaches the store.
+        const parsedPercentage = percentageStr ? parseFloat(percentageStr) : NaN;
         let percentage = 0;
-        if (percentageStr) {
-            percentage = parseFloat(percentageStr);
+        if (Number.isFinite(parsedPercentage)) {
+            percentage = parsedPercentage;
             // Normalize percentage to 0.0 - 1.0 range if it appears to be 0-100
             if (percentage > 1.0 && percentage <= 100) percentage = percentage / 100;
         } else {
@@ -160,15 +165,20 @@ export function parseReadingListCSV(csv: string): ReadingListEntry[] {
             else if (percentage > 0) status = 'currently-reading';
         }
 
+        // Invalid dates / ratings must not leak NaN into the persisted entry (a NaN
+        // lastUpdated would also make a later export throw).
+        const parsedDate = dateRead ? new Date(dateRead).getTime() : NaN;
+        const parsedRating = ratingStr ? parseInt(ratingStr, 10) : NaN;
+
         entries.push({
             filename: finalFilename,
             title,
             author,
             isbn,
             percentage,
-            lastUpdated: dateRead ? new Date(dateRead).getTime() : Date.now(),
+            lastUpdated: Number.isNaN(parsedDate) ? Date.now() : parsedDate,
             status,
-            rating: ratingStr ? parseInt(ratingStr) : undefined
+            rating: Number.isNaN(parsedRating) ? undefined : parsedRating
         });
     }
 

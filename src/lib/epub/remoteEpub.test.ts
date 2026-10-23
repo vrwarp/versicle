@@ -196,6 +196,27 @@ describe('readRemoteEpubPreview', () => {
     expect(error.reason).toBe('zip64-unsupported');
   });
 
+  it('reports inflate-failed (without an unhandled rejection) for corrupt deflate data', async () => {
+    const buf = await buildEpub({ coverStyle: 'none' });
+    const bytes = new Uint8Array(buf);
+    // Locate container.xml's local header (the first occurrence of its name)
+    // and trash the start of its compressed data (0xff = reserved block type).
+    const nameBytes = new TextEncoder().encode('META-INF/container.xml');
+    let nameAt = -1;
+    for (let i = 0; i + nameBytes.length <= bytes.length && nameAt < 0; i++) {
+      if (nameBytes.every((b, j) => bytes[i + j] === b)) nameAt = i;
+    }
+    expect(nameAt).toBeGreaterThanOrEqual(30);
+    const extraLen = new DataView(buf).getUint16(nameAt - 2, true);
+    bytes.fill(0xff, nameAt + nameBytes.length + extraLen, nameAt + nameBytes.length + extraLen + 8);
+
+    const error = await readRemoteEpubPreview(bufferReader(buf)).catch((e) => e);
+    expect(error).toBeInstanceOf(UnextractableEpubError);
+    expect(error.reason).toBe('inflate-failed');
+    // Let any stray stream-rejection surface before the test ends.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
   it('throws when no EOCD signature is present at all', async () => {
     const buf = new TextEncoder().encode('not a zip file at all').buffer;
     const error = await readRemoteEpubPreview(bufferReader(buf)).catch((e) => e);

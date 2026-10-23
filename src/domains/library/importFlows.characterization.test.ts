@@ -560,6 +560,31 @@ describe('import flows characterization', () => {
       expect(useLibraryStore.getState().staticMetadata['b1']?.title).toBe('Reprocessed');
     });
 
+    describe('regression: partial palette re-derivation', () => {
+      it('keeps the stored perceptualPalette when only a coverPalette was re-derived', async () => {
+        const reprocess = vi.fn(async () => ({
+          coverPalette: [9, 9, 9],
+          perceptualPalette: undefined,
+          searchText: { extractionVersion: 3, sections: [] },
+        }));
+        const { orchestrator } = makeOrchestrator({
+          reprocess,
+          getBookMetadata: vi.fn(async () => undefined),
+        });
+        useBookStore.setState({
+          books: {
+            b1: makeInventoryItem({ bookId: 'b1', perceptualPalette: { standout: 1, background: 2, deltaE: 3 } }),
+          },
+        });
+
+        await orchestrator.reprocess('b1');
+
+        const item = useBookStore.getState().books['b1'];
+        expect(item?.coverPalette).toEqual([9, 9, 9]);
+        expect(item?.perceptualPalette).toEqual({ standout: 1, background: 2, deltaE: 3 });
+      });
+    });
+
     it('serializes concurrent reprocess runs for the same book on its mutex', async () => {
       const order: string[] = [];
       const reprocess = vi.fn(async () => {

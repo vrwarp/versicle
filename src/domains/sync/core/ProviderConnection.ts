@@ -185,7 +185,11 @@ export class ProviderConnection {
     }
     if (this.connection) {
       try {
-        this.connection.destroy();
+        // destroy() may be async (the final commit of a real provider); a
+        // rejection must be logged, not escape as an unhandled rejection.
+        Promise.resolve(this.connection.destroy()).catch((error) => {
+          logger.error('Error destroying provider:', error);
+        });
         logger.debug('Provider destroyed');
       } catch (error) {
         logger.error('Error destroying provider:', error);

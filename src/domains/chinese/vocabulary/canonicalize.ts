@@ -31,7 +31,9 @@ const TABLE = trad2simp as Record<string, string>;
  * already simplified, non-Han, or unknown to the table.
  */
 export function canonicalizeChar(char: string): string {
-  return TABLE[char] ?? char;
+  // Own-property check: a bare `TABLE[char]` would resolve inherited keys
+  // ('constructor', '__proto__', ...) to Object.prototype members.
+  return Object.prototype.hasOwnProperty.call(TABLE, char) ? TABLE[char] : char;
 }
 
 /**

@@ -92,6 +92,9 @@ export const useDriveStore = create<DriveConfigState>()(
                 // 2. Title containment (simple fuzzy)
                 // Normalize: "Project Hail Mary" -> "project hail mary"
                 const normalizedTitle = bookTitle.toLowerCase();
+                // An empty title is contained in EVERY name — without this
+                // guard it would "match" whichever file happens to be first.
+                if (!normalizedTitle.trim()) return undefined;
                 return index.find(f => f.name.toLowerCase().includes(normalizedTitle));
             }
         }),

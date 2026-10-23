@@ -81,7 +81,12 @@ export class QueryEmbeddingCache {
             query: keyParts.query.trim(),
             model: keyParts.model,
             dims: keyParts.dims,
-            vector: vector.buffer as ArrayBuffer,
+            // Exact bytes of THIS view: `vector.buffer` alone would persist the
+            // whole backing buffer if the embed client handed back a subarray.
+            vector: vector.buffer.slice(
+              vector.byteOffset,
+              vector.byteOffset + vector.byteLength,
+            ) as ArrayBuffer,
             createdAt: Date.now(),
           });
         } catch (_err) {

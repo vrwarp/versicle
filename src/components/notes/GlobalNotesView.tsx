@@ -4,15 +4,23 @@ import { NotesSearchBar } from './NotesSearchBar';
 import { BookNotesBlock } from './BookNotesBlock';
 import { useGroupedAnnotations } from '@hooks/useGroupedAnnotations';
 import { useDebounce } from '@hooks/useDebounce';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Mic, Check, Trash2 } from 'lucide-react';
 import { useLibraryStore } from '@store/useLibraryStore';
 import { useAnnotationStore, selectPendingAudioBookmarks } from '@store/useAnnotationStore';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '../ui/Button';
-import { Mic, Check, Trash2 } from 'lucide-react';
 
 interface GlobalNotesViewProps {
     onContentMissing: (bookId: string) => void;
+}
+
+/**
+ * True when the book's file is not readable on this device: either a ghost
+ * (no local metadata at all) or an offloaded book.
+ */
+function isContentMissing(bookId: string): boolean {
+    const { staticMetadata, offloadedBookIds } = useLibraryStore.getState();
+    return !staticMetadata[bookId] || offloadedBookIds.has(bookId);
 }
 
 export const GlobalNotesView: React.FC<GlobalNotesViewProps> = ({ onContentMissing }) => {
@@ -24,13 +32,7 @@ export const GlobalNotesView: React.FC<GlobalNotesViewProps> = ({ onContentMissi
     const pendingBookmarks = useAnnotationStore(useShallow(selectPendingAudioBookmarks));
 
     const handleNavigate = useCallback((bookId: string, cfiRange: string) => {
-        const staticMetadata = useLibraryStore.getState().staticMetadata;
-        const offloadedBookIds = useLibraryStore.getState().offloadedBookIds;
-
-        const isGhost = !staticMetadata[bookId] && !offloadedBookIds.has(bookId);
-        const isOffloaded = offloadedBookIds.has(bookId);
-
-        if (isGhost || isOffloaded) {
+        if (isContentMissing(bookId)) {
             onContentMissing(bookId);
             return;
         }
@@ -38,13 +40,7 @@ export const GlobalNotesView: React.FC<GlobalNotesViewProps> = ({ onContentMissi
     }, [navigate, onContentMissing]);
 
     const handleOpenBook = useCallback((bookId: string) => {
-        const staticMetadata = useLibraryStore.getState().staticMetadata;
-        const offloadedBookIds = useLibraryStore.getState().offloadedBookIds;
-
-        const isGhost = !staticMetadata[bookId] && !offloadedBookIds.has(bookId);
-        const isOffloaded = offloadedBookIds.has(bookId);
-
-        if (isGhost || isOffloaded) {
+        if (isContentMissing(bookId)) {
             onContentMissing(bookId);
             return;
         }

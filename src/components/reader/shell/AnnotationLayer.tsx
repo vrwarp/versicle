@@ -19,7 +19,10 @@ import {
 import { useAnnotationStore } from '@store/useAnnotationStore';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { useCfiCoordinates } from '@hooks/useCfiCoordinates';
+import { createLogger } from '@lib/logger';
 import { AnnotationMarkerOverlay } from '../AnnotationMarkerOverlay';
+
+const logger = createLogger('AnnotationLayer');
 
 export interface AnnotationLayerProps {
   bookId: string | undefined;
@@ -116,7 +119,9 @@ export const AnnotationLayer: React.FC<AnnotationLayerProps> = ({
                 e.preventDefault();
                 e.stopPropagation();
                 // 1. Programmatically select the block (engine selection utility)
-                engine.display(annotation.cfiRange);
+                engine.display(annotation.cfiRange).catch((err: unknown) => {
+                  logger.warn('Audio-bookmark display failed', err);
+                });
 
                 setTimeout(() => {
                   engine.selectRange(annotation.cfiRange);

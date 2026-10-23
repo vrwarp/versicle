@@ -333,6 +333,25 @@ describe('QuotaGovernor', () => {
       expect(double.saved.at(-1)).toMatchObject({ day: '2026-06-13', rpd: 1 });
     });
 
+    describe('regression: concurrent first acquires share one daily counter', () => {
+      it('counts every request when two acquires race the initial store load', async () => {
+        const saved: DailyUsage[] = [];
+        setQuotaStore({
+          // Yield a macrotask so both acquires are suspended in the load.
+          loadDailyUsage: () => new Promise((resolve) => setTimeout(() => resolve(null), 0)),
+          saveDailyUsage: (_ratePool, u) => {
+            saved.push(u);
+          },
+        });
+        const g = newGovernor();
+
+        await Promise.all([g.acquire('fg', 1), g.acquire('fg', 1)]);
+
+        expect(g.snapshot().fg.rpd).toBe(2);
+        expect(saved.at(-1)).toMatchObject({ day: '2026-06-13', rpd: 2 });
+      });
+    });
+
     it('rolls the in-memory counter over when the clock crosses midnight PT', async () => {
       limits = { ...LOOSE, rpd: 5 };
       const double = makeStoreDouble();

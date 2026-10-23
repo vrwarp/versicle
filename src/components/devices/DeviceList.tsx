@@ -84,7 +84,7 @@ const DeviceItem = ({ device, isCurrent, onRename, onDelete, onClone }: DeviceIt
 
     return (
         <div className={cn(
-            "flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg border bg-card text-card-foreground shadow-sm gap-3",
+            "group flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg border bg-card text-card-foreground shadow-sm gap-3",
             isCurrent && "border-primary/50 bg-primary/5 ring-1 ring-primary/20"
         )}>
             <div className="flex items-center gap-3 overflow-hidden">

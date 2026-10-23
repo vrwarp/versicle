@@ -103,7 +103,9 @@ export function findHanTextNodes(doc: Document): Text[] {
   while ((node = walker.nextNode() as Text)) {
     if (!node.textContent || !HAN_RE.test(node.textContent)) continue;
     const parent = node.parentElement;
-    if (!parent || parent.tagName === 'RT' || parent.tagName === 'RUBY') continue;
+    // localName, not tagName: XHTML (XML-parsed) section documents report
+    // tagName in source case ('rt'), HTML-parsed ones upper-case it.
+    if (!parent || parent.localName === 'rt' || parent.localName === 'ruby') continue;
     textNodes.push(node);
   }
   return textNodes;

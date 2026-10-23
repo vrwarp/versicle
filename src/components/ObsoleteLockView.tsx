@@ -12,11 +12,17 @@ import { Button } from './ui/Button';
  */
 export const ObsoleteLockView: React.FC = () => {
     const obsoleteLock = useUIStore(state => state.obsoleteLock);
+    const titleId = React.useId();
+    const descriptionId = React.useId();
 
     if (!obsoleteLock) return null;
 
     return (
         <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={descriptionId}
             style={{
                 position: 'fixed',
                 inset: 0,
@@ -30,11 +36,11 @@ export const ObsoleteLockView: React.FC = () => {
             }}
         >
             <div style={{ maxWidth: '28rem', textAlign: 'center' }}>
-                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</div>
-                <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.75rem' }}>
+                <div aria-hidden="true" style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</div>
+                <h1 id={titleId} style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.75rem' }}>
                     Update Required
                 </h1>
-                <p style={{ fontSize: '1rem', opacity: 0.8, marginBottom: '1.5rem', lineHeight: 1.5 }}>
+                <p id={descriptionId} style={{ fontSize: '1rem', opacity: 0.8, marginBottom: '1.5rem', lineHeight: 1.5 }}>
                     Your data has been upgraded to a newer format by another device.
                     This version of Versicle (schema v{CURRENT_SCHEMA_VERSION}) cannot safely
                     read or write the new format.

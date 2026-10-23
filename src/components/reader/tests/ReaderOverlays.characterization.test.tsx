@@ -327,6 +327,35 @@ describe('characterization: reader overlay systems (P6 entry gate)', () => {
       );
     });
 
+    describe('regression: no current section (currentSectionId is null, not undefined)', () => {
+      it('adds no debug highlight while the section is unresolved', async () => {
+        useContentAnalysisStore
+          .getState()
+          .saveReferenceStartCfi(BOOK_ID, 'chap1.html', 'epubcfi(/6/4!/4/10)');
+
+        renderReader();
+        await waitForReady();
+
+        act(() => {
+          useReaderUIStore.setState({ currentSectionId: null });
+          useGenAIStore.getState().setDebugModeEnabled(true);
+        });
+        // Let the effect's async apply settle.
+        await act(async () => {
+          await Promise.resolve();
+        });
+
+        expect(mockAnnotations.add).not.toHaveBeenCalledWith(
+          'highlight',
+          expect.anything(),
+          expect.anything(),
+          null,
+          'debug-analysis-highlight',
+          expect.anything(),
+        );
+      });
+    });
+
     it('removes the debug highlight when debug mode is disabled', async () => {
       useContentAnalysisStore
         .getState()

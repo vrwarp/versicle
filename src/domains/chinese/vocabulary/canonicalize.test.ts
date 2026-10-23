@@ -22,6 +22,15 @@ describe('canonicalizeChar', () => {
     expect(canonicalizeChar('\u{20000}')).toBe('\u{20000}'); // astral, no mapping
   });
 
+  describe('regression: inherited Object.prototype keys', () => {
+    it.each(['constructor', 'toString', 'hasOwnProperty', '__proto__'])(
+      'returns %s unchanged instead of an Object.prototype member',
+      (key) => {
+        expect(canonicalizeChar(key)).toBe(key);
+      },
+    );
+  });
+
   it('is idempotent over the whole table (canonical forms map to themselves)', () => {
     for (const simplified of Object.values(getTrad2SimpTable())) {
       expect(canonicalizeChar(simplified)).toBe(simplified);

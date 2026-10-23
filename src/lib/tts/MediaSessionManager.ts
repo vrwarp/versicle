@@ -76,7 +76,8 @@ export class MediaSessionManager {
    * @param callbacks - The set of action handlers for media events.
    */
   constructor(private callbacks: MediaSessionCallbacks) {
-    this.setupActionHandlers();
+    // Fire-and-forget: a rejected native registration must not surface as an unhandled rejection.
+    this.setupActionHandlers().catch((e) => logger.warn('action handler setup failed', e));
   }
 
   /**
@@ -105,15 +106,20 @@ export class MediaSessionManager {
       const registered: string[] = [];
       for (const [action, handler] of actionHandlers) {
         if (handler) {
-          await MediaSession.setActionHandler({ action }, (details) => {
-            // warn (not info) so this always-on breadcrumb survives a production WebView build: it
-            // proves the OS transport event crossed native -> JS. Fires once per button press.
-            logger.warn('OS->JS onMediaAction', details.action, details.seekTime != null ? `seekTime=${details.seekTime}` : '');
-            // The plugin's ActionDetails ({ action, seekTime }) is structurally compatible with the
-            // web MediaSessionActionDetails for the seekTime field that the seek callbacks read.
-            handler(details as unknown as MediaSessionActionDetails);
-          });
-          registered.push(action);
+          try {
+            await MediaSession.setActionHandler({ action }, (details) => {
+              // warn (not info) so this always-on breadcrumb survives a production WebView build: it
+              // proves the OS transport event crossed native -> JS. Fires once per button press.
+              logger.warn('OS->JS onMediaAction', details.action, details.seekTime != null ? `seekTime=${details.seekTime}` : '');
+              // The plugin's ActionDetails ({ action, seekTime }) is structurally compatible with the
+              // web MediaSessionActionDetails for the seekTime field that the seek callbacks read.
+              handler(details as unknown as MediaSessionActionDetails);
+            });
+            registered.push(action);
+          } catch (e) {
+            // One unsupported/failed action must not leave the remaining actions unregistered.
+            logger.warn(`native: failed to register action '${action}'`, e);
+          }
         }
       }
       logger.info('native: registered action handlers', registered);

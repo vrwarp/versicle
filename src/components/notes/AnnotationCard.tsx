@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { UserAnnotation } from '~types/user-data';
 import { StickyNote, PenLine, Trash2, Copy, Check } from 'lucide-react';
 import { useAnnotationStore } from '@store/useAnnotationStore';
@@ -26,6 +26,10 @@ export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNa
     const [isEditing, setIsEditing] = useState(false);
     const [editNoteText, setEditNoteText] = useState(annotation.note || '');
     const [isCopied, setIsCopied] = useState(false);
+    const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+    // Don't let the "Copied" reset fire after the card unmounts.
+    useEffect(() => () => clearTimeout(copiedTimerRef.current), []);
 
     const handleDelete = async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -39,7 +43,9 @@ export const AnnotationCard: React.FC<AnnotationCardProps> = ({ annotation, onNa
         try {
             await copyAnnotationAsMarkdown(annotation);
             setIsCopied(true);
-            setTimeout(() => setIsCopied(false), 2000);
+            // Restart the window so a second copy isn't cut short by the first timer.
+            clearTimeout(copiedTimerRef.current);
+            copiedTimerRef.current = setTimeout(() => setIsCopied(false), 2000);
             showToast('Copied to clipboard', 'success');
         } catch {
             showToast('Failed to copy', 'error');

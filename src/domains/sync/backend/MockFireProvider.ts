@@ -36,6 +36,9 @@ interface MockStorageData {
     snapshotBase64?: string;
     lastModified: number;
     path: string;
+    /** Tombstone fields written into the same entry by MockBackend. */
+    isDeleted?: boolean;
+    deletedAt?: number;
 }
 
 /**
@@ -188,7 +191,12 @@ export class MockFireProvider extends ObservableV2<MockFireProviderEvents> {
             }
 
             const at = Date.now();
+            // Spread the existing entry: MockBackend.tombstoneWorkspace stores
+            // its tombstone in the same per-path entry, and a save must not
+            // erase it (the real backend's tombstone lives on the root doc and
+            // survives provider writes the same way).
             allData[this.documentPath] = {
+                ...allData[this.documentPath],
                 snapshotBase64,
                 lastModified: at,
                 path: this.documentPath

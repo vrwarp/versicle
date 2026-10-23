@@ -365,3 +365,33 @@ describe('downloadWorkspaceState — teardown', () => {
     expect(errorLogs.some((a) => a.some((x) => String(x).includes('Error destroying')))).toBe(false);
   });
 });
+
+describe('regression: async destroy rejection on teardown', () => {
+  it('logs a rejected (async) destroy instead of leaking an unhandled rejection', async () => {
+    const backend = {
+      uid: 'unit',
+      connect: (doc: Y.Doc): SyncConnection => {
+        rec.tempDocs.push(doc);
+        let syncedCb: (() => void) | null = null;
+        setTimeout(() => syncedCb?.(), 0);
+        return {
+          on: (event, cb) => {
+            if (event === 'synced') syncedCb = cb as () => void;
+          },
+          off: () => undefined,
+          destroy: () => Promise.reject(new Error('final commit failed')),
+        };
+      },
+    } as unknown as SyncBackend;
+
+    await expect(
+      downloadWorkspaceState(backend, 'ws_1', { maxWaitTimeMs: 1, maxUpdatesThreshold: 1 })
+    ).resolves.toBeInstanceOf(Uint8Array);
+
+    await vi.waitFor(() =>
+      expect(
+        errorLogs.some((a) => a.some((x) => String(x).includes('Error destroying temp provider')))
+      ).toBe(true)
+    );
+  });
+});

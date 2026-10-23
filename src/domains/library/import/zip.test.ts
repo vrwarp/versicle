@@ -48,6 +48,15 @@ describe('extractEpubsFromZip', () => {
     expect(files.map((f) => f.name)).toEqual(['a.epub']);
   });
 
+  describe('regression: macOS resource-fork stubs', () => {
+    it('skips __MACOSX AppleDouble entries that carry the .epub suffix', async () => {
+      const zip = await makeZip({ 'a.epub': 'one', '__MACOSX/._a.epub': 'stub' });
+      const files = await extractEpubsFromZip(zip);
+
+      expect(files.map((f) => f.name)).toEqual(['a.epub']);
+    });
+  });
+
   it('matches the extension case-insensitively', async () => {
     const files = await extractEpubsFromZip(await makeZip({ 'A.EPUB': 'one', 'b.EpUb': 'two' }));
 

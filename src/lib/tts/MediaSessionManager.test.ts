@@ -315,6 +315,22 @@ describe('MediaSessionManager', () => {
       expect(onBookmark).toHaveBeenCalledTimes(1);
     });
 
+    describe('regression: a failed native action registration', () => {
+      it('does not stop the remaining actions or listeners from registering', async () => {
+        (MediaSession.setActionHandler as Mock).mockImplementation(async ({ action }: { action: string }) => {
+          if (action === 'play') throw new Error('unsupported');
+        });
+        (MediaSession.addListener as Mock).mockResolvedValue({ remove: vi.fn() });
+
+        new MediaSessionManager(callbacks);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'pause' }, expect.any(Function));
+        expect(MediaSession.setActionHandler).toHaveBeenCalledWith({ action: 'nexttrack' }, expect.any(Function));
+        expect(MediaSession.addListener).toHaveBeenCalledWith('artworkload', expect.any(Function));
+      });
+    });
+
     it('subscribes to the artworkload outcome event', async () => {
       new MediaSessionManager(callbacks);
       await new Promise(resolve => setTimeout(resolve, 0));

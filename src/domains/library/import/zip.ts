@@ -93,6 +93,10 @@ export async function listZipEpubEntries(
     zipContent.forEach((_, zipEntry) => {
       if (zipEntry.dir) return; // Skip directories
       if (!zipEntry.name.toLowerCase().endsWith('.epub')) return; // Skip non-epubs
+      // macOS Archive Utility adds AppleDouble resource-fork stubs
+      // (`__MACOSX/._book.epub`) that carry the .epub suffix but are not
+      // EPUBs; importing them would report a spurious failure per book.
+      if (zipEntry.name.startsWith('__MACOSX/')) return;
 
       // The full relative path is flattened to the basename (collisions
       // surface as duplicates downstream).

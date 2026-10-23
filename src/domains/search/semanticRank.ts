@@ -47,6 +47,16 @@ import {
 /** The query profile — MUST match the indexer's 'document' profile asymmetry. */
 const QUERY_PROFILE = 'query' as const;
 
+/**
+ * Where the match starts inside `getExcerpt`'s output: the excerpt window opens
+ * up to 40 chars before the match and carries a 3-char leading ellipsis when it
+ * was clipped from the left.
+ */
+function matchStartInExcerpt(charOffset: number): number {
+  const start = Math.max(0, charOffset - 40);
+  return (start > 0 ? 3 : 0) + (charOffset - start);
+}
+
 export interface SemanticRankArgs {
   engine: SearchEngineProtocol;
   embeddingClient: EmbeddingClientPort;
@@ -200,15 +210,13 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
       if (!offsets) continue;
       const charOffset = offsets.charStart;
       const matchLength = offsets.charEnd - offsets.charStart;
-      const start = Math.max(0, charOffset - 40);
-      const matchStartInExcerpt = (start > 0 ? 3 : 0) + (charOffset - start);
       const result: DetailedSearchResult = {
         href: section.href,
         sectionTitle: source.title,
         excerpt: getExcerpt(source.text, charOffset, matchLength),
         charOffset,
         matchLength,
-        matchStartInExcerpt,
+        matchStartInExcerpt: matchStartInExcerpt(charOffset),
         matchLengthInExcerpt: matchLength,
         // 1-based ordinal within the section (chunk row + 1); CFI stays unset.
         occurrence: row + 1,
@@ -249,8 +257,7 @@ export async function semanticRank(args: SemanticRankArgs): Promise<DetailedSear
             c.result.charOffset = sentenceCharOffset;
             c.result.matchLength = sentenceMatchLength;
             c.result.excerpt = getExcerpt(c.sectionText, sentenceCharOffset, sentenceMatchLength);
-            const sentenceStart = Math.max(0, sentenceCharOffset - 40);
-            c.result.matchStartInExcerpt = (sentenceStart > 0 ? 3 : 0) + (sentenceCharOffset - sentenceStart);
+            c.result.matchStartInExcerpt = matchStartInExcerpt(sentenceCharOffset);
             c.result.matchLengthInExcerpt = sentenceMatchLength;
           }
         }

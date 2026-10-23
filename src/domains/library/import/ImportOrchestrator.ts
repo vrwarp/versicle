@@ -317,9 +317,12 @@ export class ImportOrchestrator {
             verifyDerived: opts.verifyDerived,
           });
           if (result.coverPalette || result.perceptualPalette) {
+            // Only the re-derived half is written: an explicit `undefined`
+            // for the other would wipe its stored value (the manifest keeps
+            // the old one in this case — see reprocessBookContent).
             this.deps.inventory.update(bookId, {
-              coverPalette: result.coverPalette,
-              perceptualPalette: result.perceptualPalette,
+              ...(result.coverPalette && { coverPalette: result.coverPalette }),
+              ...(result.perceptualPalette && { perceptualPalette: result.perceptualPalette }),
             });
           }
           const fresh = await this.deps.persistence.getBookMetadata(bookId);

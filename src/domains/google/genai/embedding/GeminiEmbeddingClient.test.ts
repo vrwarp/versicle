@@ -203,6 +203,13 @@ describe('GeminiEmbeddingClient', () => {
       expect(calls[0].url).toContain('/models/gemini-embedding-001:batchEmbedContents');
     });
 
+    it('regression: a batch reply whose vector count differs from the request throws', async () => {
+      const { client } = makeClient([batchResponse(2)], { useBatchEmbedding: true });
+      await expect(
+        client.embed(['a', 'b', 'c'], { profile: 'document' }),
+      ).rejects.toMatchObject({ code: 'GENAI_INVALID_RESPONSE' });
+    });
+
     it('true: >100 texts → ceil(n/100) egress calls (one per <=100 window)', async () => {
       const texts = Array.from({ length: 250 }, (_, i) => `t${i}`);
       const { client, calls } = makeClient(

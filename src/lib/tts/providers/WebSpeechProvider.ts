@@ -183,9 +183,8 @@ export class WebSpeechProvider implements ITTSProvider {
           this.audioContext = new AudioContextClass();
       }
       const ctx = this.audioContext;
-      if (ctx.state === 'suspended') {
-          ctx.resume();
-      }
+      // playEarconOscillators resumes a suspended context itself (best-effort, with
+      // the rejection swallowed), so no separate resume() here.
       playEarconOscillators(ctx, type);
   }
 

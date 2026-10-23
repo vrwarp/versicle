@@ -31,7 +31,11 @@ export function loadBibleLexicon(): Promise<BibleLexiconData> {
     if (!dataPromise) {
         dataPromise = import('./bible-lexicon.json').then(
             (m) => (m as { default: BibleLexiconData }).default ?? (m as unknown as BibleLexiconData),
-        );
+        ).catch((e) => {
+            // Don't cache a failed chunk load (flaky network / stale deploy): let the next call retry.
+            dataPromise = null;
+            throw e;
+        });
     }
     return dataPromise;
 }

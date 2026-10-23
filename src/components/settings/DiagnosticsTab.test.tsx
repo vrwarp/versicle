@@ -89,4 +89,33 @@ describe('DiagnosticsTab (worker data via the engine handle)', () => {
         fireEvent.click(screen.getByRole('button', { name: /Delete Snapshot/i }));
         await waitFor(() => expect(commands.deleteDiagnosticSnapshot).toHaveBeenCalledWith('snap-1'));
     });
+
+    describe('regression: engine failures do not wedge the controls', () => {
+        it('re-enables Refresh after a failed load', async () => {
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+            commands.exportDiagnostics.mockRejectedValue(new Error('engine gone'));
+            render(<DiagnosticsTab />);
+
+            await waitFor(() => expect(errorSpy).toHaveBeenCalled());
+            await waitFor(() => {
+                expect(screen.getByRole('button', { name: /Refresh/i })).not.toBeDisabled();
+            });
+            errorSpy.mockRestore();
+        });
+
+        it('re-enables Capture Snapshot after a failed capture', async () => {
+            const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+            render(<DiagnosticsTab />);
+            await waitFor(() => expect(screen.getByText('ANOMALY')).toBeTruthy());
+
+            commands.triggerDiagnosticsSnapshot.mockRejectedValue(new Error('engine gone'));
+            fireEvent.click(screen.getByRole('button', { name: /Capture Snapshot/i }));
+
+            await waitFor(() => expect(errorSpy).toHaveBeenCalled());
+            await waitFor(() => {
+                expect(screen.getByRole('button', { name: /Capture Snapshot/i })).not.toBeDisabled();
+            });
+            errorSpy.mockRestore();
+        });
+    });
 });

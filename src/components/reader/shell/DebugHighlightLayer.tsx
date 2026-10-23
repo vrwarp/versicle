@@ -47,15 +47,14 @@ export const DebugHighlightLayer: React.FC<DebugHighlightLayerProps> = ({
 
     const applyHighlights = async () => {
       try {
-        if (currentSectionId === undefined) return;
+        if (!currentSectionId || !bookId) return;
 
         // Resolve the current section's index to fetch specific analysis data.
         // This avoids loading analysis for the entire book.
-        // currentSectionId is checked above, but TS might not infer it for the argument
-        const section = engine.resolveSection(currentSectionId!);
+        const section = engine.resolveSection(currentSectionId);
         if (!section) return;
 
-        const analysis = contentAnalysisRepository.getContentAnalysis(bookId!, section.href);
+        const analysis = contentAnalysisRepository.getContentAnalysis(bookId, section.href);
         if (!analysis) return;
 
         if (analysis.referenceStartCfi) {

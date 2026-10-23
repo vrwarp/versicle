@@ -177,6 +177,33 @@ describe('DriveClient', () => {
     expect(await blob.text()).toBe('epub-bytes');
   });
 
+  describe('regression: ids are percent-encoded into the URL path', () => {
+    const hostile = 'a/b?x=1#frag';
+    const encoded = encodeURIComponent(hostile);
+
+    it('downloadFile', async () => {
+      const { client, egress } = makeClient([new Response('x')]);
+      await client.downloadFile(hostile);
+      expect(egress.mock.calls[0][1]).toBe(
+        `https://www.googleapis.com/drive/v3/files/${encoded}?alt=media`,
+      );
+    });
+
+    it('downloadFileRange', async () => {
+      const { client, egress } = makeClient([new Response('x', { status: 206 })]);
+      await client.downloadFileRange(hostile, 0, 0);
+      expect(egress.mock.calls[0][1]).toBe(
+        `https://www.googleapis.com/drive/v3/files/${encoded}?alt=media`,
+      );
+    });
+
+    it('getFolderMetadata', async () => {
+      const { client, egress } = makeClient([jsonResponse({ id: 'x' })]);
+      await client.getFolderMetadata(hostile);
+      expect(String(egress.mock.calls[0][1])).toContain(`/files/${encoded}?fields=`);
+    });
+  });
+
   describe('rate-limit backoff (429 / 403 rate-limit)', () => {
     it('backs off and retries a 429, then returns the eventual success', async () => {
       const { client, egress, sleep } = makeClient([

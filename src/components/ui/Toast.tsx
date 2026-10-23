@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { cn } from '@lib/utils';
 import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
 import { Button } from './Button';
@@ -38,12 +38,20 @@ export const Toast: React.FC<ToastProps> = ({
 }) => {
   const [isPaused, setIsPaused] = useState(false);
 
+  // Hosts pass a fresh inline `onClose` on every render; keep the latest in a
+  // ref so a re-render (e.g. another toast arriving) does not restart this
+  // toast's dismiss timer.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     if (duration > 0 && Number.isFinite(duration) && !isPaused) {
-      const timer = setTimeout(onClose, duration);
+      const timer = setTimeout(() => onCloseRef.current(), duration);
       return () => clearTimeout(timer);
     }
-  }, [duration, onClose, isPaused]);
+  }, [duration, isPaused]);
 
   const getStyles = () => {
     switch (type) {

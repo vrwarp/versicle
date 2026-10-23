@@ -12,7 +12,7 @@ if [[ "$1" == "--help" ]]; then
   echo "  and avoids the need for a local Android-configured environment."
   echo ""
   echo "Usage:"
-  echo "  ./run_android_test.sh [arguments]"
+  echo "  ./run_android_tests.sh [arguments]"
   echo ""
   echo "How it works:"
   echo "  1. Builds a Docker image ('versicle-android-test') using 'Dockerfile.android'."
@@ -25,16 +25,16 @@ if [[ "$1" == "--help" ]]; then
   echo ""
   echo "Examples:"
   echo "  - Run all Android unit tests (default):"
-  echo "      ./run_android_test.sh"
+  echo "      ./run_android_tests.sh"
   echo ""
   echo "  - Run a specific test class:"
-  echo "      ./run_android_test.sh ./gradlew test --tests 'com.example.MyTest'"
+  echo "      ./run_android_tests.sh ./gradlew test --tests 'com.example.MyTest'"
   echo ""
   echo "  - Run with stacktrace:"
-  echo "      ./run_android_test.sh ./gradlew test --stacktrace"
+  echo "      ./run_android_tests.sh ./gradlew test --stacktrace"
   echo ""
   echo "  - List tasks:"
-  echo "      ./run_android_test.sh ./gradlew tasks"
+  echo "      ./run_android_tests.sh ./gradlew tasks"
   echo ""
   echo "Artifacts:"
   echo "  - Test reports are saved to 'android/app/build/reports'."
@@ -50,15 +50,14 @@ docker build --platform linux/amd64 -t versicle-android-test -f Dockerfile.andro
 # Create reports directory if it doesn't exist
 mkdir -p android/app/build/reports
 
-# Run the verification container and capture exit code
+# Run the verification container and capture exit code. `set -e` would exit on a
+# failing `docker run` before the status was recorded, so capture it explicitly.
 echo "🏃 Running Android tests..."
 # We mount the reports directory to persist artifacts
+EXIT_CODE=0
 docker run --platform linux/amd64 --rm \
   -v "$(pwd)/android/app/build/reports:/app/android/app/build/reports" \
-  versicle-android-test "$@"
-
-# Capture the exit code from docker run
-EXIT_CODE=$?
+  versicle-android-test "$@" || EXIT_CODE=$?
 
 # Echo it for visibility
 echo "🏁 Android tests completed with exit code: $EXIT_CODE"

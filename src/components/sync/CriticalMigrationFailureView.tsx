@@ -42,7 +42,7 @@ export const CriticalMigrationFailureView: React.FC<CriticalMigrationFailureView
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-background text-foreground text-center">
             <div className="max-w-md space-y-6">
-                <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg">
+                <div role="alert" className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg">
                     <h2 className="text-xl font-bold text-destructive mb-2">
                         Workspace Switch Failed
                     </h2>

@@ -210,7 +210,7 @@ export class TtsController {
             // Warn user if no voices for this language
             import('@store/useToastStore').then(({ useToastStore }) => {
                 useToastStore.getState().showToast(`No voices found for ${lang}. Audio playback may not work.`, 'error');
-            });
+            }).catch((e) => logger.warn('Could not show the no-voices toast', e));
         }
 
         useTTSPlaybackStore.setState({ voice: selected });

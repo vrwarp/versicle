@@ -24,6 +24,6 @@ export function getAudioPlayer(): TtsEngine {
     if (!instance) {
         instance = new WorkerEngineHandle();
     }
-    return instance!;
+    return instance;
 }
 

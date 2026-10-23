@@ -93,4 +93,22 @@ describe('DeviceId Service', () => {
         expect(secondId).toBe(firstId);
         expect(localStorage.getItem('versicle-device-id')).toBe(firstId);
     });
+
+    it('regression: still returns a stable session ID when localStorage throws', async () => {
+        const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+            throw new Error('SecurityError');
+        });
+        const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+            throw new Error('QuotaExceededError');
+        });
+        try {
+            const { getDeviceId } = await import('./device-id');
+            const first = getDeviceId();
+            expect(first).toMatch(/^device-[a-z0-9]{8}$/);
+            expect(getDeviceId()).toBe(first);
+        } finally {
+            getItem.mockRestore();
+            setItem.mockRestore();
+        }
+    });
 });
