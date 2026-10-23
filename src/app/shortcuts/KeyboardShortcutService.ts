@@ -159,8 +159,8 @@ export class KeyboardShortcutService {
     // 'overlay' may see it (the overlay closes itself — Radix owns that).
     if (event.key === 'Escape' && typeof document !== 'undefined') {
       if (document.querySelector(OPEN_OVERLAY_SELECTOR)) {
-        const overlayHandled = this.dispatchIn('overlay', event);
-        void overlayHandled; // overlay-scope registrations are optional
+        // overlay-scope registrations are optional, so the result is unused.
+        this.dispatchIn('overlay', event);
         return;
       }
     }
