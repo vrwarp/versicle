@@ -28,11 +28,11 @@
 *   **Storage**: IndexedDB (via `idb`) with Web Locks API (`navigator.locks`) for safe cross-context execution and deadlock prevention
 *   **Parsing**: epub.js + PapaParse (CSV) + `opencc-js` + `pinyin-pro`
 *   **Audio**: Piper (WASM) / Web Speech API / LemonFox.ai
-*   **AI**: Google Gemini 2.5 (Flash Lite / Flash) via `@google/generative-ai`
+*   **AI**: Google Gemini (rotating Flash / Flash Lite models) via the Gemini REST API (`src/domains/google/genai/GeminiClient.ts`, routed through the egress gateway)
 *   **Mobile**: Capacitor 7.1.1 (Android) + `@capacitor/filesystem` + `@capawesome-team/capacitor-android-battery-optimization` + `@jofr/capacitor-media-session` + `@capgo/capacitor-social-login` + `@capacitor-community/text-to-speech`
 *   **Workers**: Comlink + Web Workers
 *   **Styling**: Tailwind CSS v4.1.18 + Radix UI
-*   **Tools**: `browser-image-compression`, `JSZip`, `lucide-react`, `react-lazy-load-image-component`, `react-window`, `dompurify`, `@google/generative-ai`, `y-cinder`, `y-idb`, `uuid`
+*   **Tools**: `browser-image-compression`, `JSZip`, `lucide-react`, `react-lazy-load-image-component`, `dompurify`, `y-cinder`, `y-idb`, `uuid`
 *   **Dev Tools**: `vite-plugin-mkcert` (Local HTTPS)
 
 ## Features
