@@ -620,5 +620,9 @@ export const useCurrentDevicePercentage = (bookId: string | null): number => {
     });
 };
 
-// @ts-expect-error Exposing store for debugging
-window.useReadingStateStore = useReadingStateStore;
+// Debug handle. Guarded so importing this module from a non-DOM context
+// (worker, SSR/node tooling) does not throw a ReferenceError at load time.
+if (typeof window !== 'undefined') {
+    // @ts-expect-error Exposing store for debugging
+    window.useReadingStateStore = useReadingStateStore;
+}
