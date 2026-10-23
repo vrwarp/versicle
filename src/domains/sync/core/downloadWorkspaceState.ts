@@ -112,7 +112,12 @@ export async function downloadWorkspaceState(
   } finally {
     if (connection) {
       try {
-        (connection as SyncConnection).destroy();
+        // destroy() may be async; log a rejection instead of leaking it as
+        // an unhandled rejection (the read-only temp provider has nothing
+        // left to flush, so the result need not be awaited).
+        Promise.resolve((connection as SyncConnection).destroy()).catch((e) => {
+          logger.error('Error destroying temp provider', e);
+        });
       } catch (e) {
         logger.error('Error destroying temp provider', e);
       }
