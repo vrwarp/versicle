@@ -230,7 +230,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
 
     const response = await this.egress(
       'gemini',
-      `${GEMINI_API_BASE}/models/${config.model}:batchEmbedContents`,
+      `${GEMINI_API_BASE}/models/${encodeURIComponent(config.model)}:batchEmbedContents`,
       {
         method: 'POST',
         headers: {
@@ -276,7 +276,7 @@ export class GeminiEmbeddingClient implements EmbeddingClient {
 
     const response = await this.egress(
       'gemini',
-      `${GEMINI_API_BASE}/models/${config.model}:embedContent`,
+      `${GEMINI_API_BASE}/models/${encodeURIComponent(config.model)}:embedContent`,
       {
         method: 'POST',
         headers: {

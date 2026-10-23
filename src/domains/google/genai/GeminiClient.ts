@@ -401,7 +401,7 @@ export class GeminiClient implements GenAIClient {
 
     const response = await this.egress(
       'gemini',
-      `${GEMINI_API_BASE}/models/${modelId}:generateContent`,
+      `${GEMINI_API_BASE}/models/${encodeURIComponent(modelId)}:generateContent`,
       {
         method: 'POST',
         headers: {

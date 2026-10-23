@@ -233,7 +233,7 @@ export class DriveClient {
         fields: 'id, name, mimeType, parents, viewedByMeTime',
       });
       const response = await this.fetchWithAuth(
-        `${DRIVE_API_BASE}/files/${folderId}?${params.toString()}`,
+        `${DRIVE_API_BASE}/files/${encodeURIComponent(folderId)}?${params.toString()}`,
         {},
         opts,
       );
@@ -320,7 +320,7 @@ export class DriveClient {
   async downloadFile(fileId: string, opts: DriveRequestOptions = {}): Promise<Blob> {
     try {
       const response = await this.fetchWithAuth(
-        `${DRIVE_API_BASE}/files/${fileId}?alt=media`,
+        `${DRIVE_API_BASE}/files/${encodeURIComponent(fileId)}?alt=media`,
         {},
         opts,
       );
@@ -348,7 +348,7 @@ export class DriveClient {
   ): Promise<ArrayBuffer> {
     try {
       const response = await this.fetchWithAuth(
-        `${DRIVE_API_BASE}/files/${fileId}?alt=media`,
+        `${DRIVE_API_BASE}/files/${encodeURIComponent(fileId)}?alt=media`,
         { headers: { Range: `bytes=${start}-${end}` } },
         opts,
       );
