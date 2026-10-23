@@ -226,7 +226,8 @@ export class AudioElementPlayer implements AudioSink {
       }
     }
     if (this.audioContext && this.audioContext.state === 'suspended') {
-      this.audioContext.resume();
+      // resume() rejects on a closed context; ducking is best-effort.
+      void Promise.resolve(this.audioContext.resume()).catch(() => { /* best-effort */ });
     }
   }
 
@@ -264,7 +265,8 @@ export class AudioElementPlayer implements AudioSink {
           this.gainNode.disconnect();
       }
       if (this.audioContext) {
-          this.audioContext.close();
+          // close() rejects if the context is already closed (e.g. a second destroy()).
+          void Promise.resolve(this.audioContext.close()).catch(() => { /* already closed */ });
       }
   }
 }

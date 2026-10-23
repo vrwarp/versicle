@@ -8,7 +8,9 @@ export function playEarconOscillators(
     destinationNode?: AudioNode
 ) {
     if (audioContext.state === 'suspended') {
-        audioContext.resume();
+        // resume() rejects on a closed context; the earcon is best-effort, so
+        // swallow it rather than raise an unhandled rejection.
+        void Promise.resolve(audioContext.resume()).catch(() => { /* best-effort */ });
     }
 
     const now = audioContext.currentTime;
