@@ -156,4 +156,18 @@ describe('PinyinGeometryEngine (characterization heritage: P6 entry gate)', () =
     expect(nodes).toHaveLength(1);
     expect(nodes[0].textContent).toBe('\u{20000}\u{20001}');
   });
+
+  describe('regression: ruby annotations in XHTML section documents', () => {
+    it('skips <rt>/<ruby> text when tagName is lower-case (XML-parsed document)', () => {
+      const doc = new DOMParser().parseFromString(
+        '<html xmlns="http://www.w3.org/1999/xhtml"><body><p>汉字</p>' +
+          '<ruby>汉<rt>hàn</rt></ruby></body></html>',
+        'application/xhtml+xml',
+      );
+      expect(doc.querySelector('rt')!.tagName).toBe('rt'); // the premise
+
+      const nodes = findHanTextNodes(doc);
+      expect(nodes.map((n) => n.textContent)).toEqual(['汉字']);
+    });
+  });
 });
