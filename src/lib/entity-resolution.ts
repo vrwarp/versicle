@@ -37,7 +37,7 @@ export function normalizeMetadata(text: string): string {
     normalized = normalized.replace(/[-_:,.]/g, " ");
 
     // 5. Remove possessives and quotes entirely
-    normalized = normalized.replace(/['"''""\u2018\u2019\u201C\u201D]/g, "");
+    normalized = normalized.replace(/['"\u2018\u2019\u201C\u201D]/g, "");
 
     // 6. Collapse and trim whitespace
     normalized = normalized.replace(/\s+/g, " ").trim();
