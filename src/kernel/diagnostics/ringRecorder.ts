@@ -57,7 +57,9 @@ export class RingRecorder<S extends string = string> {
     private full = false;
 
     constructor(options: RingRecorderOptions = {}) {
-        this.capacity = options.capacity ?? DEFAULT_CAPACITY;
+        // Floor at 1: a zero/negative capacity would make `head` NaN and the
+        // buffer grow without bound.
+        this.capacity = Math.max(1, Math.floor(options.capacity ?? DEFAULT_CAPACITY));
         this.maxStringLength = options.maxStringLength ?? DEFAULT_MAX_STRING_LEN;
     }
 
