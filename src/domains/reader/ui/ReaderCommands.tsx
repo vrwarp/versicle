@@ -26,7 +26,7 @@
  * routing (the keys are KeyboardShortcutService registrations —
  * src/app/shortcuts/ — where scope stacking decides ownership).
  */
-import React, { createContext, useContext, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useMemo } from 'react';
 import type { ReaderEngine } from '@domains/reader/engine/ReaderEngine';
 
 export interface ReaderCommands {
@@ -89,8 +89,13 @@ export const ReaderCommandsProvider: React.FC<{
 }> = ({ commands, engine, children }) => {
   useEffect(() => registerReaderCommands(commands), [commands]);
 
+  // Stable identity: a fresh object per render would re-render every context
+  // consumer each time the provider's parent re-renders, even when neither
+  // the commands nor the engine changed.
+  const value = useMemo(() => ({ commands, engine }), [commands, engine]);
+
   return (
-    <ReaderCommandsContext.Provider value={{ commands, engine }}>
+    <ReaderCommandsContext.Provider value={value}>
       {children}
     </ReaderCommandsContext.Provider>
   );

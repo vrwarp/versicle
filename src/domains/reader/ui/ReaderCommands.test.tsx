@@ -176,6 +176,39 @@ describe('ReaderCommandsProvider', () => {
     expect(readerCommandsRegistry.get()).toBe(commands);
     view.unmount();
   });
+
+  it('does NOT re-render memoized consumers when the provider re-renders with the same commands and engine', () => {
+    const commands = makeCommands();
+    const engine = { id: 'e' } as unknown as ReaderEngine;
+    let renders = 0;
+    const Counted = React.memo(function Counted() {
+      useReaderCommands();
+      renders += 1;
+      return null;
+    });
+
+    const view = render(
+      <ReaderCommandsProvider commands={commands} engine={engine}>
+        <Counted />
+      </ReaderCommandsProvider>
+    );
+    expect(renders).toBe(1);
+
+    view.rerender(
+      <ReaderCommandsProvider commands={commands} engine={engine}>
+        <Counted />
+      </ReaderCommandsProvider>
+    );
+    expect(renders).toBe(1);
+
+    view.rerender(
+      <ReaderCommandsProvider commands={makeCommands('next')} engine={engine}>
+        <Counted />
+      </ReaderCommandsProvider>
+    );
+    expect(renders).toBe(2);
+    view.unmount();
+  });
 });
 
 describe('useReaderCommands / useReaderEngine outside the provider', () => {
