@@ -12,7 +12,7 @@ const logger = createLogger('TTS-Utils');
 
 // Consumption types live in the types layer (so the TTS engine never imports
 // the extractor); re-exported for ingestion-side callers.
-export type { SentenceNode, ExtractionResult,  };
+export type { SentenceNode, ExtractionResult };
 
 /**
  * Version of the sentence-extraction algorithm, stamped onto newly written
