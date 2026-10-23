@@ -78,7 +78,7 @@ state for exactly that).
    machinery — `downloadWorkspaceState` (temp doc + temp provider on the
    new epoch) → `applySnapshot` into `versicle-yjs-staging` → reload —
    instead of the toast-only reaction. All pieces exist
-   (`src/domains/sync/core/stagedSwap.ts`,
+   (`src/domains/sync/workspaces/stagedSwap.ts`,
    `src/data/snapshot/YjsSnapshotService.ts`).
 2. **Squash scheduling**: call `syncService`-level squash on an explicit
    maintenance action first (Settings → Data Management), then consider

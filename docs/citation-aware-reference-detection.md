@@ -3,6 +3,16 @@
 **Status:** Final draft for review
 **Date:** 2026-06-06
 
+> **Code-reference note:** this design was written against the pre-overhaul tree.
+> File links below have been retargeted to the closest current module
+> (`tts.ts` extraction now lives in `src/lib/ingestion/sentence-extraction.ts`,
+> `db.ts` is `src/data/schema.ts`, `GenAIService` is
+> `src/domains/google/genai/`, `DBService` persistence is `src/data/rows/`),
+> but the quoted line numbers and the `v24` schema / `CURRENT_BOOK_VERSION`
+> `9 → 10` figures are historical: the book pipeline version is already 11
+> (`src/lib/constants.ts`) and the IndexedDB schema is at the version in
+> `src/data/schema.ts`. Re-verify against the code before implementing.
+
 ---
 
 ## 1. Background & Problem
@@ -31,7 +41,7 @@ The first is a clue to the second. Pruning kills the clue before detection runs.
 
 A natural idea is to move pruning later (to chapter-load time) so the markers survive. This does **not** work for DOM-level pruning. The DOM exists in only two places:
 
-1. **Ingestion** — the offscreen renderer ([offscreen-renderer.ts:163](../src/lib/offscreen-renderer.ts)) actually *renders* each chapter in a hidden iframe, so `getComputedStyle` is available.
+1. **Ingestion** — the offscreen renderer ([offscreen-renderer.ts:163](../src/domains/reader/engine/offscreen/offscreen-renderer.ts)) actually *renders* each chapter in a hidden iframe, so `getComputedStyle` is available.
 2. **Live reading** — epub.js renders into the reader iframe.
 
 Stored TTS content has no DOM, and detection runs *ahead* of render (it pre-warms the next chapter), so there is no live DOM to fall back on. A DOMParser-only re-parse at load time has **no layout**, so computed style — the thing we need to recognize format-only citations (§4.1) — is unavailable.
@@ -47,7 +57,7 @@ Real-world EPUBs are inconsistent. Citations are frequently done with **no seman
 - `<a href="#x">1</a>` — plain anchor, no `epub:type`
 - plain text `[1]`, `(1)`, `*`, `†` — zero markup
 
-The current DOM heuristic ([tts.ts:170-179](../src/lib/tts.ts)) keys on `epub:type=noteref`, `role=doc-noteref`, and href patterns. These are unreliable. **This design treats semantic markup as an optional confidence booster, never a requirement.** The primary detector is format-derived.
+The current DOM heuristic ([tts.ts:170-179](../src/lib/ingestion/sentence-extraction.ts)) keys on `epub:type=noteref`, `role=doc-noteref`, and href patterns. These are unreliable. **This design treats semantic markup as an optional confidence booster, never a requirement.** The primary detector is format-derived.
 
 ---
 
@@ -55,7 +65,7 @@ The current DOM heuristic ([tts.ts:170-179](../src/lib/tts.ts)) keys on `epub:ty
 
 ### 2.1 Pruning (two layers, both at ingestion)
 
-**DOM-level** — [tts.ts:156-186](../src/lib/tts.ts), inside `extractSentencesFromNode`:
+**DOM-level** — [tts.ts:156-186](../src/lib/ingestion/sentence-extraction.ts), inside `extractSentencesFromNode`:
 
 ```ts
 if (tagName === 'SUP' || tagName === 'A') {
@@ -72,7 +82,7 @@ if (tagName === 'SUP' || tagName === 'A') {
 
 The element is dropped during traversal — its text never reaches a sentence, so the text-level sanitizer never sees it.
 
-**Text-level** — `Sanitizer.sanitize` ([Sanitizer.ts:55-65](../src/lib/tts/processors/Sanitizer.ts)), using `RegexPatterns.CITATION_NUMERIC` (`/\[\s*\d+(?:\s*,\s*\d+)*\s*\]/`) and `CITATION_AUTHOR_YEAR`. Called per-segment at [tts.ts:96-98](../src/lib/tts.ts), gated by `sanitizationEnabled` (defaults `true`).
+**Text-level** — `Sanitizer.sanitize` ([Sanitizer.ts:55-65](../src/lib/tts/processors/Sanitizer.ts)), using `RegexPatterns.CITATION_NUMERIC` (`/\[\s*\d+(?:\s*,\s*\d+)*\s*\]/`) and `CITATION_AUTHOR_YEAR`. Called per-segment at [tts.ts:96-98](../src/lib/ingestion/sentence-extraction.ts), gated by `sanitizationEnabled` (defaults `true`).
 
 ### 2.2 Ingestion flow
 
@@ -86,12 +96,12 @@ extractContentOffscreen (offscreen-renderer.ts:163)
 
 ### 2.3 Reference-section detection (post-ingestion)
 
-[AudioContentPipeline.getOrDetectContentTypes](../src/lib/tts/AudioContentPipeline.ts) (line 406) and `detectContentSkipMask` (line 354):
+[AudioContentPipeline.getOrDetectContentTypes](../src/lib/tts/SectionAnalysisDriver.ts) (line 406) and `detectContentSkipMask` (line 354):
 
 1. Load stored sentences via `dbService.getTTSContent`.
 2. `groupSentencesByRoot` (line 526) groups sentences by parent block CFI → `{ rootCfi, segments, fullText }[]`.
 3. Build `nodesToDetect = groups.map(g => ({ id, sampleText: g.fullText.substring(0, 200) }))` (line 460-467).
-4. `genAIService.detectContentTypes` ([GenAIService.ts:259](../src/lib/genai/GenAIService.ts)) → Gemini returns `referenceStartIndex` → mapped to a `referenceStartCfi`.
+4. `genAIService.detectContentTypes` ([GenAIService.ts:259](../src/domains/google/genai/features/referenceDetection.ts)) → Gemini returns `referenceStartIndex` → mapped to a `referenceStartCfi`.
 5. Persisted to the synced content-analysis store (`saveReferenceStartCfi`, [useContentAnalysisStore.ts:118](../src/store/useContentAnalysisStore.ts)).
 6. `detectContentSkipMask` marks every sentence from `referenceStartCfi` onward as skipped.
 
@@ -107,7 +117,7 @@ extractContentOffscreen (offscreen-renderer.ts:163)
 // ContentType = 'reference'   (content-analysis.ts)
 ```
 
-IndexedDB schema: `EpubLibraryDB` v24 ([db.ts:105](../src/db/db.ts)). The cache stores (`cache_tts_preparation`, `cache_table_images`) are in the **"Ephemeral, Regenerable"** domain — safe to drop and re-derive. The detection *result* lives in the synced content-analysis store.
+IndexedDB schema: `EpubLibraryDB` v24 ([db.ts:105](../src/data/schema.ts)). The cache stores (`cache_tts_preparation`, `cache_table_images`) are in the **"Ephemeral, Regenerable"** domain — safe to drop and re-derive. The detection *result* lives in the synced content-analysis store.
 
 ---
 
@@ -136,7 +146,7 @@ Two complementary detectors run at ingestion and emit a single, **semantics-free
 
 ### 4.1 Generic citation-marker detection (ingestion)
 
-Replace the semantic checks at [tts.ts:156-186](../src/lib/tts.ts) with a format-derived classifier. A run of text is a citation marker if it satisfies both a *form* test and a *content* test.
+Replace the semantic checks at [tts.ts:156-186](../src/lib/ingestion/sentence-extraction.ts) with a format-derived classifier. A run of text is a citation marker if it satisfies both a *form* test and a *content* test.
 
 **Detector A — styled / superscript element** (needs rendered context, available in the offscreen renderer):
 
@@ -210,7 +220,7 @@ New setting in `useGenAIStore`, surfaced in `GenAISettingsTab`:
 referenceDetectionStrategy: 'gemini' | 'deterministic';  // default: 'gemini'
 ```
 
-**Strategy `gemini` (default).** Reuse the existing `detectContentTypes` call ([GenAIService.ts:259](../src/lib/genai/GenAIService.ts)), enriching each node with format-derived features from the sidecar:
+**Strategy `gemini` (default).** Reuse the existing `detectContentTypes` call ([GenAIService.ts:259](../src/domains/google/genai/features/referenceDetection.ts)), enriching each node with format-derived features from the sidecar:
 
 ```ts
 nodesToDetect = groups.map(g => ({
@@ -298,7 +308,7 @@ interface ReferenceDetectionTelemetry {
 
 Choosing (say) `minRunLength` or `overlapThreshold` then becomes a one-pass offline computation over the exported logs: for each candidate value, count the sections where the deterministic decision would match `geminiReferenceStartCfi`.
 
-**Storage — reuse the existing GenAI log channel.** `GenAIService` routes structured entries through `setLogCallback` → `useGenAIStore.addLog` → `logs: GenAILogEntry[]` (persisted to `localStorage` under `genai-storage`), exportable via the existing **"Download GenAI Logs"** action ([GlobalSettingsDialog.tsx:345](../src/components/GlobalSettingsDialog.tsx)). Emit telemetry as a log entry (`type: 'response'`, `method: 'detectReferenceStart'`, `payload: ReferenceDetectionTelemetry`). Zero new infrastructure. **Raise `maxLogs`** (default 100) so sustained collection doesn't roll over before review; a durable store is deferred unless records are lost.
+**Storage — reuse the existing GenAI log channel.** `GenAIService` routes structured entries through `setLogCallback` → `useGenAIStore.addLog` → `logs: GenAILogEntry[]` (persisted to `localStorage` under `genai-storage`), exportable via the existing **"Download GenAI Logs"** action ([GlobalSettingsDialog.tsx:345](../src/components/settings/GenAISettingsTab.tsx)). Emit telemetry as a log entry (`type: 'response'`, `method: 'detectReferenceStart'`, `payload: ReferenceDetectionTelemetry`). Zero new infrastructure. **Raise `maxLogs`** (default 100) so sustained collection doesn't roll over before review; a durable store is deferred unless records are lost.
 
 **Tuning loop.** Manual review of the exported JSON (no automated sweep tooling for now). The exported records contain enough raw features to choose thresholds by hand or with an ad-hoc script.
 
@@ -324,7 +334,7 @@ Choosing (say) `minRunLength` or `overlapThreshold` then becomes a one-pass offl
 
 **No new object store.** Markers fold into the existing `cache_tts_preparation` store:
 
-- `CacheTtsPreparation` ([db.ts:66](../src/db/db.ts), type at [db.ts:322](../src/types/db.ts)) gains an optional `citationMarkers?: CitationMarker[]` field. IndexedDB is schemaless within a store, so **no DB version bump is required** for the store, and `saveTTSContent` / `getTTSContent` ([DBService.ts:860-875](../src/db/DBService.ts)) carry the field for free.
+- `CacheTtsPreparation` ([db.ts:66](../src/data/schema.ts), type at [db.ts:322](../src/types/cache.ts)) gains an optional `citationMarkers?: CitationMarker[]` field. IndexedDB is schemaless within a store, so **no DB version bump is required** for the store, and `saveTTSContent` / `getTTSContent` ([DBService.ts:860-875](../src/data/rows/cache.ts)) carry the field for free.
 - New `CitationMarker` type (§4.2).
 - New `referenceDetectionStrategy` field in `useGenAIStore` (`localStorage`-persisted; `partialize` already passes everything through).
 
@@ -338,13 +348,13 @@ The TTS-prep write path uses **explicit field lists**, not object spreads, at ev
 
 | # | Site | Current shape | Action |
 |---|---|---|---|
-| 1 | `ProcessedChapter` ([offscreen-renderer.ts:28](../src/lib/offscreen-renderer.ts)) | `{ href, sentences, textContent, title?, tables? }` | add `citationMarkers?` |
-| 2 | `extractContentOffscreen` ([offscreen-renderer.ts:301](../src/lib/offscreen-renderer.ts)) | builds chapter from `extractSentencesFromNode` | also collect markers, set on chapter |
+| 1 | `ProcessedChapter` ([offscreen-renderer.ts:28](../src/domains/reader/engine/offscreen/offscreen-renderer.ts)) | `{ href, sentences, textContent, title?, tables? }` | add `citationMarkers?` |
+| 2 | `extractContentOffscreen` ([offscreen-renderer.ts:301](../src/domains/reader/engine/offscreen/offscreen-renderer.ts)) | builds chapter from `extractSentencesFromNode` | also collect markers, set on chapter |
 | 3 | Reprocess — batch build ([ingestion.ts:128-133](../src/lib/ingestion.ts)) | `{ id, bookId, sectionId, sentences }` | include `citationMarkers` |
 | 4 | Reprocess — `prepStore.put` ([ingestion.ts:196-202](../src/lib/ingestion.ts)) | `{ id, bookId, sectionId, sentences }` | include `citationMarkers` |
 | 5 | Initial ingest — batch build ([ingestion.ts:337-342](../src/lib/ingestion.ts)) | `{ id, bookId, sectionId, sentences }` | include `citationMarkers` |
-| 6 | DBService persist — `item` ([DBService.ts:380-385](../src/db/DBService.ts)) | `{ id, bookId, sectionId, sentences }` | include `citationMarkers` |
-| 7 | `TTSContent` carrier type ([db.ts:692](../src/types/db.ts)) | `sentences` only | add `citationMarkers?` |
+| 6 | DBService persist — `item` ([DBService.ts:380-385](../src/data/rows/cache.ts)) | `{ id, bookId, sectionId, sentences }` | include `citationMarkers` |
+| 7 | `TTSContent` carrier type ([db.ts:692](../src/types/cache.ts)) | `sentences` only | add `citationMarkers?` |
 
 `saveTTSContent` / `getTTSContent` pass the whole object through, so the read path and any pipeline-side save are already field-agnostic — only the ingest/reprocess explicit puts are the hazard.
 
