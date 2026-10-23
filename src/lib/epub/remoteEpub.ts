@@ -109,8 +109,11 @@ async function inflate(bytes: Uint8Array, method: number): Promise<ArrayBuffer> 
     // a larger (possibly SharedArrayBuffer-typed) buffer, which the stream
     // writer's BufferSource typing rejects.
     const chunk = new Uint8Array(bytes);
-    void writer.write(chunk);
-    void writer.close();
+    // Corrupt input errors the stream: the failure surfaces through the
+    // readable side below, so these write/close rejections are redundant and
+    // would otherwise be reported as unhandled promise rejections.
+    writer.write(chunk).catch(() => undefined);
+    writer.close().catch(() => undefined);
     return await new Response(ds.readable).arrayBuffer();
   } catch (error) {
     throw new UnextractableEpubError('inflate-failed', String(error));
@@ -120,7 +123,6 @@ async function inflate(bytes: Uint8Array, method: number): Promise<ArrayBuffer> 
 /** Locate + parse the EOCD record within the fetched tail buffer. */
 function parseEocd(
   tail: ArrayBuffer,
-  tailStart: number,
 ): { cdOffset: number; cdSize: number; entryCount: number } {
   const view = dv(tail);
   // Scan backwards for the EOCD signature (a ZIP comment may follow it).
@@ -140,7 +142,6 @@ function parseEocd(
     if (i >= 20 && view.getUint32(i - 20, true) === SIG_ZIP64_LOCATOR) {
       throw new UnextractableEpubError('zip64-unsupported');
     }
-    void tailStart;
     return { cdOffset, cdSize, entryCount };
   }
   throw new UnextractableEpubError('eocd-not-found');
@@ -229,7 +230,7 @@ export async function readRemoteEpubPreview(
   const tailLen = Math.min(port.size, TAIL_FETCH);
   const tailStart = port.size - tailLen;
   const tail = await port.readRange(tailStart, port.size - 1);
-  const { cdOffset, cdSize, entryCount } = parseEocd(tail, tailStart);
+  const { cdOffset, cdSize, entryCount } = parseEocd(tail);
 
   let cdBuf: ArrayBuffer;
   if (cdOffset >= tailStart && cdOffset + cdSize <= port.size) {
