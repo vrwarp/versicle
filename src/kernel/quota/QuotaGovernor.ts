@@ -261,6 +261,12 @@ export class QuotaGovernor {
       return p.daily;
     }
     const persisted = await store.loadDailyUsage(ratePool);
+    // A concurrent acquire may have finished loading while we awaited. Reuse
+    // its counter: replacing it would orphan that caller's increment (a lost
+    // update that under-counts the day's requests).
+    if (p.daily && p.daily.day === today) {
+      return p.daily;
+    }
     if (persisted && persisted.day === today) {
       p.daily = { ...persisted };
     } else {
