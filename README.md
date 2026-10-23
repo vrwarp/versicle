@@ -24,7 +24,7 @@
 *   **Testing**: Vitest 4.0.16
 *   **Linting**: ESLint 9.39.2
 *   **State**: Zustand + Yjs (CRDT) + `zustand-middleware-yjs` (github:vrwarp/zustand-middleware-yjs#master)
-*   **Sync**: `y-cinder` (github:vrwarp/y-cinder#main / Firestore 11.10.0) + Android Backup Service + Google Drive API
+*   **Sync**: `y-cinder` (github:vrwarp/y-cinder#main / Firestore 11.10.0) + Google Drive API
 *   **Storage**: IndexedDB (via `idb`) with Web Locks API (`navigator.locks`) for safe cross-context execution and deadlock prevention
 *   **Parsing**: epub.js + PapaParse (CSV) + `opencc-js` + `pinyin-pro`
 *   **Audio**: Piper (WASM) / Web Speech API / LemonFox.ai
@@ -74,9 +74,8 @@
 
 ### Management (The "Engine Room")
 *   **Sync & Cloud**:
-    *   **Dual Sync**:
+    *   **Cloud Sync**:
         *   **Real-time Sync**: Optional "Cloud Overlay" using **Firestore** for live updates.
-        *   **Android Backup**: Native integration with Android's Backup Manager (Cold Path).
         *   **Cloud Library**: Connect your Google Drive to scan and import EPUBs directly from the cloud. Uses a smart **Heuristic Sync** (`viewedByMeTime` vs `lastScanTime`) to skip unnecessary expensive API scans, and optimizes memory by mapping heavy API objects to a lightweight file indexing strategy to speed up "New Book" diffing. Forces a full scan if the Cloud Index is empty. Automatically syncs recursive folders.
     *   **Workspace Context Switching**: Safely handles migrating states between remote workspaces, securely bridging page reloads and offering recovery from dangling backups.
     *   **Store-First Architecture**: Uses Yjs CRDTs for robust, conflict-free synchronization.
