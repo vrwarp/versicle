@@ -68,7 +68,9 @@ export interface ReferenceDetectionContext {
 }
 
 function truncateWords(text: string, maxWords: number): string {
-  const words = text.trimStart().split(/\s+/);
+  // Trim both ends: a trailing space would add a phantom empty "word" and
+  // append the ellipsis to text that was not actually shortened.
+  const words = text.trim().split(/\s+/);
   if (words.length <= maxWords) return text.trim();
   return words.slice(0, maxWords).join(' ') + '…';
 }

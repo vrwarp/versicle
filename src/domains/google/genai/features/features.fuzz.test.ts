@@ -323,3 +323,25 @@ describe('regression: referenceDetection HINT B (linked note block)', () => {
     expect(result.agreedWithHeuristic).toBeNull();
   });
 });
+
+describe('regression: referenceDetection front-text truncation', () => {
+  it('does not append an ellipsis to front text that is exactly at the word cap (trailing space)', async () => {
+    const requests: GenAIRequest<unknown>[] = [];
+    const client: GenAIClient = {
+      isConfigured: () => true,
+      generateText: async () => '',
+      generateStructured: async <T,>(request: GenAIRequest<T>) => {
+        requests.push(request as GenAIRequest<unknown>);
+        return request.validate({ justification: 'none', referenceStartIndex: -1 });
+      },
+    };
+    const nodes: ReferenceDetectionNode[] = [
+      { id: '0', sampleText: 'one two three four five six seven eight ' },
+      { id: '1', sampleText: 'one two three four five six seven eight nine ten' },
+    ];
+    await detectReferenceSection(client, nodes, { enumeratorCandidate: -1, leadingMarkerCandidate: -1 });
+    const prompt = String(requests[0].prompt);
+    expect(prompt).toContain('"sampleText":"one two three four five six seven eight"');
+    expect(prompt).toContain('"sampleText":"one two three four five six seven eight…"');
+  });
+});
