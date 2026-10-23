@@ -10,6 +10,7 @@ export ANDROID_HOME=$(pwd)/android-sdk
 export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
 
 yes | sdkmanager --licenses > /dev/null
-sdkmanager "platforms;android-34" "build-tools;34.0.0" > /dev/null
+# Keep in sync with Dockerfile.android and android/variables.gradle (API 35).
+sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" > /dev/null
 
 echo "Android SDK installed successfully."
