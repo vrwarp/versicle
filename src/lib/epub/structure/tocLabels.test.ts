@@ -177,3 +177,35 @@ describe('regression: flat class-styled nav vs nested NCX (T11)', () => {
     expect(chooseTocSource([{ kind: 'nav', items: nestedNcx }, { kind: 'ncx', items: nestedNcx }]).source).toBe('nav');
   });
 });
+
+describe('regression: label repair never duplicates a neighbour into the same file', () => {
+  // The nav spells a part as three rows into one file; the bare numeral is junk.
+  const nav: NavigationItem[] = [
+    { id: 'p', href: 'part1.html', label: 'I' },
+    { id: 'q', href: 'part1.html#ptr1', label: 'Series subtitle' },
+    { id: 'r', href: 'part1.html#ptr2', label: 'Part 1: Belief' },
+    { id: 's', href: 'chap01.html', label: 'Chapter 1' },
+  ];
+  const ncx: NavigationItem[] = [
+    { id: 'n1', href: 'part1.html#ptr2', label: 'Part 1: Belief' },
+    { id: 'n2', href: 'chap01.html', label: 'First Things' },
+  ];
+
+  it('keeps the junk label rather than repeating the label two rows below', () => {
+    expect(repairTocLabels(nav, [ncx]).map((i) => i.label)).toEqual([
+      'I',
+      'Series subtitle',
+      'Part 1: Belief',
+      'First Things',
+    ]);
+  });
+
+  it('does not hand one borrowed label to two junk entries of the same file', () => {
+    const twoJunk: NavigationItem[] = [
+      { id: 'a', href: 'c.xhtml', label: 'Chapter 3' },
+      { id: 'b', href: 'c.xhtml', label: '3' },
+    ];
+    const out = repairTocLabels(twoJunk, [[{ id: 'n', href: 'c.xhtml', label: 'The Long Road' }]]);
+    expect(out.map((i) => i.label)).toEqual(['The Long Road', '3']);
+  });
+});

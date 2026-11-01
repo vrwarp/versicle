@@ -115,24 +115,38 @@ export function repairTocLabels(
     }
   }
 
+  // Labels already shown per spine file. A flat nav that spells a part as
+  // three rows ("I" / subtitle / "Part 1: …", all into part1.xhtml) would
+  // otherwise borrow "Part 1: …" for the "I" row and show it twice; a junk
+  // label is better than a duplicate of its neighbour.
+  const labelKey = (href: string, label: string) =>
+    `${splitFragment(href)[0]}\u0000${label.replace(/\s+/g, ' ').trim().toLowerCase()}`;
+  const shown = new Set<string>();
+  for (const entry of flatten(items)) {
+    if (!junk.has(entry) && entry.href) shown.add(labelKey(entry.href, entry.label));
+  }
+
   const pick = (item: NavigationItem): string | undefined => {
     if (item.unresolved || !item.href) return undefined;
     const [file, fragment] = splitFragment(item.href);
-    const direct = byIdHref.get(`${item.id}\u0000${item.href}`) ?? byHref.get(item.href);
+    const fresh = (label: string | undefined) =>
+      label && !shown.has(labelKey(item.href, label)) ? label : undefined;
+    const direct = fresh(byIdHref.get(`${item.id}\u0000${item.href}`)) ?? fresh(byHref.get(item.href));
     if (direct) return direct;
     if (fragment) return undefined;
-    const sameFile = byFile.get(file);
+    const sameFile = fresh(byFile.get(file));
     if (sameFile) return sameFile;
     // Derived titles fall back to the first paragraph when a chapter has no
     // heading; a truncated sentence is not a better label than "Chapter 7".
     const derived = chapterTitles?.get(file)?.trim();
     if (!derived || /(\.\.\.|\u2026)$/.test(derived) || isLowQualityLabel(derived)) return undefined;
-    return derived;
+    return fresh(derived);
   };
 
   const walk = (list: NavigationItem[]): NavigationItem[] =>
     list.map((item) => {
       const better = junk.has(item) ? pick(item) : undefined;
+      if (better) shown.add(labelKey(item.href, better));
       const subitems = item.subitems ? walk(item.subitems) : undefined;
       if (!better && subitems === item.subitems) return item;
       const next: NavigationItem = { ...item, label: better ?? item.label };
