@@ -150,7 +150,8 @@ test('malformed EPUB: a flat class-styled nav shows the NCX tree and tracks sub-
   // instead of staying on the chapter row.
   await jumpVia(page, 'toc-item-0-0-1', 'chap01.html');
   await openToc(page);
-  await expect(page.getByTestId('toc-item-0-0-1')).toHaveClass(/text-primary/);
-  await expect(page.getByTestId('toc-item-0-0')).not.toHaveClass(/text-primary/);
+  // `font-medium` marks the active row (every row has `hover:text-primary`).
+  await expect(page.getByTestId('toc-item-0-0-1')).toHaveClass(/\bfont-medium\b/);
+  await expect(page.getByTestId('toc-item-0-0')).not.toHaveClass(/\bfont-medium\b/);
   await utils.captureScreenshot(page, 'malformed_7_active_subsection');
 });
