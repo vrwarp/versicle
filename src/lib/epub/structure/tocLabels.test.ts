@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { NavigationItem } from '~types/book';
-import { chooseTocSource, isLowQualityLabel, junkLabelRate, repairTocLabels } from './tocLabels';
+import { chooseTocSource, isLowQualityLabel, junkLabelRate, repairTocLabels, tocDepth } from './tocLabels';
 
 describe('isLowQualityLabel', () => {
   it.each([
@@ -135,5 +135,45 @@ describe('chooseTocSource', () => {
 
   it('returns an empty choice when no source has entries', () => {
     expect(chooseTocSource([{ kind: 'nav', items: [] }])).toMatchObject({ toc: [], source: null });
+  });
+});
+
+describe('regression: flat class-styled nav vs nested NCX (T11)', () => {
+  // Same files, same headings: the nav lists them as siblings, the NCX as a tree.
+  const flatNav: NavigationItem[] = [
+    { id: 'a', href: 'c1.xhtml', label: 'One' },
+    { id: 'b', href: 'c1.xhtml#s1', label: 'One, first section' },
+    { id: 'c', href: 'c1.xhtml#s2', label: 'One, second section' },
+    { id: 'd', href: 'c2.xhtml', label: 'Two' },
+    { id: 'e', href: 'c2.xhtml#s3', label: 'Two, only section' },
+  ];
+  const nestedNcx: NavigationItem[] = [
+    {
+      id: 'x1',
+      href: 'c1.xhtml',
+      label: 'One',
+      subitems: [
+        { id: 'x2', href: 'c1.xhtml#s1', label: 'One, first section' },
+        { id: 'x3', href: 'c1.xhtml#s2', label: 'One, second section' },
+      ],
+    },
+    { id: 'x4', href: 'c2.xhtml', label: 'Two', subitems: [{ id: 'x5', href: 'c2.xhtml#s3', label: 'Two, only section' }] },
+  ];
+
+  it('hands the TOC to the NCX when the nav is flat and the NCX is a real tree', () => {
+    expect(tocDepth(flatNav)).toBe(1);
+    expect(tocDepth(nestedNcx)).toBe(2);
+    expect(chooseTocSource([{ kind: 'nav', items: flatNav }, { kind: 'ncx', items: nestedNcx }]).source).toBe('ncx');
+  });
+
+  it('keeps a flat nav that lists far more than a nested NCX', () => {
+    const chaptersOnly: NavigationItem[] = [
+      { id: 'x1', href: 'c1.xhtml', label: 'One', subitems: [{ id: 'x2', href: 'c2.xhtml', label: 'Two' }] },
+    ];
+    expect(chooseTocSource([{ kind: 'nav', items: flatNav }, { kind: 'ncx', items: chaptersOnly }]).source).toBe('nav');
+  });
+
+  it('keeps a nested nav over a nested NCX', () => {
+    expect(chooseTocSource([{ kind: 'nav', items: nestedNcx }, { kind: 'ncx', items: nestedNcx }]).source).toBe('nav');
   });
 });

@@ -142,6 +142,13 @@ export function repairTocLabels(
   return walk(items);
 }
 
+/** Nesting depth of a tree (1 = flat list, 0 = empty). */
+export function tocDepth(items: NavigationItem[] | undefined): number {
+  let depth = 0;
+  for (const item of items ?? []) depth = Math.max(depth, 1 + tocDepth(item.subitems));
+  return depth;
+}
+
 type TocSourceKind = 'nav' | 'ncx';
 
 export interface TocSourceCandidate {
@@ -161,6 +168,13 @@ export interface TocChoice {
 }
 
 /**
+ * Share of the flat source's entries a nested source must list to replace it
+ * on structure alone: a nested NCX that lists only the chapters must not
+ * displace a flat nav that also lists every section.
+ */
+const FLAT_RESCUE_COVERAGE = 2 / 3;
+
+/**
  * Pick the TOC source and repair its labels from the others.
  *
  * Candidates are given in priority order (nav before NCX). A lower-priority
@@ -170,7 +184,10 @@ export interface TocChoice {
  *  - the current pick is mostly broken (under half its entries resolve) and
  *    the other resolves a larger share, or
  *  - the current pick fails the label floor (over half junk) while the other
- *    resolves at least as well and has better labels.
+ *    resolves at least as well and has better labels, or
+ *  - the current pick is a flat list while the other is a real tree over
+ *    (nearly) the same entries — a nav that encodes its hierarchy only in
+ *    CSS classes (`<li class="toch2">` siblings) loses to a nested NCX.
  * A few dead links in an otherwise good nav do NOT hand the TOC to a
  * flatter NCX — those entries are kept and greyed out instead.
  */
@@ -180,7 +197,7 @@ export function chooseTocSource(
 ): TocChoice {
   const scored = candidates
     .filter((c) => c.items.length > 0)
-    .map((c) => ({ ...c, score: scoreToc(c.items), junk: junkLabelRate(c.items) }));
+    .map((c) => ({ ...c, score: scoreToc(c.items), junk: junkLabelRate(c.items), depth: tocDepth(c.items) }));
   if (scored.length === 0) {
     return { toc: [], source: null, score: null, junkRateBefore: 0, junkRateAfter: 0 };
   }
@@ -192,7 +209,14 @@ export function chooseTocSource(
       (best.score.resolveRate < 0.5 && other.score.resolveRate > best.score.resolveRate + 1e-9);
     const labelRescue =
       best.junk > 0.5 && other.junk < best.junk && other.score.resolveRate >= best.score.resolveRate - 1e-9;
-    if (betterResolve || labelRescue) best = other;
+    const structureRescue =
+      best.depth === 1 &&
+      other.depth > 1 &&
+      other.score.total >= best.score.total * FLAT_RESCUE_COVERAGE &&
+      other.score.distinctTargets >= best.score.distinctTargets &&
+      other.score.resolveRate >= best.score.resolveRate - 1e-9 &&
+      other.junk <= best.junk + 1e-9;
+    if (betterResolve || labelRescue || structureRescue) best = other;
   }
 
   const alternatives = scored.filter((c) => c !== best).map((c) => c.items);

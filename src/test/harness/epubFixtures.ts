@@ -188,21 +188,46 @@ function navDoc(items: NavSpec[], landmarks?: Array<{ type: string; href: string
   return xhtml('Contents', `  <nav epub:type="toc" id="toc">\n    <h1>Contents</h1>\n    ${ol}\n  </nav>${lm}`);
 }
 
-function ncxDoc(title: string, points: Array<{ label: string; src: string }>): string {
-  const nav = points
-    .map(
-      (p, i) =>
-        `    <navPoint id="navpoint${i + 1}" playOrder="${i + 1}">\n      <navLabel><text>${p.label}</text></navLabel>\n      <content src="${p.src}"/>\n    </navPoint>`,
-    )
-    .join('\n');
+interface NcxSpec {
+  label: string;
+  src: string;
+  children?: NcxSpec[];
+}
+
+function ncxDoc(title: string, points: NcxSpec[]): string {
+  let n = 0;
+  const render = (list: NcxSpec[], indent: string): string =>
+    list
+      .map((p) => {
+        n++;
+        const nested = p.children?.length ? `\n${render(p.children, `${indent}  `)}` : '';
+        return `${indent}<navPoint id="navpoint${n}" playOrder="${n}">\n${indent}  <navLabel><text>${p.label}</text></navLabel>\n${indent}  <content src="${p.src}"/>${nested}\n${indent}</navPoint>`;
+      })
+      .join('\n');
   return `<?xml version="1.0" encoding="utf-8"?>
 <ncx version="2005-1" xmlns="http://www.daisy.org/z3986/2005/ncx/">
   <head><meta name="dtb:uid" content="fixture"/></head>
   <docTitle><text>${title}</text></docTitle>
   <navMap>
-${nav}
+${render(points, '    ')}
   </navMap>
 </ncx>`;
+}
+
+/**
+ * A FLAT nav whose hierarchy lives only in `<li class>` styling — the
+ * InDesign/Crossway export shape (one `<ol>`, every heading a sibling).
+ */
+function flatClassNavDoc(items: Array<{ cls: string; label: string; href: string }>): string {
+  const li = items.map((i) => `      <li class="${i.cls}"><a href="${i.href}">${i.label}</a></li>`).join('\n');
+  return xhtml('Contents', `  <nav epub:type="toc" id="toc">\n    <h1>Contents</h1>\n    <ol>\n${li}\n    </ol>\n  </nav>`);
+}
+
+/** A chapter whose sections are `<h2 id>` anchors (TOC fragment targets). */
+function sectionedChapter(heading: string, n: number, sections: Array<{ id: string; title: string }>): string {
+  const p = `<p>Section prose for chapter ${n}. The quick brown fox jumps over the lazy dog while the narrator explains what happens next in some detail.</p>`;
+  const body = sections.map((sec) => `<h2 id="${sec.id}">${sec.title}</h2>\n${p}\n${p}`).join('\n');
+  return xhtml(heading, `<h1>${heading}</h1>\n${p}\n${body}`);
 }
 
 const XHTML = 'application/xhtml+xml';
@@ -588,6 +613,125 @@ const coverLandmarks: EpubFixture = {
   },
 };
 
+/**
+ * T11 — the nav is one flat `<ol>` with its hierarchy encoded only in CSS
+ * classes, and each part spelled as three rows (bare numeral, series
+ * subtitle, "Part N: …") into one file; the NCX carries the same entries as
+ * a real tree. Shape of "Roman Catholic Theology and Practice" (Crossway,
+ * 2014). Both sources reach the same files, so only the structure rule
+ * hands the TOC to the NCX.
+ */
+const flatNavNestedNcx: EpubFixture = {
+  name: 'flat-nav-nested-ncx',
+  title: 'Flat Nav',
+  covers: ['T11'],
+  opfPath: 'OEBPS/content.opf',
+  files: {
+    'OEBPS/content.opf': opf({
+      title: 'Flat Nav',
+      tocId: 'ncx',
+      manifest: [
+        { id: 'nav', href: 'nav.xhtml', type: XHTML, properties: 'nav' },
+        { id: 'ncx', href: 'toc.ncx', type: NCX },
+        { id: 'part1', href: 'part1.html', type: XHTML },
+        { id: 'ch1', href: 'chap01.html', type: XHTML },
+        { id: 'ch2', href: 'chap02.html', type: XHTML },
+        { id: 'part2', href: 'part2.html', type: XHTML },
+        { id: 'ch3', href: 'chap03.html', type: XHTML },
+        { id: 'cover', href: 'images/cover.png', type: PNG, properties: 'cover-image' },
+      ],
+      spine: ['nav', 'part1', 'ch1', 'ch2', 'part2', 'ch3'],
+    }),
+    'OEBPS/nav.xhtml': flatClassNavDoc([
+      { cls: 'tocpart', label: 'I', href: 'part1.html' },
+      { cls: 'tocpart1', label: 'Doctrine according to the Catechism', href: 'part1.html#ptr1' },
+      { cls: 'tocpart2', label: 'Part 1: Belief', href: 'part1.html#ptr2' },
+      { cls: 'tocn', label: '1 First Things', href: 'chap01.html' },
+      { cls: 'toch1', label: 'Revelation', href: 'chap01.html#chp1' },
+      { cls: 'toch2', label: 'Evangelical Assessment', href: 'chap01.html#chp2' },
+      { cls: 'toch1', label: 'Faith', href: 'chap01.html#chp3' },
+      { cls: 'toch2', label: 'Evangelical Assessment', href: 'chap01.html#chp4' },
+      { cls: 'tocn', label: '2 The Church', href: 'chap02.html' },
+      { cls: 'toch1', label: 'Unity', href: 'chap02.html#chp5' },
+      { cls: 'toch2', label: 'Evangelical Assessment', href: 'chap02.html#chp6' },
+      { cls: 'tocpart', label: 'II', href: 'part2.html' },
+      { cls: 'tocpart1', label: 'Doctrine according to the Catechism', href: 'part2.html#ptr1' },
+      { cls: 'tocpart2', label: 'Part 2: Practice', href: 'part2.html#ptr2' },
+      { cls: 'tocn', label: '3 Sacraments', href: 'chap03.html' },
+      { cls: 'toch1', label: 'Baptism', href: 'chap03.html#chp7' },
+      { cls: 'toch2', label: 'Evangelical Assessment', href: 'chap03.html#chp8' },
+    ]),
+    'OEBPS/toc.ncx': ncxDoc('Flat Nav', [
+      {
+        label: 'Part 1: Belief',
+        src: 'part1.html#ptr2',
+        children: [
+          {
+            label: '1 First Things',
+            src: 'chap01.html',
+            children: [
+              { label: 'Revelation', src: 'chap01.html#chp1', children: [{ label: 'Evangelical Assessment', src: 'chap01.html#chp2' }] },
+              { label: 'Faith', src: 'chap01.html#chp3', children: [{ label: 'Evangelical Assessment', src: 'chap01.html#chp4' }] },
+            ],
+          },
+          {
+            label: '2 The Church',
+            src: 'chap02.html',
+            children: [{ label: 'Unity', src: 'chap02.html#chp5', children: [{ label: 'Evangelical Assessment', src: 'chap02.html#chp6' }] }],
+          },
+        ],
+      },
+      {
+        label: 'Part 2: Practice',
+        src: 'part2.html#ptr2',
+        children: [
+          {
+            label: '3 Sacraments',
+            src: 'chap03.html',
+            children: [{ label: 'Baptism', src: 'chap03.html#chp7', children: [{ label: 'Evangelical Assessment', src: 'chap03.html#chp8' }] }],
+          },
+        ],
+      },
+    ]),
+    'OEBPS/part1.html': xhtml('Part 1', '<h1 id="ptr1">Doctrine according to the Catechism</h1>\n<h2 id="ptr2">Part 1: Belief</h2>'),
+    'OEBPS/part2.html': xhtml('Part 2', '<h1 id="ptr1">Doctrine according to the Catechism</h1>\n<h2 id="ptr2">Part 2: Practice</h2>'),
+    'OEBPS/chap01.html': sectionedChapter('1 First Things', 1, [
+      { id: 'chp1', title: 'Revelation' },
+      { id: 'chp2', title: 'Evangelical Assessment' },
+      { id: 'chp3', title: 'Faith' },
+      { id: 'chp4', title: 'Evangelical Assessment' },
+    ]),
+    'OEBPS/chap02.html': sectionedChapter('2 The Church', 2, [
+      { id: 'chp5', title: 'Unity' },
+      { id: 'chp6', title: 'Evangelical Assessment' },
+    ]),
+    'OEBPS/chap03.html': sectionedChapter('3 Sacraments', 3, [
+      { id: 'chp7', title: 'Baptism' },
+      { id: 'chp8', title: 'Evangelical Assessment' },
+    ]),
+    'OEBPS/images/cover.png': COVER_ART(),
+  },
+  expected: {
+    tocSource: 'ncx',
+    toc: [
+      { label: 'Part 1: Belief', href: 'part1.html#ptr2' },
+      { label: '1 First Things', href: 'chap01.html' },
+      { label: 'Revelation', href: 'chap01.html#chp1' },
+      { label: 'Evangelical Assessment', href: 'chap01.html#chp2' },
+      { label: 'Faith', href: 'chap01.html#chp3' },
+      { label: 'Evangelical Assessment', href: 'chap01.html#chp4' },
+      { label: '2 The Church', href: 'chap02.html' },
+      { label: 'Unity', href: 'chap02.html#chp5' },
+      { label: 'Evangelical Assessment', href: 'chap02.html#chp6' },
+      { label: 'Part 2: Practice', href: 'part2.html#ptr2' },
+      { label: '3 Sacraments', href: 'chap03.html' },
+      { label: 'Baptism', href: 'chap03.html#chp7' },
+      { label: 'Evangelical Assessment', href: 'chap03.html#chp8' },
+    ],
+    cover: 'images/cover.png',
+  },
+};
+
 export const MALFORMED_EPUB_FIXTURES: readonly EpubFixture[] = [
   navSubfolderUndeclaredCover,
   hrefVariants,
@@ -595,6 +739,7 @@ export const MALFORMED_EPUB_FIXTURES: readonly EpubFixture[] = [
   navEmptyNcxGood,
   coverMetaHrefCorrupt,
   coverLandmarks,
+  flatNavNestedNcx,
 ];
 
 function decodeOrSelf(value: string): string {

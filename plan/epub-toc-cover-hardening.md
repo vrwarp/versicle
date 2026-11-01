@@ -77,6 +77,7 @@ What "poorly formatted" means in practice. ✔ = handled today, ✘ = not,
 | T8 | Nav present but empty / non-`toc` nav picked; NCX would have been usable | ✘ (no source arbitration) |
 | T9 | Nav uses `<span>` headings with no href (grouping nodes) | ◐ (rendered, click fails) |
 | T10 | No TOC at all | ✔ (synthetic from spine) |
+| T11 | Flat nav whose hierarchy lives only in `<li class>` styling, while the NCX is a real tree over the same entries (Crossway/InDesign exports) | ✔ (structure rule in `chooseTocSource`; fixture `flat-nav-nested-ncx`) |
 
 ### Cover
 
