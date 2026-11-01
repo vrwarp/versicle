@@ -126,3 +126,31 @@ test('malformed EPUB: a corrupt declared cover falls back to the real one, not t
     .toEqual([300, 450]);
   await utils.captureScreenshot(page, 'malformed_5_corrupt_cover_fallback');
 });
+
+test('malformed EPUB: a flat class-styled nav shows the NCX tree and tracks sub-sections', async ({ page }) => {
+  const card = await importAndOpen(page, 'flat-nav-nested-ncx', 'Flat Nav');
+  await card.click();
+  await utils.waitForReaderReady(page);
+  await openToc(page);
+  const sidebar = page.getByTestId('reader-toc-sidebar');
+
+  // T11: the nav is 17 flat sibling rows (hierarchy only in CSS classes);
+  // the reader shows the NCX's tree instead — the same choice import made.
+  await expect(page.getByTestId('toc-item-0')).toHaveText('Part 1: Belief');
+  await expect(page.getByTestId('toc-item-0-0')).toHaveText('1 First Things');
+  await expect(page.getByTestId('toc-item-0-0-1')).toHaveText('Faith');
+  // Third level and below render (the sidebar used to stop at three).
+  await expect(page.getByTestId('toc-item-0-0-1-0')).toHaveText('Evangelical Assessment');
+  // No three-row part headings, no duplicated "Part 1" label.
+  await expect(sidebar.getByRole('button', { name: 'Part 1: Belief', exact: true })).toHaveCount(1);
+  await expect(sidebar.getByRole('button', { name: 'I', exact: true })).toHaveCount(0);
+  await utils.captureScreenshot(page, 'malformed_6_flat_nav_tree');
+
+  // A sub-section of a single-file chapter: the highlight follows it
+  // instead of staying on the chapter row.
+  await jumpVia(page, 'toc-item-0-0-1', 'chap01.html');
+  await openToc(page);
+  await expect(page.getByTestId('toc-item-0-0-1')).toHaveClass(/text-primary/);
+  await expect(page.getByTestId('toc-item-0-0')).not.toHaveClass(/text-primary/);
+  await utils.captureScreenshot(page, 'malformed_7_active_subsection');
+});

@@ -223,10 +223,15 @@ function flatClassNavDoc(items: Array<{ cls: string; label: string; href: string
   return xhtml('Contents', `  <nav epub:type="toc" id="toc">\n    <h1>Contents</h1>\n    <ol>\n${li}\n    </ol>\n  </nav>`);
 }
 
-/** A chapter whose sections are `<h2 id>` anchors (TOC fragment targets). */
-function sectionedChapter(heading: string, n: number, sections: Array<{ id: string; title: string }>): string {
+/**
+ * A chapter whose sections are `<h2 id>` anchors (TOC fragment targets),
+ * each `paragraphs` long — long enough sections land their headings on
+ * different pages, which the active-sub-section journey relies on.
+ */
+function sectionedChapter(heading: string, n: number, sections: Array<{ id: string; title: string }>, paragraphs = 2): string {
   const p = `<p>Section prose for chapter ${n}. The quick brown fox jumps over the lazy dog while the narrator explains what happens next in some detail.</p>`;
-  const body = sections.map((sec) => `<h2 id="${sec.id}">${sec.title}</h2>\n${p}\n${p}`).join('\n');
+  const prose = Array.from({ length: paragraphs }, () => p).join('\n');
+  const body = sections.map((sec) => `<h2 id="${sec.id}">${sec.title}</h2>\n${prose}`).join('\n');
   return xhtml(heading, `<h1>${heading}</h1>\n${p}\n${body}`);
 }
 
@@ -700,7 +705,7 @@ const flatNavNestedNcx: EpubFixture = {
       { id: 'chp2', title: 'Evangelical Assessment' },
       { id: 'chp3', title: 'Faith' },
       { id: 'chp4', title: 'Evangelical Assessment' },
-    ]),
+    ], 40),
     'OEBPS/chap02.html': sectionedChapter('2 The Church', 2, [
       { id: 'chp5', title: 'Unity' },
       { id: 'chp6', title: 'Evangelical Assessment' },
