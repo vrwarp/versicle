@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Book, Contents, Rendition } from 'epubjs';
 import type { ReaderEngineEvent } from './ReaderEngine';
+import type { NavigationItem } from '~types/book';
 import { EpubJsEngine, createEpubJsBook } from './EpubJsEngine';
 
 const ePubFactory = vi.fn(() => ({ mocked: true }));
@@ -1236,5 +1237,79 @@ describe('regression: display() with nav-relative href', () => {
   it('getNavLabel() finds the label through the resolved TOC', () => {
     const { engine } = build({ book: makeNavBook() });
     expect(engine.getNavLabel('Text/CH1.xhtml')).toBe('Why I Wrote This Book');
+  });
+});
+
+describe('regression: reader TOC arbitrates nav vs NCX like import', () => {
+  /**
+   * epub.js parses only the nav document. A nav that is one flat list of
+   * siblings (hierarchy only in CSS classes) next to a nested NCX showed
+   * flat in the reader while import had stored the NCX tree.
+   */
+  const spineHrefs = ['c1.xhtml', 'c2.xhtml'];
+  const flatNav = [
+    { id: 'n1', href: 'c1.xhtml', label: 'One' },
+    { id: 'n2', href: 'c1.xhtml#s1', label: 'One, first section' },
+    { id: 'n3', href: 'c2.xhtml', label: 'Two' },
+    { id: 'n4', href: 'c2.xhtml#s2', label: 'Two, only section' },
+  ];
+  const ncxXml = `<?xml version="1.0"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><navMap>
+  <navPoint id="x1"><navLabel><text>One</text></navLabel><content src="c1.xhtml"/>
+    <navPoint id="x2"><navLabel><text>One, first section</text></navLabel><content src="c1.xhtml#s1"/></navPoint>
+  </navPoint>
+  <navPoint id="x3"><navLabel><text>Two</text></navLabel><content src="c2.xhtml"/>
+    <navPoint id="x4"><navLabel><text>Two, only section</text></navLabel><content src="c2.xhtml#s2"/></navPoint>
+  </navPoint>
+</navMap></ncx>`;
+  const makeBook = (over: Record<string, unknown> = {}) => {
+    const sections = spineHrefs.map((href, index) => ({ href, index }));
+    return {
+      container: { packagePath: 'content.opf' },
+      packaging: {
+        metadata: {},
+        navPath: 'nav.xhtml',
+        ncxPath: 'toc.ncx',
+        manifest: {
+          nav: { href: 'nav.xhtml', type: 'application/xhtml+xml', properties: ['nav'] },
+          ncx: { href: 'toc.ncx', type: 'application/x-dtbncx+xml', properties: [] },
+          ...Object.fromEntries(spineHrefs.map((href, i) => [`s${i}`, { href, type: 'application/xhtml+xml', properties: [] }])),
+        },
+      },
+      spine: {
+        get: (t: unknown) => (typeof t === 'string' ? sections.find((s) => s.href === t.split('#')[0]) : undefined),
+        each: (fn: (s: { href: string }) => void) => sections.forEach(fn),
+        items: sections,
+      },
+      navigation: { toc: flatNav, get: () => undefined, forEach: () => undefined },
+      load: vi.fn(async () => new DOMParser().parseFromString(ncxXml, 'application/xml')),
+      ...over,
+    };
+  };
+  const depth = (items: NavigationItem[]): number => items.reduce((m, i) => Math.max(m, 1 + depth(i.subitems ?? [])), 0);
+
+  it('loadToc() reads the NCX and prefers its tree over the flat nav', async () => {
+    const book = makeBook();
+    const { engine } = build({ book });
+    expect(depth(engine.getToc())).toBe(1);
+    const toc = await engine.loadToc();
+    expect(book.load).toHaveBeenCalledWith('toc.ncx');
+    expect(toc.map((i) => i.label)).toEqual(['One', 'Two']);
+    expect(toc[0].subitems?.map((i) => i.href)).toEqual(['c1.xhtml#s1']);
+    // getToc() (getNavLabel, title resolution) now serves the same tree.
+    expect(engine.getToc()).toBe(toc);
+  });
+
+  it('keeps the nav when the NCX cannot be read', async () => {
+    const { engine } = build({ book: makeBook({ load: vi.fn(async () => Promise.reject(new Error('missing'))) }) });
+    expect((await engine.loadToc()).map((i) => i.label)).toEqual(flatNav.map((i) => i.label));
+  });
+
+  it('does not read anything when the package has no NCX', async () => {
+    const book = makeBook();
+    book.packaging.ncxPath = '';
+    const { engine } = build({ book });
+    expect(depth(await engine.loadToc())).toBe(1);
+    expect(book.load).not.toHaveBeenCalled();
   });
 });

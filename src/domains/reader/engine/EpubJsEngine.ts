@@ -22,6 +22,9 @@ import { bookInternals, internals } from './epubjsInternals';
 import { PackageIndex } from '@lib/epub/structure/packageIndex';
 import { packageModelFromEpubJs } from '@lib/epub/structure/packageModel';
 import { splitFragment } from '@lib/epub/structure/paths';
+import { parseMarkup } from '@lib/epub/structure/markup';
+import { parseNcxDocument } from '@lib/epub/structure/navParser';
+import { chooseTocSource } from '@lib/epub/structure/tocLabels';
 import { resolveToc, resolveTocHref } from '@lib/epub/structure/tocResolver';
 import { HighlightLayerManager, type AnnotatingRendition } from './HighlightLayerManager';
 import { markProgrammaticSelection } from './selectionBridge';
@@ -77,6 +80,8 @@ export class EpubJsEngine implements ReaderEngine {
   /** Lazily-built manifest/spine index for href resolution (null: book not open). */
   private packageIndex: PackageIndex | null | undefined;
   private resolvedToc: { source: NavigationItem[]; toc: NavigationItem[] } | undefined;
+  /** loadToc()'s arbitrated TOC, keyed by the navigation tree it started from. */
+  private arbitratedToc: { source: NavigationItem[]; toc: NavigationItem[] } | undefined;
 
   constructor(private readonly deps: EpubJsEngineDeps) {
     this.highlights = new HighlightLayerManager(
@@ -229,12 +234,49 @@ export class EpubJsEngine implements ReaderEngine {
     // `navigation` is undefined until book.loaded.navigation resolves —
     // upstream types it non-optional, so the runtime guard keeps the `?.`.
     const raw: NavigationItem[] = this.deps.book.navigation?.toc || [];
+    if (this.arbitratedToc?.source === raw) return this.arbitratedToc.toc;
     if (this.resolvedToc?.source !== raw) {
       // epub.js keeps nav hrefs as written (relative to the nav document);
       // map them onto the spine once per navigation object.
       this.resolvedToc = { source: raw, toc: this.normalizeToc(raw, 'raw') };
     }
     return this.resolvedToc.toc;
+  }
+
+  /**
+   * epub.js only ever parses ONE TOC file — the nav document when the
+   * package has one. Import arbitrates nav against NCX
+   * (`chooseTocSource`), so without this the reader could show a flat nav
+   * while the library stored the nested NCX. When the package has both,
+   * read the NCX too and run the same arbitration; any failure keeps the
+   * nav. Once resolved, getToc() returns the result.
+   */
+  async loadToc(): Promise<NavigationItem[]> {
+    const raw: NavigationItem[] = this.deps.book.navigation?.toc || [];
+    const primary = this.getToc();
+    if (this.arbitratedToc?.source === raw) return primary;
+    const index = this.getPackageIndex();
+    const packaging = bookInternals(this.deps.book).packaging;
+    if (!index || !packaging?.navPath || !packaging.ncxPath || primary.length === 0) return primary;
+
+    let ncx: NavigationItem[];
+    try {
+      const loaded: unknown = await this.deps.book.load(packaging.ncxPath);
+      const doc = typeof loaded === 'string' ? parseMarkup(loaded) : (loaded as Document | null);
+      ncx = doc && typeof doc === 'object' && 'documentElement' in doc ? parseNcxDocument(doc) : [];
+    } catch (error) {
+      logger.debug('NCX unavailable; keeping the nav TOC', error);
+      return primary;
+    }
+    if (this.destroyed || ncx.length === 0) return primary;
+
+    const choice = chooseTocSource([
+      { kind: 'nav', items: primary },
+      { kind: 'ncx', items: resolveToc(ncx, { index, tocPath: index.model.ncxPath, order: 'raw' }) },
+    ]);
+    if (choice.source === 'ncx') logger.info(`Reader TOC from the NCX (${choice.score?.total} entries)`);
+    this.arbitratedToc = { source: raw, toc: choice.source ? choice.toc : primary };
+    return this.arbitratedToc.toc;
   }
 
   normalizeToc(items: NavigationItem[], order: 'raw' | 'stored' = 'stored'): NavigationItem[] {

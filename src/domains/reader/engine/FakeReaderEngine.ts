@@ -229,6 +229,10 @@ export class FakeReaderEngine implements ReaderEngine {
     }));
   }
 
+  loadToc(): Promise<NavigationItem[]> {
+    return Promise.resolve(this.getToc());
+  }
+
   /** Flags entries whose href names no section; hrefs are already spine hrefs here. */
   normalizeToc(items: NavigationItem[]): NavigationItem[] {
     return items.map((item) => {

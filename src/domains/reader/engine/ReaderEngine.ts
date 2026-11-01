@@ -111,6 +111,13 @@ export interface ReaderEngine extends CfiRangeResolver {
   /** The publisher TOC with hrefs resolved onto the spine (see normalizeToc). */
   getToc(): NavigationItem[];
   /**
+   * The publisher TOC arbitrated across the package's TOC files exactly as
+   * import does (nav vs NCX, `chooseTocSource`). Resolves to getToc()'s
+   * value when there is nothing to arbitrate; afterwards getToc() returns
+   * the arbitrated tree.
+   */
+  loadToc(): Promise<NavigationItem[]>;
+  /**
    * Resolve a TOC tree's hrefs onto this book's spine (@lib/epub/structure):
    * nav-relative, differently-encoded or -cased hrefs become spine hrefs and
    * entries that cannot be displayed get `unresolved: true`. `stored` order

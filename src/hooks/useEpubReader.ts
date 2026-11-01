@@ -282,9 +282,13 @@ export function useEpubReader(
         // junk labels (`*FIX_…`, bare "Chapter N") borrow a real one from the
         // stored TOC for the same target when it has one
         // (plan/epub-toc-cover-hardening.md §4.2).
+        // loadToc() also arbitrates the nav against the NCX the way import
+        // does (a flat class-styled nav loses to a nested NCX).
+        const arbitratedToc = nav?.toc?.length ? ((yield newEngine.loadToc()) as NavigationItem[]) : [];
+        const publisherToc = arbitratedToc.length ? arbitratedToc : newEngine.normalizeToc(nav?.toc ?? [], 'raw');
         const storedToc = optionsRef.current.metadata?.syntheticToc;
         const tocItems = repairTocLabels(
-          newEngine.normalizeToc(nav?.toc ?? [], 'raw'),
+          publisherToc,
           storedToc?.length ? [newEngine.normalizeToc(storedToc)] : [],
         );
         setToc(tocItems);
