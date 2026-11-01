@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Book, Contents, Rendition } from 'epubjs';
 import type { ReaderEngineEvent } from './ReaderEngine';
 import type { NavigationItem } from '~types/book';
+import { generateEpubCfi } from '@kernel/cfi';
 import { EpubJsEngine, createEpubJsBook } from './EpubJsEngine';
 
 const ePubFactory = vi.fn(() => ({ mocked: true }));
@@ -1311,5 +1312,63 @@ describe('regression: reader TOC arbitrates nav vs NCX like import', () => {
     const { engine } = build({ book });
     expect(depth(await engine.loadToc())).toBe(1);
     expect(book.load).not.toHaveBeenCalled();
+  });
+});
+
+describe('regression: anchorAt() tracks the sub-section inside one long chapter', () => {
+  /**
+   * A chapter is one spine file whose sections are TOC fragments
+   * (`chap03.html#chp12`); the TOC highlight stayed on the chapter row for
+   * the whole file. anchorAt() names the last anchor at or before the
+   * reading position.
+   */
+  const html = `<html xmlns="http://www.w3.org/1999/xhtml"><body>
+    <h1>Chapter</h1><p>intro</p>
+    <h2 id="s1">First</h2><p>one</p><p>one more</p>
+    <h2 id="s2">Second</h2><p>two</p>
+  </body></html>`;
+  const base = 'epubcfi(/6/4!)';
+  // Point CFI at the start of a node's first text (kernel generator; the raw
+  // epub.js CFI class is quarantined to the kernel shim).
+  const pointCfi = (node: Node) => {
+    const range = node.ownerDocument!.createRange();
+    range.setStart(node.firstChild ?? node, 0);
+    range.collapse(true);
+    return generateEpubCfi(range, base);
+  };
+  const makeAnchorEngine = () => {
+    const doc = new DOMParser().parseFromString(html, 'application/xhtml+xml');
+    const contents = {
+      document: doc,
+      window,
+      sectionIndex: 1,
+      cfiFromNode: (node: Node) => pointCfi(node),
+    };
+    const sections = [{ href: 'c0.xhtml', index: 0 }, { href: 'chap03.html', index: 1 }];
+    const { engine } = build({
+      rendition: { getContents: () => [contents] },
+      book: { spine: { get: (t: unknown) => (typeof t === 'number' ? sections[t] : undefined), items: sections } },
+    });
+    const at = (selector: string) => pointCfi(doc.querySelector(selector)!);
+    return { engine, at, doc };
+  };
+
+  it('names the last anchor before the position, none before the first', () => {
+    const { engine, at } = makeAnchorEngine();
+    const fragments = ['s1', 's2'];
+    expect(engine.anchorAt('chap03.html', at('h1'), fragments)).toBeNull();
+    // Heading text that starts the page counts as reached.
+    expect(engine.anchorAt('chap03.html', at('#s1'), fragments)).toBe('s1');
+    expect(engine.anchorAt('chap03.html', at('p:nth-of-type(3)'), fragments)).toBe('s1');
+    expect(engine.anchorAt('chap03.html', at('#s2 + p'), fragments)).toBe('s2');
+    // TOC order does not matter; document order does.
+    expect(engine.anchorAt('chap03.html', at('#s2 + p'), ['s2', 's1'])).toBe('s2');
+  });
+
+  it('returns null for a section that is not rendered, unknown ids, or no fragments', () => {
+    const { engine, at } = makeAnchorEngine();
+    expect(engine.anchorAt('c0.xhtml', at('#s2 + p'), ['s1'])).toBeNull();
+    expect(engine.anchorAt('chap03.html', at('#s2 + p'), ['nope'])).toBeNull();
+    expect(engine.anchorAt('chap03.html', at('#s2 + p'), [])).toBeNull();
   });
 });

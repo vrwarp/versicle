@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchPaths, findTocItem, resolveSyntheticPreference } from './titleResolver';
+import { matchPaths, findTocItem, resolveSyntheticPreference, tocFragmentsFor } from './titleResolver';
 import type { NavigationItem } from '~types/book';
 import type { UserInventoryItem } from '~types/user-data';
 
@@ -132,6 +132,29 @@ describe('titleResolver', () => {
         useSyntheticToc: undefined
       };
       expect(resolveSyntheticPreference(bookMissing)).toBe(false);
+    });
+  });
+
+  describe('regression: tocFragmentsFor lists the sub-section anchors of one file', () => {
+    const toc: NavigationItem[] = [
+      {
+        id: 'c3',
+        href: 'chap03.html',
+        label: 'Chapter 3',
+        subitems: [
+          { id: 'a', href: 'chap03.html#chp9', label: 'Subtitle', subitems: [{ id: 'b', href: 'chap03.html#chp10', label: 'Intro' }] },
+          { id: 'x', href: 'chap04.html#chp25', label: 'Elsewhere' },
+          { id: 'dead', href: 'chap03.html#gone', label: 'Gone', unresolved: true },
+          { id: 'dup', href: 'chap03.html#chp9', label: 'Again' },
+        ],
+      },
+    ];
+
+    it('returns fragments into the section in TOC order, deduped, skipping broken entries', () => {
+      expect(tocFragmentsFor(toc, 'chap03.html')).toEqual(['chp9', 'chp10']);
+      expect(tocFragmentsFor(toc, 'OEBPS/chap03.html')).toEqual(['chp9', 'chp10']);
+      expect(tocFragmentsFor(toc, 'chap05.html')).toEqual([]);
+      expect(tocFragmentsFor(toc, null)).toEqual([]);
     });
   });
 });

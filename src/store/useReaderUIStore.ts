@@ -17,6 +17,13 @@ interface ReaderUIState {
     immersiveMode: boolean;
     currentSectionTitle: string | null;
     currentSectionId: string | null;
+    /**
+     * The TOC fragment (`chp12` of `chap03.html#chp12`) inside the current
+     * section that the reader has reached — lets the TOC highlight follow
+     * sub-sections of a long single-file chapter. Null when the section has
+     * no TOC anchors before the reading position.
+     */
+    currentSectionAnchor: string | null;
     currentBookId: string | null;
     /**
      * Whether the reader auto-follows the spoken sentence during TTS playback
@@ -34,7 +41,11 @@ interface ReaderUIState {
     setIsLoading: (isLoading: boolean) => void;
     setToc: (toc: NavigationItem[]) => void;
     setImmersiveMode: (enabled: boolean) => void;
-    setCurrentSection: (title: string | null, id: string | null) => void;
+    /**
+     * `anchor` omitted keeps the current anchor while the section is
+     * unchanged (TTS section updates carry none) and clears it otherwise.
+     */
+    setCurrentSection: (title: string | null, id: string | null, anchor?: string | null) => void;
     setCurrentBookId: (id: string | null) => void;
     setFollowingAudio: (following: boolean) => void;
 
@@ -61,6 +72,7 @@ export const useReaderUIStore = create<ReaderUIState>((set, get) => ({
     immersiveMode: false,
     currentSectionTitle: null,
     currentSectionId: null,
+    currentSectionAnchor: null,
     currentBookId: null,
     followingAudio: true,
 
@@ -69,7 +81,13 @@ export const useReaderUIStore = create<ReaderUIState>((set, get) => ({
     setIsLoading: (isLoading) => set({ isLoading }),
     setToc: (toc) => set({ toc }),
     setImmersiveMode: (enabled) => set({ immersiveMode: enabled }),
-    setCurrentSection: (title, id) => set({ currentSectionTitle: title, currentSectionId: id }),
+    setCurrentSection: (title, id, anchor) =>
+        set((state) => ({
+            currentSectionTitle: title,
+            currentSectionId: id,
+            currentSectionAnchor:
+                anchor !== undefined ? anchor : id === state.currentSectionId ? state.currentSectionAnchor : null,
+        })),
     setCurrentBookId: (id) => set({ currentBookId: id }),
     setFollowingAudio: (following) => set({ followingAudio: following }),
 
@@ -87,6 +105,7 @@ export const useReaderUIStore = create<ReaderUIState>((set, get) => ({
         immersiveMode: false,
         currentSectionTitle: null,
         currentSectionId: null,
+        currentSectionAnchor: null,
         currentBookId: null,
         followingAudio: true,
         compass: COMPASS_IDLE

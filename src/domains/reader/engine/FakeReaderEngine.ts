@@ -244,6 +244,11 @@ export class FakeReaderEngine implements ReaderEngine {
     });
   }
 
+  /** Fake sections have no anchors. */
+  anchorAt(): string | null {
+    return null;
+  }
+
   resolveSection(cfiOrHref: string): ResolvedSection | null {
     const idx = this.indexFor(cfiOrHref);
     if (idx < 0) return null;

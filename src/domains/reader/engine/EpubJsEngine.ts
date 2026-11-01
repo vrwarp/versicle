@@ -17,6 +17,7 @@
  */
 import ePub, { type Book, type Contents, type Rendition, type Location } from 'epubjs';
 import { createLogger } from '@lib/logger';
+import { CfiComparator } from '@kernel/cfi';
 import type { NavigationItem } from '~types/book';
 import { bookInternals, internals } from './epubjsInternals';
 import { PackageIndex } from '@lib/epub/structure/packageIndex';
@@ -332,6 +333,37 @@ export class EpubJsEngine implements ReaderEngine {
     if (!index) return target;
     const { navPath, ncxPath } = index.model;
     return resolveTocHref(target, { index, tocPath: navPath ?? ncxPath, order: 'stored' }) ?? target;
+  }
+
+  anchorAt(sectionHref: string, cfi: string, fragments: readonly string[]): string | null {
+    if (!cfi || fragments.length === 0) return null;
+    const file = splitFragment(sectionHref)[0];
+    let contents: Contents | undefined;
+    try {
+      contents = (internals(this.deps.rendition).getContents() || []).find(
+        (c) => c?.document && splitFragment(this.toContentView(c).sectionHref)[0] === file,
+      );
+    } catch {
+      return null;
+    }
+    if (!contents) return null;
+
+    const comparator = new CfiComparator();
+    let best: { fragment: string; cfi: string } | null = null;
+    for (const fragment of fragments) {
+      const el = contents.document.getElementById(fragment);
+      if (!el) continue;
+      try {
+        const elCfi = contents.cfiFromNode(el);
+        // An ancestor CFI sorts before its descendants, so a heading whose
+        // text starts the page counts as reached.
+        if (comparator.compareStrings(elCfi, cfi) > 0) continue;
+        if (!best || comparator.compareStrings(elCfi, best.cfi) > 0) best = { fragment, cfi: elCfi };
+      } catch {
+        /* an unparsable CFI cannot win */
+      }
+    }
+    return best?.fragment ?? null;
   }
 
   resolveSection(cfiOrHref: string): ResolvedSection | null {

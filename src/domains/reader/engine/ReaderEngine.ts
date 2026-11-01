@@ -125,6 +125,13 @@ export interface ReaderEngine extends CfiRangeResolver {
    */
   normalizeToc(items: NavigationItem[], order?: 'raw' | 'stored'): NavigationItem[];
   resolveSection(cfiOrHref: string): ResolvedSection | null;
+  /**
+   * Of `fragments` (element ids inside the RENDERED section `sectionHref`,
+   * e.g. the TOC's `#chp12` anchors), the one whose element is the last at
+   * or before `cfi` in document order — the sub-section being read. Null
+   * when none precedes it or the section is not on screen.
+   */
+  anchorAt(sectionHref: string, cfi: string, fragments: readonly string[]): string | null;
   /** Nav-based human label for a section (ReadingHistoryPanel semantics). */
   getNavLabel(cfiOrHref: string): string | null;
   /** Section text without re-unzipping (useSmartTOC). */
