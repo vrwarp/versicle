@@ -14,6 +14,9 @@ import { useToastStore } from '@store/useToastStore';
 /** Shown for a TOC entry whose link does not land in the book (greyed out). */
 export const BROKEN_TOC_LINK_MESSAGE = 'This chapter link is broken in the book file.';
 
+/** Deeper TOC levels still render, flush with this level's indentation. */
+const MAX_TOC_INDENT_LEVEL = 4;
+
 export interface DeviceMarker {
     id: string;
     name: string;
@@ -65,8 +68,11 @@ export const TOCPanel: React.FC<TOCPanelProps> = ({
     const showToast = useToastStore(state => state.showToast);
 
     const renderTOCItem = (item: NavigationItem, index: number, level: number = 0, parentId: string = 'toc-item') => {
-        const hasSubitems = item.subitems && item.subitems.length > 0;
-        const showSubitems = hasSubitems && level < 2;
+        // Every level renders: a five-level book (part › chapter › section ›
+        // subsection) hid its sections — and the active sub-section entry —
+        // behind a three-level cap. Indentation stops growing past
+        // MAX_TOC_INDENT_LEVEL so deep entries keep room for their label.
+        const showSubitems = !!item.subitems && item.subitems.length > 0;
 
         const currentId = `${parentId}-${index}`;
         const isActive = item.id === activeTocId;
@@ -92,7 +98,7 @@ export const TOCPanel: React.FC<TOCPanelProps> = ({
                             ? "text-muted-foreground/50 italic cursor-not-allowed hover:bg-transparent hover:text-muted-foreground/50"
                             : isActive ? "text-primary font-medium bg-accent/50" : "text-muted-foreground hover:text-primary hover:bg-accent/30"
                     )}
-                    style={{ paddingLeft: `${level * 1.0 + 0.5}rem` }}
+                    style={{ paddingLeft: `${Math.min(level, MAX_TOC_INDENT_LEVEL) * 1.0 + 0.5}rem` }}
                     onClick={() => (isBroken ? showToast(BROKEN_TOC_LINK_MESSAGE, 'info') : onNavigate(item.href))}
                 >
                     <span className="truncate" lang={contentLang}>{item.label.trim()}</span>
