@@ -1306,6 +1306,11 @@ describe('regression: reader TOC arbitrates nav vs NCX like import', () => {
     expect((await engine.loadToc()).map((i) => i.label)).toEqual(flatNav.map((i) => i.label));
   });
 
+  it('parses an NCX handed back as text (non-archived request path)', async () => {
+    const { engine } = build({ book: makeBook({ load: vi.fn(async () => ncxXml) }) });
+    expect((await engine.loadToc()).map((i) => i.label)).toEqual(['One', 'Two']);
+  });
+
   it('T8: an empty nav yields to the NCX', async () => {
     const book = makeBook({ navigation: { toc: [], get: () => undefined, forEach: () => undefined } });
     const { engine } = build({ book });

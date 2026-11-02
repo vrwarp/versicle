@@ -117,9 +117,12 @@ export function repairTocLabels(
 
   // Labels the publisher already shows per spine file. A flat nav that
   // spells a part as three rows ("I" / subtitle / "Part 1: …", all into
-  // part1.xhtml) would otherwise borrow "Part 1: …" for the "I" row and show
-  // it twice; a junk label is better than a duplicate of its neighbour.
-  // Only publisher-written labels block a borrow — two junk entries into one
+  // part1.xhtml) would otherwise borrow "Part 1: …" for the "I" row (via
+  // the same-FILE rung) and show it twice; a junk label is better than a
+  // duplicate of its neighbour. Only the weaker rungs (same file, derived
+  // heading) are guarded: an alternative entry for the exact same
+  // `file#fragment` names that very anchor and is trusted, and only
+  // publisher-written labels block a borrow — two junk entries into one
   // file may still both receive the same real title.
   const labelKey = (href: string, label: string) =>
     `${splitFragment(href)[0]}\u0000${label.replace(/\s+/g, ' ').trim().toLowerCase()}`;
@@ -133,7 +136,7 @@ export function repairTocLabels(
     const [file, fragment] = splitFragment(item.href);
     const fresh = (label: string | undefined) =>
       label && !shown.has(labelKey(item.href, label)) ? label : undefined;
-    const direct = fresh(byIdHref.get(`${item.id}\u0000${item.href}`)) ?? fresh(byHref.get(item.href));
+    const direct = byIdHref.get(`${item.id}\u0000${item.href}`) ?? byHref.get(item.href);
     if (direct) return direct;
     if (fragment) return undefined;
     const sameFile = fresh(byFile.get(file));

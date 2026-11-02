@@ -283,7 +283,8 @@ export function useEpubReader(
         // Load navigation
         // The runner resumes the generator with the awaited yield value; the
         // navigation shape is asserted where it is received.
-        const nav = (yield newBook.loaded.navigation) as { toc?: NavigationItem[] } | undefined;
+        // Awaited for its side effect: book.navigation is set when it resolves.
+        yield newBook.loaded.navigation;
         // The engine resolves the publisher TOC's hrefs onto the spine (a nav
         // document outside the OPF folder otherwise yields dead links), and
         // junk labels (`*FIX_…`, bare "Chapter N") borrow a real one from the
@@ -291,14 +292,10 @@ export function useEpubReader(
         // (plan/epub-toc-cover-hardening.md §4.2).
         // loadToc() also arbitrates the nav against the NCX the way import
         // does (a flat class-styled nav loses to a nested NCX; an empty nav
-        // yields to a good one). It serves the engine's own navigation;
-        // the `nav` fallback covers an engine whose book exposes only the
-        // loaded promise.
-        const arbitratedToc = (yield newEngine.loadToc()) as NavigationItem[];
-        const publisherToc = arbitratedToc.length ? arbitratedToc : newEngine.normalizeToc(nav?.toc ?? [], 'raw');
+        // yields to a good one).
         const storedToc = optionsRef.current.metadata?.syntheticToc;
         const tocItems = repairTocLabels(
-          publisherToc,
+          (yield newEngine.loadToc()) as NavigationItem[],
           storedToc?.length ? [newEngine.normalizeToc(storedToc)] : [],
         );
         setToc(tocItems);

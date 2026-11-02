@@ -200,6 +200,15 @@ describe('regression: label repair never duplicates a neighbour into the same fi
     ]);
   });
 
+  it('trusts an exact-anchor match even when a sibling shows the same label', () => {
+    const sameLabels: NavigationItem[] = [
+      { id: 'a', href: 'chap03.html#chp12', label: 'Chapter 7' },
+      { id: 'b', href: 'chap03.html#chp17', label: 'Evangelical Assessment' },
+    ];
+    const out = repairTocLabels(sameLabels, [[{ id: 'n', href: 'chap03.html#chp12', label: 'Evangelical Assessment' }]]);
+    expect(out.map((i) => i.label)).toEqual(['Evangelical Assessment', 'Evangelical Assessment']);
+  });
+
   it('still repairs two junk entries into one file with the same real title', () => {
     // Only a label the publisher wrote blocks the borrow (the all-`*FIX_`
     // NCX keeps getting every label the nav has).

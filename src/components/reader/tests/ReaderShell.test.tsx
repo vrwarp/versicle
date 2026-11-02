@@ -112,6 +112,7 @@ describe('ReaderView', () => {
         }
       }),
       ready: Promise.resolve(),
+      navigation: { toc: [{ id: '1', label: 'Chapter 1', href: 'chap1.html' }] },
       loaded: {
         navigation: Promise.resolve({ toc: [{ id: '1', label: 'Chapter 1', href: 'chap1.html' }] })
       },
