@@ -229,6 +229,10 @@ export class FakeReaderEngine implements ReaderEngine {
     }));
   }
 
+  loadToc(): Promise<NavigationItem[]> {
+    return Promise.resolve(this.getToc());
+  }
+
   /** Flags entries whose href names no section; hrefs are already spine hrefs here. */
   normalizeToc(items: NavigationItem[]): NavigationItem[] {
     return items.map((item) => {
@@ -238,6 +242,11 @@ export class FakeReaderEngine implements ReaderEngine {
       else if (item.href) next.unresolved = true;
       return next;
     });
+  }
+
+  /** Fake sections have no anchors. */
+  anchorAt(): string | null {
+    return null;
   }
 
   resolveSection(cfiOrHref: string): ResolvedSection | null {

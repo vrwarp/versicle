@@ -175,4 +175,21 @@ describe('TOCPanel', () => {
             }
         });
     });
+
+    describe('regression: deep TOCs render every level', () => {
+        // Part › chapter › subtitle › section › subsection: the panel capped
+        // rendering at three levels, hiding every section of such a book.
+        const leaf = (depth: number): NavigationItem =>
+            depth === 5
+                ? { id: 'd5', href: 'c.xhtml#d5', label: 'Level 5' }
+                : { id: `d${depth}`, href: `c.xhtml#d${depth}`, label: `Level ${depth}`, subitems: [leaf(depth + 1)] };
+
+        it('shows and highlights entries below the third level, with capped indentation', () => {
+            render(<TOCPanel {...defaultProps} toc={[leaf(1)]} activeTocId="d5" />);
+            const deepest = screen.getByText('Level 5').closest('button');
+            expect(screen.getByText('Level 4')).toBeInTheDocument();
+            expect(deepest).toHaveClass('text-primary');
+            expect(deepest).toHaveStyle({ paddingLeft: '4.5rem' });
+        });
+    });
 });

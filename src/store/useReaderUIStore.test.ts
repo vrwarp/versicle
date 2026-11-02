@@ -98,4 +98,23 @@ describe('useReaderUIStore', () => {
       expect(useReaderUIStore.getState().compass).toEqual({ mode: 'idle' });
     });
   });
+
+  describe('regression: setCurrentSection keeps the sub-section anchor per section', () => {
+    it('sets, keeps (same section, no anchor given) and clears (new section) the anchor', () => {
+      const store = () => useReaderUIStore.getState();
+      act(() => store().setCurrentSection('Chapter 3', 'chap03.html', 'chp12'));
+      expect(store().currentSectionAnchor).toBe('chp12');
+      // TTS section updates carry no anchor.
+      act(() => store().setCurrentSection('Chapter 3', 'chap03.html'));
+      expect(store().currentSectionAnchor).toBe('chp12');
+      act(() => store().setCurrentSection('Chapter 3', 'chap03.html', null));
+      expect(store().currentSectionAnchor).toBeNull();
+      act(() => store().setCurrentSection('Chapter 3', 'chap03.html', 'chp13'));
+      act(() => store().setCurrentSection('Chapter 4', 'chap04.html'));
+      expect(store().currentSectionAnchor).toBeNull();
+      act(() => store().setCurrentSection('Chapter 4', 'chap04.html', 'chp25'));
+      act(() => store().reset());
+      expect(store().currentSectionAnchor).toBeNull();
+    });
+  });
 });

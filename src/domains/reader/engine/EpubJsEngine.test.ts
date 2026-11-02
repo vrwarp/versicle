@@ -13,6 +13,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Book, Contents, Rendition } from 'epubjs';
 import type { ReaderEngineEvent } from './ReaderEngine';
+import type { NavigationItem } from '~types/book';
+import { generateEpubCfi } from '@kernel/cfi';
 import { EpubJsEngine, createEpubJsBook } from './EpubJsEngine';
 
 const ePubFactory = vi.fn(() => ({ mocked: true }));
@@ -1236,5 +1238,167 @@ describe('regression: display() with nav-relative href', () => {
   it('getNavLabel() finds the label through the resolved TOC', () => {
     const { engine } = build({ book: makeNavBook() });
     expect(engine.getNavLabel('Text/CH1.xhtml')).toBe('Why I Wrote This Book');
+  });
+});
+
+describe('regression: reader TOC arbitrates nav vs NCX like import', () => {
+  /**
+   * epub.js parses only the nav document. A nav that is one flat list of
+   * siblings (hierarchy only in CSS classes) next to a nested NCX showed
+   * flat in the reader while import had stored the NCX tree.
+   */
+  const spineHrefs = ['c1.xhtml', 'c2.xhtml'];
+  const flatNav = [
+    { id: 'n1', href: 'c1.xhtml', label: 'One' },
+    { id: 'n2', href: 'c1.xhtml#s1', label: 'One, first section' },
+    { id: 'n3', href: 'c2.xhtml', label: 'Two' },
+    { id: 'n4', href: 'c2.xhtml#s2', label: 'Two, only section' },
+  ];
+  const ncxXml = `<?xml version="1.0"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><navMap>
+  <navPoint id="x1"><navLabel><text>One</text></navLabel><content src="c1.xhtml"/>
+    <navPoint id="x2"><navLabel><text>One, first section</text></navLabel><content src="c1.xhtml#s1"/></navPoint>
+  </navPoint>
+  <navPoint id="x3"><navLabel><text>Two</text></navLabel><content src="c2.xhtml"/>
+    <navPoint id="x4"><navLabel><text>Two, only section</text></navLabel><content src="c2.xhtml#s2"/></navPoint>
+  </navPoint>
+</navMap></ncx>`;
+  const makeBook = (over: Record<string, unknown> = {}) => {
+    const sections = spineHrefs.map((href, index) => ({ href, index }));
+    return {
+      container: { packagePath: 'content.opf' },
+      packaging: {
+        metadata: {},
+        navPath: 'nav.xhtml',
+        ncxPath: 'toc.ncx',
+        manifest: {
+          nav: { href: 'nav.xhtml', type: 'application/xhtml+xml', properties: ['nav'] },
+          ncx: { href: 'toc.ncx', type: 'application/x-dtbncx+xml', properties: [] },
+          ...Object.fromEntries(spineHrefs.map((href, i) => [`s${i}`, { href, type: 'application/xhtml+xml', properties: [] }])),
+        },
+      },
+      spine: {
+        get: (t: unknown) => (typeof t === 'string' ? sections.find((s) => s.href === t.split('#')[0]) : undefined),
+        each: (fn: (s: { href: string }) => void) => sections.forEach(fn),
+        items: sections,
+      },
+      navigation: { toc: flatNav, get: () => undefined, forEach: () => undefined },
+      load: vi.fn(async () => new DOMParser().parseFromString(ncxXml, 'application/xml')),
+      ...over,
+    };
+  };
+  const depth = (items: NavigationItem[]): number => items.reduce((m, i) => Math.max(m, 1 + depth(i.subitems ?? [])), 0);
+
+  it('loadToc() reads the NCX and prefers its tree over the flat nav', async () => {
+    const book = makeBook();
+    const { engine } = build({ book });
+    expect(depth(engine.getToc())).toBe(1);
+    const toc = await engine.loadToc();
+    expect(book.load).toHaveBeenCalledWith('toc.ncx');
+    expect(toc.map((i) => i.label)).toEqual(['One', 'Two']);
+    expect(toc[0].subitems?.map((i) => i.href)).toEqual(['c1.xhtml#s1']);
+    // getToc() (getNavLabel, title resolution) now serves the same tree.
+    expect(engine.getToc()).toBe(toc);
+  });
+
+  it('keeps the nav when the NCX cannot be read', async () => {
+    const { engine } = build({ book: makeBook({ load: vi.fn(async () => Promise.reject(new Error('missing'))) }) });
+    expect((await engine.loadToc()).map((i) => i.label)).toEqual(flatNav.map((i) => i.label));
+  });
+
+  it('parses an NCX handed back as text (non-archived request path)', async () => {
+    const { engine } = build({ book: makeBook({ load: vi.fn(async () => ncxXml) }) });
+    expect((await engine.loadToc()).map((i) => i.label)).toEqual(['One', 'Two']);
+  });
+
+  it('T8: an empty nav yields to the NCX', async () => {
+    const book = makeBook({ navigation: { toc: [], get: () => undefined, forEach: () => undefined } });
+    const { engine } = build({ book });
+    expect(engine.getToc()).toEqual([]);
+    const toc = await engine.loadToc();
+    expect(toc.map((i) => i.label)).toEqual(['One', 'Two']);
+    expect(engine.getToc()).toBe(toc);
+  });
+
+  it('does not read anything when the package has no NCX', async () => {
+    const book = makeBook();
+    book.packaging.ncxPath = '';
+    const { engine } = build({ book });
+    expect(depth(await engine.loadToc())).toBe(1);
+    expect(book.load).not.toHaveBeenCalled();
+  });
+});
+
+describe('regression: anchorAt() tracks the sub-section inside one long chapter', () => {
+  /**
+   * A chapter is one spine file whose sections are TOC fragments
+   * (`chap03.html#chp12`); the TOC highlight stayed on the chapter row for
+   * the whole file. anchorAt() names the last anchor at or before the
+   * reading position.
+   */
+  const html = `<html xmlns="http://www.w3.org/1999/xhtml"><body>
+    <h1>Chapter</h1><p>intro</p>
+    <h2 id="s1">First</h2><p>one</p><p>one more</p>
+    <h2 id="s2">Second</h2><p>two</p>
+  </body></html>`;
+  const base = 'epubcfi(/6/4!)';
+  // Point CFI at the start of a node's first text (kernel generator; the raw
+  // epub.js CFI class is quarantined to the kernel shim).
+  const pointCfi = (node: Node) => {
+    const range = node.ownerDocument!.createRange();
+    range.setStart(node.firstChild ?? node, 0);
+    range.collapse(true);
+    return generateEpubCfi(range, base);
+  };
+  const makeAnchorEngine = () => {
+    const doc = new DOMParser().parseFromString(html, 'application/xhtml+xml');
+    const contents = {
+      document: doc,
+      window,
+      sectionIndex: 1,
+      cfiFromNode: (node: Node) => pointCfi(node),
+    };
+    const sections = [{ href: 'c0.xhtml', index: 0 }, { href: 'chap03.html', index: 1 }];
+    const { engine } = build({
+      rendition: { getContents: () => [contents] },
+      book: { spine: { get: (t: unknown) => (typeof t === 'number' ? sections[t] : undefined), items: sections } },
+    });
+    const at = (selector: string) => pointCfi(doc.querySelector(selector)!);
+    return { engine, at, doc };
+  };
+
+  it('names the last anchor before the position, none before the first', () => {
+    const { engine, at } = makeAnchorEngine();
+    const fragments = ['s1', 's2'];
+    expect(engine.anchorAt('chap03.html', at('h1'), fragments)).toBeNull();
+    // Heading text that starts the page counts as reached.
+    expect(engine.anchorAt('chap03.html', at('#s1'), fragments)).toBe('s1');
+    expect(engine.anchorAt('chap03.html', at('p:nth-of-type(3)'), fragments)).toBe('s1');
+    expect(engine.anchorAt('chap03.html', at('#s2 + p'), fragments)).toBe('s2');
+    // TOC order does not matter; document order does.
+    expect(engine.anchorAt('chap03.html', at('#s2 + p'), ['s2', 's1'])).toBe('s2');
+  });
+
+  it('orders element CFIs (no text offset — epub.js cfiFromNode shape) against a point CFI', () => {
+    // body > h1, p, h2#s1, p, p, h2#s2, p → element steps /2 /4 /6 /8 /10 /12 /14
+    const { engine } = makeAnchorEngine();
+    const contents = (engine as unknown as { deps: { rendition: { getContents: () => Array<{ cfiFromNode: unknown }> } } }).deps
+      .rendition.getContents()[0];
+    const steps: Record<string, number> = { s1: 6, s2: 12 };
+    contents.cfiFromNode = (node: Node) => `epubcfi(${base.slice('epubcfi('.length, -1)}/4/${steps[(node as Element).id]})`;
+    const fragments = ['s1', 's2'];
+    // Reading the first paragraph (/4/4): no heading reached yet.
+    expect(engine.anchorAt('chap03.html', 'epubcfi(/6/4!/4/4/1:3)', fragments)).toBeNull();
+    // The h2 element itself (an ancestor CFI sorts before its text).
+    expect(engine.anchorAt('chap03.html', 'epubcfi(/6/4!/4/6/1:0)', fragments)).toBe('s1');
+    expect(engine.anchorAt('chap03.html', 'epubcfi(/6/4!/4/10/1:12)', fragments)).toBe('s1');
+    expect(engine.anchorAt('chap03.html', 'epubcfi(/6/4!/4/14/1:0)', fragments)).toBe('s2');
+  });
+
+  it('returns null for a section that is not rendered, unknown ids, or no fragments', () => {
+    const { engine, at } = makeAnchorEngine();
+    expect(engine.anchorAt('c0.xhtml', at('#s2 + p'), ['s1'])).toBeNull();
+    expect(engine.anchorAt('chap03.html', at('#s2 + p'), ['nope'])).toBeNull();
+    expect(engine.anchorAt('chap03.html', at('#s2 + p'), [])).toBeNull();
   });
 });

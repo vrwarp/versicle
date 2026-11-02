@@ -203,4 +203,32 @@ describe('useTocController', () => {
       expect(persistStoredToc).not.toHaveBeenCalled();
     });
   });
+
+  describe('regression: the active entry follows the sub-section inside one file', () => {
+    // A chapter is one spine file with its sections as TOC fragments; the
+    // highlight used to stay on the chapter row for the whole file.
+    const toc: NavigationItem[] = [
+      {
+        id: 'c3',
+        href: 'chap03.html',
+        label: 'Chapter 3',
+        subitems: [
+          { id: 's12', href: 'chap03.html#chp12', label: 'Evangelical Assessment' },
+          { id: 's13', href: 'chap03.html#chp13', label: 'The Doctrine of Revelation' },
+        ],
+      },
+    ];
+
+    it('picks the anchored entry, and falls back to the chapter without one', async () => {
+      useReaderUIStore.setState({ toc });
+      const { result } = renderHook(() => useTocController({ bookId: 'book-1', engine: null, bookMetadata: null }));
+      act(() => useReaderUIStore.getState().setCurrentSection('Chapter 3', 'chap03.html', 'chp13'));
+      expect(result.current.activeTocId).toBe('s13');
+      act(() => useReaderUIStore.getState().setCurrentSection('Chapter 3', 'chap03.html', null));
+      expect(result.current.activeTocId).toBe('c3');
+      // An anchor the TOC does not list keeps the chapter highlighted.
+      act(() => useReaderUIStore.getState().setCurrentSection('Chapter 3', 'chap03.html', 'unknown'));
+      expect(result.current.activeTocId).toBe('c3');
+    });
+  });
 });

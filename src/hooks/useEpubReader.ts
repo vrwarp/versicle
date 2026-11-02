@@ -44,7 +44,7 @@ import { runCancellable, CancellationError } from '@lib/cancellable-task-runner'
 import { createLogger } from '@lib/logger';
 import { measureSince } from '@lib/perf';
 import { usePreferencesStore } from '@store/usePreferencesStore';
-import { findTocItem } from '@lib/reader/titleResolver';
+import { findTocItem, tocFragmentsFor } from '@lib/reader/titleResolver';
 import { repairTocLabels } from '@lib/epub/structure/tocLabels';
 
 const logger = createLogger('useEpubReader');
@@ -68,7 +68,14 @@ export interface EpubReaderOptions {
   /** Whether to force font settings and override book styles. */
   shouldForceFont: boolean;
   /** Callback when location changes (ReaderEngine port location shape). */
-  onLocationChange?: (location: EngineLocation, percentage: number, chapterTitle: string, sectionId: string) => void;
+  /** `anchor`: the TOC fragment reached inside the section (see ReaderEngine.anchorAt). */
+  onLocationChange?: (
+    location: EngineLocation,
+    percentage: number,
+    chapterTitle: string,
+    sectionId: string,
+    anchor: string | null,
+  ) => void;
   /** Callback when TOC is loaded. */
   onTocLoaded?: (toc: NavigationItem[]) => void;
   /** Callback when text is selected. */
@@ -276,15 +283,19 @@ export function useEpubReader(
         // Load navigation
         // The runner resumes the generator with the awaited yield value; the
         // navigation shape is asserted where it is received.
-        const nav = (yield newBook.loaded.navigation) as { toc?: NavigationItem[] } | undefined;
+        // Awaited for its side effect: book.navigation is set when it resolves.
+        yield newBook.loaded.navigation;
         // The engine resolves the publisher TOC's hrefs onto the spine (a nav
         // document outside the OPF folder otherwise yields dead links), and
         // junk labels (`*FIX_…`, bare "Chapter N") borrow a real one from the
         // stored TOC for the same target when it has one
         // (plan/epub-toc-cover-hardening.md §4.2).
+        // loadToc() also arbitrates the nav against the NCX the way import
+        // does (a flat class-styled nav loses to a nested NCX; an empty nav
+        // yields to a good one).
         const storedToc = optionsRef.current.metadata?.syntheticToc;
         const tocItems = repairTocLabels(
-          newEngine.normalizeToc(nav?.toc ?? [], 'raw'),
+          (yield newEngine.loadToc()) as NavigationItem[],
           storedToc?.length ? [newEngine.normalizeToc(storedToc)] : [],
         );
         setToc(tocItems);
@@ -318,6 +329,7 @@ export function useEpubReader(
           const section = newEngine.resolveSection(location.sectionHref);
           let title = section ? (section.label || 'Chapter') : 'Unknown';
           const sectionId = section ? section.href : '';
+          let anchor: string | null = null;
 
           // Improve title resolution
           if (section) {
@@ -329,10 +341,17 @@ export function useEpubReader(
             if (betterItem) {
               title = betterItem.label;
             }
+            // A long chapter is one spine file with its sub-sections as
+            // TOC fragments; find the one being read for the highlight.
+            // Measured at the END of the visible range: a heading on screen
+            // counts as reached, so jumping to a section mid-page highlights
+            // it rather than the section whose tail opens the page.
+            const fragments = tocFragmentsFor(tocSource, section.href);
+            if (fragments.length) anchor = newEngine.anchorAt(section.href, location.endCfi, fragments);
           }
 
           if (optionsRef.current.onLocationChange) {
-            optionsRef.current.onLocationChange(location, location.percentage, title, sectionId);
+            optionsRef.current.onLocationChange(location, location.percentage, title, sectionId, anchor);
           }
         };
 

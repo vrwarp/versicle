@@ -45,6 +45,7 @@ export function useTocController(opts: {
 
   const toc = useReaderUIStore(state => state.toc);
   const currentSectionId = useReaderUIStore(state => state.currentSectionId);
+  const currentSectionAnchor = useReaderUIStore(state => state.currentSectionAnchor);
   const currentSectionTitle = useReaderUIStore(state => state.currentSectionTitle);
   const setCurrentSection = useReaderUIStore(state => state.setCurrentSection);
 
@@ -66,13 +67,15 @@ export function useTocController(opts: {
     return tocEquals(healed, storedToc) ? storedToc : healed;
   }, [engine, toc, storedToc]);
 
-  // Determine active TOC item based on currentSectionId (href)
+  // Determine active TOC item based on currentSectionId (href), refined to
+  // the sub-section entry (`file#anchor`) the reader has reached.
   const activeTocId = useMemo(() => {
     if (!currentSectionId) return null;
     const currentToc = useSyntheticToc ? syntheticToc : toc;
-    const resolvedItem = findTocItem(currentToc, currentSectionId);
+    const anchored = currentSectionAnchor ? findTocItem(currentToc, `${currentSectionId}#${currentSectionAnchor}`) : null;
+    const resolvedItem = anchored ?? findTocItem(currentToc, currentSectionId);
     return resolvedItem ? resolvedItem.id : null;
-  }, [toc, syntheticToc, useSyntheticToc, currentSectionId]);
+  }, [toc, syntheticToc, useSyntheticToc, currentSectionId, currentSectionAnchor]);
 
   // Keep currentSectionTitle in sync with the active TOC item when preference changes
   useEffect(() => {

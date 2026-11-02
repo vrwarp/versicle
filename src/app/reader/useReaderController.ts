@@ -360,7 +360,7 @@ export function useReaderController(
     initialLocation,
     getInitialLocation,
     metadata: readerMetadata,
-    onLocationChange: (location, percentage, title, sectionId) => {
+    onLocationChange: (location, percentage, title, sectionId, anchor) => {
       // Initialize the recorder's previous-location tracker (runs even when
       // the import-jump check skips the save).
       recorderRef.current?.prime(location, Date.now());
@@ -374,7 +374,7 @@ export function useReaderController(
         // Store not yet loaded: keep the cosmetic section title current;
         // recording is skipped (writes are also choked at the recorder
         // deps, which covers the unmount flushSync).
-        setCurrentSection(title, sectionId);
+        setCurrentSection(title, sectionId, anchor);
         return;
       }
 
@@ -396,7 +396,7 @@ export function useReaderController(
       });
       if (recorded === false) return;
 
-      setCurrentSection(title, sectionId);
+      setCurrentSection(title, sectionId, anchor);
     },
     onTocLoaded: (newToc) => useReaderUIStore.getState().setToc(newToc),
     onSelection: (cfiRange, range, _contents) => {

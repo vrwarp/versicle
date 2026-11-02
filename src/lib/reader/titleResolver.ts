@@ -53,6 +53,28 @@ export const findTocItem = (toc: NavigationItem[], key: string | undefined | nul
 };
 
 /**
+ * The fragment ids of every TOC entry that points INTO `sectionHref`
+ * (`chap03.html#chp12` → `chp12`), in TOC order — the anchors the reader
+ * tracks to highlight the sub-section being read.
+ */
+export const tocFragmentsFor = (toc: NavigationItem[], sectionHref: string | undefined | null): string[] => {
+  const out: string[] = [];
+  if (!sectionHref) return out;
+  const visit = (items: NavigationItem[]) => {
+    for (const item of items) {
+      const hash = item.href?.indexOf('#') ?? -1;
+      if (!item.unresolved && hash > 0 && matchPaths(item.href, sectionHref)) {
+        const fragment = item.href.slice(hash + 1);
+        if (fragment && !out.includes(fragment)) out.push(fragment);
+      }
+      if (item.subitems?.length) visit(item.subitems);
+    }
+  };
+  visit(toc);
+  return out;
+};
+
+/**
  * Centralizes preference evaluation:
  * Returns the useSyntheticToc preference if explicitly defined,
  * otherwise defaults to true if syntheticToc items exist.
