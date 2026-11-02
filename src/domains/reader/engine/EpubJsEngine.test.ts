@@ -1306,6 +1306,15 @@ describe('regression: reader TOC arbitrates nav vs NCX like import', () => {
     expect((await engine.loadToc()).map((i) => i.label)).toEqual(flatNav.map((i) => i.label));
   });
 
+  it('T8: an empty nav yields to the NCX', async () => {
+    const book = makeBook({ navigation: { toc: [], get: () => undefined, forEach: () => undefined } });
+    const { engine } = build({ book });
+    expect(engine.getToc()).toEqual([]);
+    const toc = await engine.loadToc();
+    expect(toc.map((i) => i.label)).toEqual(['One', 'Two']);
+    expect(engine.getToc()).toBe(toc);
+  });
+
   it('does not read anything when the package has no NCX', async () => {
     const book = makeBook();
     book.packaging.ncxPath = '';
@@ -1363,6 +1372,22 @@ describe('regression: anchorAt() tracks the sub-section inside one long chapter'
     expect(engine.anchorAt('chap03.html', at('#s2 + p'), fragments)).toBe('s2');
     // TOC order does not matter; document order does.
     expect(engine.anchorAt('chap03.html', at('#s2 + p'), ['s2', 's1'])).toBe('s2');
+  });
+
+  it('orders element CFIs (no text offset — epub.js cfiFromNode shape) against a point CFI', () => {
+    // body > h1, p, h2#s1, p, p, h2#s2, p → element steps /2 /4 /6 /8 /10 /12 /14
+    const { engine } = makeAnchorEngine();
+    const contents = (engine as unknown as { deps: { rendition: { getContents: () => Array<{ cfiFromNode: unknown }> } } }).deps
+      .rendition.getContents()[0];
+    const steps: Record<string, number> = { s1: 6, s2: 12 };
+    contents.cfiFromNode = (node: Node) => `epubcfi(${base.slice('epubcfi('.length, -1)}/4/${steps[(node as Element).id]})`;
+    const fragments = ['s1', 's2'];
+    // Reading the first paragraph (/4/4): no heading reached yet.
+    expect(engine.anchorAt('chap03.html', 'epubcfi(/6/4!/4/4/1:3)', fragments)).toBeNull();
+    // The h2 element itself (an ancestor CFI sorts before its text).
+    expect(engine.anchorAt('chap03.html', 'epubcfi(/6/4!/4/6/1:0)', fragments)).toBe('s1');
+    expect(engine.anchorAt('chap03.html', 'epubcfi(/6/4!/4/10/1:12)', fragments)).toBe('s1');
+    expect(engine.anchorAt('chap03.html', 'epubcfi(/6/4!/4/14/1:0)', fragments)).toBe('s2');
   });
 
   it('returns null for a section that is not rendered, unknown ids, or no fragments', () => {

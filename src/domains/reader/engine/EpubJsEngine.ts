@@ -248,9 +248,10 @@ export class EpubJsEngine implements ReaderEngine {
    * epub.js only ever parses ONE TOC file — the nav document when the
    * package has one. Import arbitrates nav against NCX
    * (`chooseTocSource`), so without this the reader could show a flat nav
-   * while the library stored the nested NCX. When the package has both,
-   * read the NCX too and run the same arbitration; any failure keeps the
-   * nav. Once resolved, getToc() returns the result.
+   * while the library stored the nested NCX — or nothing at all for an
+   * empty nav next to a good NCX. When the package has both, read the NCX
+   * too and run the same arbitration; any failure keeps the nav. Once
+   * resolved, getToc() returns the result.
    */
   async loadToc(): Promise<NavigationItem[]> {
     const raw: NavigationItem[] = this.deps.book.navigation?.toc || [];
@@ -258,7 +259,7 @@ export class EpubJsEngine implements ReaderEngine {
     if (this.arbitratedToc?.source === raw) return primary;
     const index = this.getPackageIndex();
     const packaging = bookInternals(this.deps.book).packaging;
-    if (!index || !packaging?.navPath || !packaging.ncxPath || primary.length === 0) return primary;
+    if (!index || !packaging?.navPath || !packaging.ncxPath) return primary;
 
     let ncx: NavigationItem[];
     try {
