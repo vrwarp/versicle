@@ -115,10 +115,12 @@ export function repairTocLabels(
     }
   }
 
-  // Labels already shown per spine file. A flat nav that spells a part as
-  // three rows ("I" / subtitle / "Part 1: …", all into part1.xhtml) would
-  // otherwise borrow "Part 1: …" for the "I" row and show it twice; a junk
-  // label is better than a duplicate of its neighbour.
+  // Labels the publisher already shows per spine file. A flat nav that
+  // spells a part as three rows ("I" / subtitle / "Part 1: …", all into
+  // part1.xhtml) would otherwise borrow "Part 1: …" for the "I" row and show
+  // it twice; a junk label is better than a duplicate of its neighbour.
+  // Only publisher-written labels block a borrow — two junk entries into one
+  // file may still both receive the same real title.
   const labelKey = (href: string, label: string) =>
     `${splitFragment(href)[0]}\u0000${label.replace(/\s+/g, ' ').trim().toLowerCase()}`;
   const shown = new Set<string>();
@@ -146,7 +148,6 @@ export function repairTocLabels(
   const walk = (list: NavigationItem[]): NavigationItem[] =>
     list.map((item) => {
       const better = junk.has(item) ? pick(item) : undefined;
-      if (better) shown.add(labelKey(item.href, better));
       const subitems = item.subitems ? walk(item.subitems) : undefined;
       if (!better && subitems === item.subitems) return item;
       const next: NavigationItem = { ...item, label: better ?? item.label };

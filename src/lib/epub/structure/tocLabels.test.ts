@@ -200,12 +200,14 @@ describe('regression: label repair never duplicates a neighbour into the same fi
     ]);
   });
 
-  it('does not hand one borrowed label to two junk entries of the same file', () => {
+  it('still repairs two junk entries into one file with the same real title', () => {
+    // Only a label the publisher wrote blocks the borrow (the all-`*FIX_`
+    // NCX keeps getting every label the nav has).
     const twoJunk: NavigationItem[] = [
       { id: 'a', href: 'c.xhtml', label: 'Chapter 3' },
       { id: 'b', href: 'c.xhtml', label: '3' },
     ];
     const out = repairTocLabels(twoJunk, [[{ id: 'n', href: 'c.xhtml', label: 'The Long Road' }]]);
-    expect(out.map((i) => i.label)).toEqual(['The Long Road', '3']);
+    expect(out.map((i) => i.label)).toEqual(['The Long Road', 'The Long Road']);
   });
 });
