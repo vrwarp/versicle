@@ -692,7 +692,15 @@ export class PlaybackController implements TtsEngine {
     jumpTo(index: number) {
         return this.enqueue('jumpTo', async () => {
             if (this.stateManager.jumpTo(index)) {
-                await this.stopInternal();
+                if (this.status === 'playing' || this.status === 'loading') {
+                    // Hop sentences inside the live session (like prev() and
+                    // setSpeed()): a transient 'stopped' would hand the arrow
+                    // keys back to page turns mid-jump, so a quick second
+                    // ArrowRight turned the page instead of skipping again.
+                    this.providerManager.stop();
+                } else {
+                    await this.stopInternal();
+                }
                 await this.playInternal();
             }
         });

@@ -208,6 +208,31 @@ describe('PlaybackController', () => {
         });
     });
 
+    describe('regression: jumpTo while playing stays in the session', () => {
+        // The 'tts-active' shortcut scope is live only while playing|paused. A
+        // jump that flashed 'stopped' handed a quick second ArrowRight to the
+        // reader's page turn, so the sentence skip was lost.
+        it('never publishes a non-playing status and both quick jumps land', async () => {
+            const { svc, backend } = makeEngine();
+            await svc.setQueue([
+                { text: 'One', cfi: '1' }, { text: 'Two', cfi: '2' }, { text: 'Three', cfi: '3' },
+            ]);
+            await svc.play();
+            backend.fireStart();
+            await vi.waitFor(() => expect(svc.snapshot().status).toBe('playing'));
+
+            const statuses: string[] = [];
+            const unsubscribe = svc.subscribe((s) => { statuses.push(s.status); });
+            void svc.jumpTo(1);
+            await svc.jumpTo(2);
+            unsubscribe();
+
+            expect(statuses.filter((s) => s !== 'playing')).toEqual([]);
+            expect(svc.snapshot().index).toBe(2);
+            expect(backend.played.at(-1)!.text).toBe('Three');
+        });
+    });
+
     describe('session persistence (the SessionStore single owner; moved from QueueModel.test)', () => {
         it('persists queue content once per queueId; index moves do not re-save; masks do', async () => {
             const ctx = new FakeEngineContext();
