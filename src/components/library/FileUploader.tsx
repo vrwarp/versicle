@@ -44,7 +44,14 @@ export const FileUploader: React.FC = () => {
       const isValid = await validateZipSignature(file);
       if (isValid) {
         try {
-          await controller.importFile(file);
+          const result = await controller.importFile(file);
+          const bookId = 'bookId' in result ? result.bookId : undefined;
+          showToast(
+            'Book imported successfully',
+            'success',
+            bookId ? 5000 : undefined,
+            bookId ? { label: 'common.open', onAction: () => navigate(`/read/${bookId}`) } : undefined,
+          );
         } catch (error) {
           if (error instanceof DuplicateBookError) {
             setDuplicateQueue(prev => [...prev, file]);
@@ -276,8 +283,14 @@ export const FileUploader: React.FC = () => {
         onConfirm={async () => {
           if (!currentDuplicate) return;
           try {
-            await controller.replaceFile(currentDuplicate);
-            showToast("Book replaced successfully", "success");
+            const result = await controller.replaceFile(currentDuplicate);
+            const bookId = 'bookId' in result ? result.bookId : undefined;
+            showToast(
+              "Book replaced successfully",
+              "success",
+              bookId ? 5000 : undefined,
+              bookId ? { label: 'common.open', onAction: () => navigate(`/read/${bookId}`) } : undefined,
+            );
           } catch (error) {
             showToast(`Replace failed: ${presentError(error)}`, 'error');
             throw error;

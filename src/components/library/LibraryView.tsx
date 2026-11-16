@@ -252,8 +252,14 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      controller.importFile(file).then(() => {
-        showToast("Book imported successfully", "success");
+      controller.importFile(file).then((result) => {
+        const bookId = 'bookId' in result ? result.bookId : undefined;
+        showToast(
+          "Book imported successfully",
+          "success",
+          bookId ? 5000 : undefined,
+          bookId ? { label: 'common.open', onAction: () => navigate(`/read/${bookId}`) } : undefined,
+        );
       }).catch((err) => {
         if (err instanceof DuplicateBookError) {
           setDuplicateQueue(prev => [...prev, file]);
@@ -271,8 +277,14 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
   const handleConfirmReplace = async () => {
     if (!currentDuplicate) return;
     try {
-      await controller.replaceFile(currentDuplicate);
-      showToast("Book replaced successfully", "success");
+      const result = await controller.replaceFile(currentDuplicate);
+      const bookId = 'bookId' in result ? result.bookId : undefined;
+      showToast(
+        "Book replaced successfully",
+        "success",
+        bookId ? 5000 : undefined,
+        bookId ? { label: 'common.open', onAction: () => navigate(`/read/${bookId}`) } : undefined,
+      );
     } catch (e) {
       showToast(`Replace failed: ${presentError(e)}`, "error");
       throw e;
@@ -311,8 +323,14 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
         return;
       }
 
-      controller.importFile(file).then(() => {
-        showToast("Book imported successfully", "success", 5000);
+      controller.importFile(file).then((result) => {
+        const bookId = 'bookId' in result ? result.bookId : undefined;
+        showToast(
+          "Book imported successfully",
+          "success",
+          5000,
+          bookId ? { label: 'common.open', onAction: () => navigate(`/read/${bookId}`) } : undefined,
+        );
       }).catch((err) => {
         if (err instanceof DuplicateBookError) {
           setDuplicateQueue(prev => [...prev, file]);
@@ -321,7 +339,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
         }
       });
     }
-  }, [controller, showToast]);
+  }, [controller, navigate, showToast]);
 
   const triggerFileUpload = () => {
     fileInputRef.current?.click();

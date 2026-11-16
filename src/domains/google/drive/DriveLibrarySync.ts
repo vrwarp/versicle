@@ -90,17 +90,26 @@ export class DriveLibrarySync {
     return new File([blob], fileName, { type: 'application/epub+zip' });
   }
 
-  /** Download a Drive file and import it into the library. */
+  /** Download a Drive file and import it into the library, returning its bookId when available. */
   async importFile(
     fileId: string,
     fileName: string,
     options?: { overwrite?: boolean },
     opts: DriveRequestOptions = { interactive: true },
-  ): Promise<void> {
+  ): Promise<string | undefined> {
     try {
       const file = await this.downloadAsFile(fileId, fileName, opts);
       this.log.info(`Importing file to library: ${fileName}`);
-      await this.ports.library.addBook(file, options);
+      const result = await this.ports.library.addBook(file, options);
+      if (
+        result &&
+        typeof result === 'object' &&
+        'bookId' in result &&
+        typeof (result as { bookId?: unknown }).bookId === 'string'
+      ) {
+        return (result as { bookId: string }).bookId;
+      }
+      return undefined;
     } catch (error) {
       if (error instanceof GoogleAuthRequiredError) {
         this.log.warn(`Failed to import file ${fileName}: ${error.message}`);

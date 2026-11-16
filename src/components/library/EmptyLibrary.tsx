@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLibraryStore } from '@store/useLibraryStore';
 import { useToastStore } from '@store/useToastStore';
 import { useImportController } from '@app/library/useImportController';
@@ -26,6 +27,7 @@ interface EmptyLibraryProps {
  * @returns A React component for the empty library state.
  */
 export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
+  const navigate = useNavigate();
   const isImporting = useLibraryStore((state) => state.isImporting);
   const controller = useImportController();
   const showToast = useToastStore((state) => state.showToast);
@@ -36,8 +38,14 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
       if (!response.ok) throw new Error('Failed to load demo book');
       const blob = await response.blob();
       const file = new File([blob], 'Alice in Wonderland.epub', { type: 'application/epub+zip' });
-      await controller.importFile(file);
-      showToast('Demo book loaded successfully', 'success');
+      const result = await controller.importFile(file);
+      const bookId = 'bookId' in result ? result.bookId : undefined;
+      showToast(
+        'Demo book loaded successfully',
+        'success',
+        bookId ? 5000 : undefined,
+        bookId ? { label: 'common.open', onAction: () => navigate(`/read/${bookId}`) } : undefined,
+      );
     } catch (error) {
       logger.error('Error loading demo book:', error);
       showToast('Failed to load demo book', 'error');
