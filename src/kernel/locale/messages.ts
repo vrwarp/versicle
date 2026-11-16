@@ -89,6 +89,7 @@ export const messages = {
   'common.delete': 'Delete',
   'common.continue': 'Continue',
   'common.reload': 'Reload',
+  'common.open': 'Open',
 
   // --- settings shell (registry labels) ---------------------------------
   'settings.tab.general': 'General',

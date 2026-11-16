@@ -213,6 +213,11 @@ describe('FileUploader', () => {
     });
 
     // 6. Expect toast success
-    expect(mockShowToast).toHaveBeenCalledWith("Book replaced successfully", "success");
+    expect(mockShowToast).toHaveBeenCalledWith(
+      "Book replaced successfully",
+      "success",
+      5000,
+      { label: 'common.open', onAction: expect.any(Function) },
+    );
   });
 });

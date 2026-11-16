@@ -147,6 +147,12 @@ describe('DriveLibrarySync', () => {
       expect(options).toEqual({ overwrite: true });
     });
 
+    it('returns the imported bookId when addBook provides one', async () => {
+      const { sync, addBook } = makeHarness();
+      addBook.mockResolvedValue({ status: 'imported', bookId: 'book-123' });
+      await expect(sync.importFile('file-1', 'New.epub')).resolves.toBe('book-123');
+    });
+
     it('rethrows download errors', async () => {
       const { sync, client } = makeHarness();
       client.downloadFile.mockRejectedValue(new Error('File content not found'));

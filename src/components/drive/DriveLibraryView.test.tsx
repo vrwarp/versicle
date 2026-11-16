@@ -294,8 +294,9 @@ describe('DriveLibraryView', () => {
   });
 
   describe('import', () => {
-    it('imports a file interactively and reports success', async () => {
+    it('imports a file interactively and reports success with an Open action', async () => {
       setDriveState({ index: makeFiles(1) });
+      driveSync.importFile.mockResolvedValue('book-000');
       renderShelf('list');
 
       fireEvent.click(screen.getByTestId('drive-import-file-0'));
@@ -309,7 +310,12 @@ describe('DriveLibraryView', () => {
         );
       });
       await waitFor(() => {
-        expect(mockShowToast).toHaveBeenCalledWith('Imported "Book 000.epub"', 'success');
+        expect(mockShowToast).toHaveBeenCalledWith(
+          'Imported "Book 000.epub"',
+          'success',
+          5000,
+          { label: 'common.open', onAction: expect.any(Function) },
+        );
       });
     });
 
@@ -398,7 +404,7 @@ describe('DriveLibraryView', () => {
         fireEvent.click(screen.getByTestId('drive-import-file-0'));
         const confirm = await screen.findByTestId('confirm-replace');
 
-        driveSync.importFile.mockResolvedValue(undefined);
+        driveSync.importFile.mockResolvedValue('b1');
         fireEvent.click(confirm);
 
         await waitFor(() => {
@@ -410,7 +416,12 @@ describe('DriveLibraryView', () => {
           );
         });
         await waitFor(() => {
-          expect(mockShowToast).toHaveBeenCalledWith('Replaced "Book 000.epub"', 'success');
+          expect(mockShowToast).toHaveBeenCalledWith(
+            'Replaced "Book 000.epub"',
+            'success',
+            5000,
+            { label: 'common.open', onAction: expect.any(Function) },
+          );
         });
       });
 

@@ -150,15 +150,17 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
     setImportingId(file.id);
     try {
       // User gesture: interactive token acquisition.
-      await getDriveLibrarySync().importFile(file.id, file.name, options, { interactive: true });
+      const bookId = await getDriveLibrarySync().importFile(file.id, file.name, options, { interactive: true });
       showToast(
         options?.overwrite ? `Replaced "${file.name}"` : `Imported "${file.name}"`,
         'success',
+        bookId ? 5000 : undefined,
+        bookId ? { label: 'common.open', onAction: () => navigate(`/read/${bookId}`) } : undefined,
       );
     } finally {
       setImportingId(null);
     }
-  }, [showToast]);
+  }, [navigate, showToast]);
 
   /** Toast for a genuinely failed import/replace (never for a duplicate). */
   const reportFailure = useCallback((verb: 'import' | 'replace', file: DriveFileIndex, error: unknown) => {

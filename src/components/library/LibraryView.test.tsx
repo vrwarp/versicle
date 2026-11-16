@@ -284,7 +284,12 @@ describe('LibraryView', () => {
 
         await waitFor(() => {
             expect(mockImportFile).toHaveBeenCalledWith(file);
-            expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('imported successfully'), 'success', 5000);
+            expect(mockShowToast).toHaveBeenCalledWith(
+                expect.stringContaining('imported successfully'),
+                'success',
+                5000,
+                { label: 'common.open', onAction: expect.any(Function) },
+            );
         });
     });
 

@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EmptyLibrary } from './EmptyLibrary';
 import { useLibraryStore } from '@store/useLibraryStore';
@@ -54,7 +55,7 @@ describe('EmptyLibrary', () => {
   });
 
   it('renders correctly', () => {
-    render(<EmptyLibrary onImport={vi.fn()} />);
+    render(<EmptyLibrary onImport={vi.fn()} />, { wrapper: MemoryRouter });
     expect(screen.getByText('Your library is empty')).toBeInTheDocument();
     expect(screen.getByTestId('file-uploader-mock')).toBeInTheDocument();
     expect(screen.getByText(/Load Demo Book/)).toBeInTheDocument();
@@ -63,7 +64,7 @@ describe('EmptyLibrary', () => {
 
   it('calls onImport when Browse Files button is clicked', () => {
     const mockOnImport = vi.fn();
-    render(<EmptyLibrary onImport={mockOnImport} />);
+    render(<EmptyLibrary onImport={mockOnImport} />, { wrapper: MemoryRouter });
 
     fireEvent.click(screen.getByText('Browse Files'));
 
@@ -77,12 +78,17 @@ describe('EmptyLibrary', () => {
         blob: () => Promise.resolve(new Blob(['dummy'], { type: 'application/epub+zip' })),
       });
 
-      render(<EmptyLibrary onImport={vi.fn()} />);
+      render(<EmptyLibrary onImport={vi.fn()} />, { wrapper: MemoryRouter });
       fireEvent.click(screen.getByText(/Load Demo Book/));
 
       await waitFor(() => {
           expect(mockAddBook).toHaveBeenCalled();
-          expect(mockShowToast).toHaveBeenCalledWith('Demo book loaded successfully', 'success');
+          expect(mockShowToast).toHaveBeenCalledWith(
+            'Demo book loaded successfully',
+            'success',
+            5000,
+            { label: 'common.open', onAction: expect.any(Function) },
+          );
       });
   });
 
@@ -93,7 +99,7 @@ describe('EmptyLibrary', () => {
       ok: false,
     });
 
-    render(<EmptyLibrary onImport={vi.fn()} />);
+    render(<EmptyLibrary onImport={vi.fn()} />, { wrapper: MemoryRouter });
     fireEvent.click(screen.getByText(/Load Demo Book/));
 
     await waitFor(() => {
@@ -109,7 +115,7 @@ describe('EmptyLibrary', () => {
       return selector ? selector(state) : state;
     });
 
-    render(<EmptyLibrary onImport={vi.fn()} />);
+    render(<EmptyLibrary onImport={vi.fn()} />, { wrapper: MemoryRouter });
     expect(screen.getAllByText('Loading...')[0]).toBeInTheDocument();
     // Verify spinner is present (Loader2 usually renders an svg with specific class)
     const button = screen.getAllByText('Loading...')[0].closest('button');
