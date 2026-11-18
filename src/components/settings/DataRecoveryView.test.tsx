@@ -60,4 +60,19 @@ describe('DataRecoveryView', () => {
         });
         expect(screen.getByText('Download JSON')).toBeDisabled();
     });
+
+    describe('regression: single spinner while reading local database snapshot', () => {
+        it('spins only the Load Data button and renders status text in the preview pane', async () => {
+            readSnapshotMock.mockReturnValue(new Promise(() => {}));
+            const { container } = render(<DataRecoveryView />);
+
+            fireEvent.click(screen.getByText('Load Data'));
+
+            await waitFor(() => {
+                expect(screen.getByRole('status')).toHaveTextContent('Reading local database...');
+            });
+            expect(container.querySelectorAll('.animate-spin')).toHaveLength(1);
+        });
+    });
 });
+

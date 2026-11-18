@@ -36,10 +36,12 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
         interactive: true,
         priority: 'interactive',
     });
-    const [isCloudRestoring, setIsCloudRestoring] = React.useState(false);
-    const [isReconnecting, setIsReconnecting] = React.useState(false);
+    const [activeAction, setActiveAction] = React.useState<'file' | 'cloud-download' | 'cloud-restore' | 'reconnect' | null>(null);
     const [reconnectError, setReconnectError] = React.useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const isLocalRestoring = activeAction === 'file' || (isRestoring && activeAction === null);
+    const isBusy = isRestoring || activeAction !== null;
 
     React.useEffect(() => {
         if (open && book) {
@@ -55,14 +57,19 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            await onRestore(file);
-        }
         if (fileInputRef.current) fileInputRef.current.value = '';
+        if (file) {
+            setActiveAction('file');
+            try {
+                await onRestore(file);
+            } finally {
+                setActiveAction(null);
+            }
+        }
     };
 
     const handleReconnect = async () => {
-        setIsReconnecting(true);
+        setActiveAction('reconnect');
         setReconnectError(null);
         try {
             await getGoogleAuthClient().connect('drive');
@@ -70,7 +77,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
             console.error('Failed to reconnect Drive:', error);
             setReconnectError('Failed to reconnect. Please try again.');
         } finally {
-            setIsReconnecting(false);
+            setActiveAction(null);
         }
     };
 
@@ -81,7 +88,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
             return;
         }
 
-        setIsCloudRestoring(true);
+        setActiveAction('cloud-download');
         setReconnectError(null);
         try {
             // Download the cloud copy, then restore it onto THIS ghost via the
@@ -93,6 +100,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
             // leave the ghost unresolved.
             // User gesture: interactive token acquisition.
             const file = await getDriveLibrarySync().downloadAsFile(cloudMatch.id, cloudMatch.name, { interactive: true });
+            setActiveAction('cloud-restore');
             await onRestore(file);
         } catch (error) {
             console.error(error);
@@ -100,11 +108,9 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
             // failures (which happen before onRestore) inline as a fallback.
             setReconnectError('Failed to restore from cloud.');
         } finally {
-            setIsCloudRestoring(false);
+            setActiveAction(null);
         }
     };
-
-    const isBusy = isRestoring || isCloudRestoring;
 
     return (
         <Dialog
@@ -127,10 +133,10 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                     <Button 
                         variant={cloudMatch ? "outline" : "default"} 
                         onClick={handleRestoreClick} 
-                        disabled={isBusy || isReconnecting} 
+                        disabled={isBusy} 
                         className="w-full sm:w-auto"
                     >
-                        {isRestoring ? (
+                        {isLocalRestoring ? (
                             <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                                 <span className="sr-only" aria-live="polite">Restoring...</span>
@@ -147,16 +153,22 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                         <Button
                             variant="default"
                             onClick={isDriveConnected ? handleCloudRestore : handleReconnect}
-                            disabled={isBusy || isReconnecting}
+                            disabled={isBusy}
                             className="w-full sm:w-auto"
                         >
-                            {isCloudRestoring ? (
+                            {activeAction === 'cloud-download' ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                                     <span className="sr-only" aria-live="polite">Downloading...</span>
                                     <span aria-hidden="true">Downloading...</span>
                                 </>
-                            ) : isReconnecting ? (
+                            ) : activeAction === 'cloud-restore' ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                                    <span className="sr-only" aria-live="polite">Restoring...</span>
+                                    <span aria-hidden="true">Restoring...</span>
+                                </>
+                            ) : activeAction === 'reconnect' ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                                     <span aria-hidden="true">Connecting...</span>
@@ -206,8 +218,11 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                                     className="h-14 w-10 rounded object-cover shrink-0 border"
                                 />
                             ) : cloudPreview.loading ? (
-                                <div className="h-14 w-10 rounded bg-muted flex items-center justify-center shrink-0 border">
-                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+                                <div
+                                    className="h-14 w-10 rounded bg-muted animate-pulse flex items-center justify-center shrink-0 border"
+                                    data-testid="cloud-preview-skeleton"
+                                >
+                                    <Book className="h-4 w-4 text-muted-foreground/40" aria-hidden="true" />
                                 </div>
                             ) : cloudPreview.title ? (
                                 <div className="h-14 w-10 rounded bg-muted flex items-center justify-center shrink-0 border">

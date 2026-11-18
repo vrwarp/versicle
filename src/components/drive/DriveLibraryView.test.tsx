@@ -591,4 +591,41 @@ describe('DriveLibraryView', () => {
       });
     });
   });
+
+  describe('regression: zero idle shelf spinners and single visible import spinner', () => {
+    it('renders zero spinners across uncached cards and scroll sentinel while previews load', () => {
+      metadataService.getPreview.mockReturnValue(new Promise(() => {}));
+      setDriveState({ index: makeFiles(60) });
+
+      const { container } = renderShelf('grid');
+
+      // Trigger intersection on cards so useDrivePreview enters loading=true.
+      act(() => scrollIntoView((el) => !isSentinel(el)));
+
+      expect(screen.getAllByTestId(/^drive-card-/)).toHaveLength(24);
+      expect(screen.getByTestId('drive-scroll-sentinel')).toHaveTextContent(
+        'Showing 24 of 60 files',
+      );
+      expect(container.querySelectorAll('.animate-spin')).toHaveLength(0);
+    });
+
+    it('renders exactly one visible spinner on the clicked card while importing', async () => {
+      metadataService.getPreview.mockReturnValue(new Promise(() => {}));
+      driveSync.importFile.mockReturnValue(new Promise(() => {}));
+      setDriveState({ index: makeFiles(3) });
+
+      const { container } = renderShelf('grid');
+      act(() => scrollIntoView((el) => !isSentinel(el)));
+
+      const importBtn = screen.getByTestId('drive-import-file-0');
+      fireEvent.click(importBtn);
+
+      await waitFor(() => {
+        expect(container.querySelectorAll('.animate-spin')).toHaveLength(1);
+      });
+      // Desktop grid wrapper stays visible (opacity-100) while importing without hover.
+      expect(importBtn.parentElement).toHaveClass('opacity-100');
+    });
+  });
 });
+

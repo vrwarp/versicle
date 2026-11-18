@@ -92,7 +92,7 @@ export const DataRecoveryView: React.FC = () => {
                 <div className="flex space-x-2">
                     <Button onClick={loadData} disabled={status === 'loading'} size="sm" variant="outline">
                         <RefreshCw className={`h-4 w-4 mr-2 ${status === 'loading' ? 'animate-spin' : ''}`} />
-                        {status === 'success' ? 'Reload Data' : 'Load Data'}
+                        {status === 'loading' ? 'Loading...' : status === 'success' ? 'Reload Data' : 'Load Data'}
                     </Button>
                     <Button onClick={handleDownload} disabled={!rawData} size="sm">
                         <Download className="h-4 w-4 mr-2" />
@@ -118,8 +118,8 @@ export const DataRecoveryView: React.FC = () => {
                         <p className="text-xs">This operation connects directly to the 'versicle-yjs' IndexedDB store.</p>
                     </div>
                 ) : status === 'loading' ? (
-                    <div className="h-full flex items-center justify-center text-muted-foreground">
-                        <RefreshCw className="h-6 w-6 animate-spin" />
+                    <div className="h-full flex items-center justify-center text-muted-foreground text-sm" role="status" aria-live="polite">
+                        Reading local database...
                     </div>
                 ) : rawData ? (
                     <pre className="text-xs font-mono overflow-auto whitespace-pre-wrap">

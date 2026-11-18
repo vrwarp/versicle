@@ -563,7 +563,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
         onImportFromDrive={handleBrowseDrive}
       />
 
-      {bookToRestore && (
+      {bookToRestore && !restoreMismatchFile && (
         <ContentMissingDialog
           open={isContentMissingOpen}
           onOpenChange={(open) => {
@@ -625,9 +625,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
                 disabled={isImporting}
                 className="gap-2 shadow-sm max-sm:px-3"
                 data-testid="header-add-button"
-                size={isImporting ? "icon" : "default"}
               >
-                {isImporting ? (
+                {isImporting && books.length > 0 && !currentDuplicate ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                     <span className="sr-only" aria-live="polite">Importing...</span>
@@ -773,7 +772,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
             <EmptyLibrary onImport={triggerFileUpload} />
           ) : (
             <>
-              <div className="mb-6 empty:mb-0">
+              <div className="mb-6 empty:hidden">
                 <ImportProgressUI />
               </div>
               {filteredAndSortedBooks.length === 0 ? (

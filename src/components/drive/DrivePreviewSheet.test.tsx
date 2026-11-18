@@ -29,7 +29,7 @@ function setLibraryBooks(books: Record<string, LibraryBook>): void {
   );
 }
 
-function setPreview(overrides: Partial<{ title: string; author: string }> = {}): void {
+function setPreview(overrides: Partial<{ title: string; author: string; loading: boolean }> = {}): void {
   (useDrivePreview as unknown as Mock).mockReturnValue({
     status: 'ok',
     loading: false,
@@ -160,4 +160,15 @@ describe('DrivePreviewSheet', () => {
       expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
     });
   });
+
+  describe('regression: cover placeholder uses skeleton pulse instead of spinner while loading', () => {
+    it('renders zero spinners while preview metadata is still loading', () => {
+      setPreview({ loading: true });
+      renderSheet();
+
+      expect(document.body.querySelectorAll('.animate-spin')).toHaveLength(0);
+      expect(document.body.querySelectorAll('.animate-pulse').length).toBeGreaterThanOrEqual(1);
+    });
+  });
 });
+

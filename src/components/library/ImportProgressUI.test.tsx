@@ -37,10 +37,18 @@ describe('ImportProgressUI', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('shows progress while importing', () => {
-    mockState({ isImporting: true, uploadProgress: 40, uploadStatus: 'Processing books.zip...' });
-    render(<ImportProgressUI />);
+  it('shows progress while importing without a redundant spinner', () => {
+    mockState({
+      isImporting: true,
+      uploadProgress: 40,
+      uploadStatus: 'Processing books.zip...',
+      importProgress: 15,
+      importStatus: 'Importing 2 of 10...',
+    });
+    const { container } = render(<ImportProgressUI />);
     expect(screen.getByText('Processing books.zip...')).toBeInTheDocument();
+    expect(screen.getByText('Importing 2 of 10...')).toBeInTheDocument();
+    expect(container.querySelectorAll('.animate-spin')).toHaveLength(0);
   });
 
   describe('regression: batch import per-file outcome summary (D1)', () => {

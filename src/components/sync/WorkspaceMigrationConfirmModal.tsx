@@ -24,12 +24,13 @@ export const WorkspaceMigrationConfirmModal: React.FC<WorkspaceMigrationConfirmM
     backupCheckpointId,
     onResolved,
 }) => {
-    const [isProcessing, setIsProcessing] = React.useState(false);
+    const [pendingAction, setPendingAction] = React.useState<'confirm' | 'rollback' | null>(null);
+    const isBusy = pendingAction !== null;
     const titleId = React.useId();
     const descriptionId = React.useId();
 
     const handleConfirm = async () => {
-        setIsProcessing(true);
+        setPendingAction('confirm');
         try {
             // Clear migration state
             MigrationStateService.clear();
@@ -57,12 +58,12 @@ export const WorkspaceMigrationConfirmModal: React.FC<WorkspaceMigrationConfirmM
             onResolved();
         } catch (e) {
             logger.error('Failed to finalize workspace switch:', e);
-            setIsProcessing(false);
+            setPendingAction(null);
         }
     };
 
     const handleReject = () => {
-        setIsProcessing(true);
+        setPendingAction('rollback');
         MigrationStateService.setRestoringBackup();
         window.location.reload();
     };
@@ -88,21 +89,21 @@ export const WorkspaceMigrationConfirmModal: React.FC<WorkspaceMigrationConfirmM
                 <div className="flex gap-3 pt-2">
                     <Button
                         onClick={handleConfirm}
-                        disabled={isProcessing}
+                        disabled={isBusy}
                         variant="default"
                         className="flex-1"
                     >
-                        {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-                        {isProcessing ? 'Processing...' : 'Yes, Finalize'}
+                        {pendingAction === 'confirm' && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+                        {pendingAction === 'confirm' ? 'Finalizing...' : 'Yes, Finalize'}
                     </Button>
                     <Button
                         onClick={handleReject}
-                        disabled={isProcessing}
+                        disabled={isBusy}
                         variant="outline"
                         className="flex-1"
                     >
-                        {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-                        Roll Back
+                        {pendingAction === 'rollback' && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+                        {pendingAction === 'rollback' ? 'Rolling back...' : 'Roll Back'}
                     </Button>
                 </div>
             </div>

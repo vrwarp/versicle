@@ -59,15 +59,18 @@ export const DriveBookCard: React.FC<DriveShelfItemProps> = React.memo(({
       className="group flex flex-col bg-card text-card-foreground rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-border h-full cursor-pointer relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring w-full max-w-[240px]"
     >
       <div className="relative">
-        <div className="aspect-[2/3] w-full bg-muted relative overflow-hidden shadow-inner flex items-center justify-center">
+        <div
+          className={cn(
+            "aspect-[2/3] w-full bg-muted relative overflow-hidden shadow-inner flex items-center justify-center",
+            !preview.coverUrl && preview.loading && "animate-pulse"
+          )}
+        >
           {preview.coverUrl ? (
             <img
               src={preview.coverUrl}
               alt={`Cover of ${title}`}
               className="w-full h-full object-cover transition-transform group-hover:scale-105"
             />
-          ) : preview.loading ? (
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground/60" aria-hidden="true" />
           ) : (
             <Book className="w-10 h-10 text-muted-foreground/50" aria-hidden="true" />
           )}
@@ -80,12 +83,14 @@ export const DriveBookCard: React.FC<DriveShelfItemProps> = React.memo(({
           </span>
         )}
 
-        {/* Import affordance — always visible on touch or while importing, on
-            hover/focus elsewhere (the same disclosure rule as the library card's action menu). */}
+        {/* Import affordance — always visible on touch or while actively importing,
+            on hover/focus elsewhere (the same disclosure rule as the library card's action menu). */}
         <div
           className={cn(
-            'absolute top-2 right-2 z-20 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity focus-within:opacity-100',
-            importing && 'md:opacity-100',
+            "absolute top-2 right-2 z-20 transition-opacity",
+            importing
+              ? "opacity-100"
+              : "opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100"
           )}
         >
           <Button
