@@ -35,3 +35,15 @@ export function isRtlLanguage(code?: string): boolean {
   const base = code.toLowerCase().split(/[-_]/)[0];
   return ['ar', 'he', 'iw', 'fa', 'ur', 'ps', 'sd', 'ug', 'yi', 'dv', 'ckb'].includes(base);
 }
+
+/**
+ * Formats a concise book label for import/replace toasts: prefers the resolved
+ * book title from metadata, falling back to the filename stripped of its
+ * `.epub` extension so long Drive/device filenames do not clutter the toast.
+ */
+export function formatToastBookTitle(fallbackFilename: string, bookTitle?: string | null): string {
+  const trimmedTitle = bookTitle?.trim();
+  if (trimmedTitle) return trimmedTitle;
+  const stripped = fallbackFilename.replace(/\.epub$/i, '').trim();
+  return stripped || fallbackFilename;
+}

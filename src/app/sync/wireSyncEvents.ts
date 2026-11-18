@@ -105,7 +105,12 @@ export function wireSyncEvents(): () => void {
         // resume. Until the staged-swap recovery flow is wired, surface it
         // — data is safe (nothing was applied or dropped), sync is simply
         // paused for this tab until reload.
-        toast(event.self ? 'sync.epochChanged.self' : 'sync.epochChanged', 'info', 10000);
+        toast(
+          event.self ? 'sync.epochChanged.self' : 'sync.epochChanged',
+          'info',
+          10000,
+          { label: 'common.reload', onAction: () => window.location.reload() },
+        );
         break;
 
       case 'workspace-purged':

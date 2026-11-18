@@ -80,9 +80,14 @@ export const DriveBookCard: React.FC<DriveShelfItemProps> = React.memo(({
           </span>
         )}
 
-        {/* Import affordance — always visible on touch, on hover/focus elsewhere
-            (the same disclosure rule as the library card's action menu). */}
-        <div className="absolute top-2 right-2 z-20 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity focus-within:opacity-100">
+        {/* Import affordance — always visible on touch or while importing, on
+            hover/focus elsewhere (the same disclosure rule as the library card's action menu). */}
+        <div
+          className={cn(
+            'absolute top-2 right-2 z-20 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity focus-within:opacity-100',
+            importing && 'md:opacity-100',
+          )}
+        >
           <Button
             variant="secondary"
             size="icon"

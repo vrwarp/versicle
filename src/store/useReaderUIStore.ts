@@ -34,6 +34,11 @@ interface ReaderUIState {
      * playback session starts. Ephemeral, device-local — never synced.
      */
     followingAudio: boolean;
+    /**
+     * Whether ReaderControlBar currently renders a visible floating bottom pill,
+     * allowing ToastHost (mounted above the router gate) to offset above it.
+     */
+    pillVisible: boolean;
     // (This store keeps DATA state only: reader commands such as
     // playFromSelection/jumpToLocation live in the ReaderCommands
     // context/registry.)
@@ -48,6 +53,7 @@ interface ReaderUIState {
     setCurrentSection: (title: string | null, id: string | null, anchor?: string | null) => void;
     setCurrentBookId: (id: string | null) => void;
     setFollowingAudio: (following: boolean) => void;
+    setPillVisible: (visible: boolean) => void;
 
     /**
      * The compass pill's interaction state (see compassMachine.ts). Ephemeral,
@@ -75,6 +81,7 @@ export const useReaderUIStore = create<ReaderUIState>((set, get) => ({
     currentSectionAnchor: null,
     currentBookId: null,
     followingAudio: true,
+    pillVisible: false,
 
     compass: COMPASS_IDLE,
 
@@ -90,6 +97,10 @@ export const useReaderUIStore = create<ReaderUIState>((set, get) => ({
         })),
     setCurrentBookId: (id) => set({ currentBookId: id }),
     setFollowingAudio: (following) => set({ followingAudio: following }),
+    setPillVisible: (visible) => {
+        if (get().pillVisible === visible) return;
+        set({ pillVisible: visible });
+    },
 
     dispatchCompass: (event) => {
         const prev = get().compass;

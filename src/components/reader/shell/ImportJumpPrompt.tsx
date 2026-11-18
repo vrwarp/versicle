@@ -156,7 +156,7 @@ export function useImportJumpPrompt(opts: {
       }
       footer={
         <>
-          <Button variant="ghost" onClick={handleJumpCancel} disabled={isWaitingForJump}>
+          <Button variant="ghost" onClick={handleJumpCancel}>
             {isWaitingForJump ? 'Cancel' : 'No, start from beginning'}
           </Button>
           <Button onClick={handleJumpConfirm} disabled={isWaitingForJump}>

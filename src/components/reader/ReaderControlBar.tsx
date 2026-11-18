@@ -27,6 +27,7 @@ import { LexiconManager } from './LexiconManager';
 
 import { useRemoteProgress } from '@hooks/useRemoteProgress';
 import { findTocItem, resolveSyntheticPreference } from '@lib/reader/titleResolver';
+import { CURRENT_BOOK_VERSION } from '@lib/constants';
 import { readerCommandsRegistry } from '@domains/reader/ui/ReaderCommands';
 import { compassOwnsSelection, resolvePillVariant, type PillVariant } from '@store/compassMachine';
 
@@ -74,14 +75,15 @@ export const ReaderControlBar: React.FC = () => {
 
     // Compass interaction state is ephemeral UI state (never synced via Yjs) —
     // it lives in useReaderUIStore behind the compassMachine transition table.
-    const { immersiveMode, toc, currentSectionTitle, currentSectionId, currentBookId, compass, dispatchCompass } = useReaderUIStore(useShallow(state => ({
+    const { immersiveMode, toc, currentSectionTitle, currentSectionId, currentBookId, compass, dispatchCompass, setPillVisible } = useReaderUIStore(useShallow(state => ({
         immersiveMode: state.immersiveMode,
         toc: state.toc,
         currentSectionTitle: state.currentSectionTitle,
         currentSectionId: state.currentSectionId,
         currentBookId: state.currentBookId,
         compass: state.compass,
-        dispatchCompass: state.dispatchCompass
+        dispatchCompass: state.dispatchCompass,
+        setPillVisible: state.setPillVisible,
     })));
 
     // Check for remote progress
@@ -116,6 +118,12 @@ export const ReaderControlBar: React.FC = () => {
     // vocab card). Null in every other mode — the machine guarantees a
     // selection-owning mode always carries its payload.
     const selection = compassOwnsSelection(compass) ? compass.selection : null;
+    const selectedAnnotationId = selection?.annotationId ?? null;
+    // Only reads annotations[id] while a specific highlight is selected, so idle
+    // annotation writes elsewhere never re-render this app-wide bar.
+    const selectedAnnotation = useAnnotationStore(state =>
+        selectedAnnotationId && state.annotations ? state.annotations[selectedAnnotationId] ?? null : null,
+    );
 
     // THE routing decision: interaction mode wins; otherwise the ambient
     // conditions pick the resting pill (see compassMachine.ts for the table).
@@ -127,6 +135,14 @@ export const ReaderControlBar: React.FC = () => {
         hasLastReadBook: !!lastReadBook,
         hasQueueItems,
     });
+
+    const hasPill = variant !== null;
+    useEffect(() => {
+        setPillVisible?.(hasPill);
+        return () => {
+            setPillVisible?.(false);
+        };
+    }, [hasPill, setPillVisible]);
 
     // Focus management on variant morph: if keyboard focus
     // lived inside the pill and the morph unmounted that control, move
@@ -236,8 +252,29 @@ export const ReaderControlBar: React.FC = () => {
                 break;
             case 'delete':
                 if (selection?.annotationId) {
+                    const deleted = (compass.mode === 'annotation' ? compass.annotation : undefined) ?? selectedAnnotation;
                     remove(selection.annotationId);
-                    showToast("Annotation deleted", "success");
+                    showToast(
+                        "Annotation deleted",
+                        "success",
+                        deleted ? 5000 : undefined,
+                        deleted
+                            ? {
+                                  label: 'common.undo',
+                                  onAction: () => {
+                                      add({
+                                          bookId: deleted.bookId,
+                                          cfiRange: deleted.cfiRange,
+                                          text: deleted.text,
+                                          type: deleted.type,
+                                          color: deleted.color,
+                                          note: deleted.note,
+                                          created: deleted.created,
+                                      });
+                                  },
+                              }
+                            : undefined,
+                    );
                     dispatchCompass({ type: 'ACTION_COMMITTED' });
                 }
                 break;
@@ -322,7 +359,17 @@ export const ReaderControlBar: React.FC = () => {
                         subtitle={subtitle}
                         progress={progress}
                         onClick={() => {
-                            if (lastReadBook) navigate(`/read/${lastReadBook.id}`);
+                            if (!lastReadBook) return;
+                            if (lastReadBook.isOffloaded || lastReadBook.isGhost) {
+                                navigate('/', { state: { restoreBookId: lastReadBook.id } });
+                            } else if (
+                                lastReadBook.version !== undefined &&
+                                lastReadBook.version < CURRENT_BOOK_VERSION
+                            ) {
+                                navigate('/', { state: { reprocessBookId: lastReadBook.id } });
+                            } else {
+                                navigate(`/read/${lastReadBook.id}`);
+                            }
                         }}
                     />
                 );

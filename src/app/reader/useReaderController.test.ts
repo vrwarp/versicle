@@ -194,3 +194,18 @@ describe('regression: a failed jump is surfaced to the reader, not only logged',
     expect(handler).toMatch(/showToast\([^)]*'error'\)/);
   });
 });
+
+describe('regression: missing-file redirect and empty-queue Play from here feedback', () => {
+  it('redirects Book file not found errors to / with restoreBookId state instead of stranding the user', () => {
+    expect(CONTROLLER).toContain("hookError === 'Book file not found'");
+    expect(CONTROLLER).toContain("navigate('/', { state: { restoreBookId: bookId } })");
+  });
+
+  it('informs the reader when handlePlayFromSelection runs before the chapter TTS queue is ready', () => {
+    const start = CONTROLLER.indexOf('const handlePlayFromSelection = useCallback(');
+    expect(start, 'handlePlayFromSelection was renamed — update this gate').toBeGreaterThan(-1);
+    const block = CONTROLLER.slice(start, CONTROLLER.indexOf('const commands = useMemo<ReaderCommands>(', start));
+    expect(block).toContain('!queue || queue.length === 0');
+    expect(block).toContain("'Preparing audio for this chapter — try again in a moment.'");
+  });
+});

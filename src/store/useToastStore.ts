@@ -26,6 +26,8 @@ export interface ToastEntry {
   message: string;
   /** The catalog key, when the call site passed one (dedupe + tests). */
   key?: string;
+  /** Optional lifecycle group — a newer phase with the same groupKey replaces the prior one in place. */
+  groupKey?: string;
   /** The type of toast (affects styling + live-region channel). */
   type: ToastType;
   /** Auto-dismiss after this many ms; <= 0 or Infinity = persistent. */
@@ -38,6 +40,21 @@ export interface ToastEntry {
 const MAX_TOASTS = 5;
 
 let nextToastId = 1;
+
+/**
+ * Multi-phase catalog prefixes whose later phases ("applied", "failed", etc.)
+ * supersede an in-flight progress toast ("started", "downloading") rather than
+ * stacking beside it.
+ */
+const LIFECYCLE_KEY_PREFIXES = ['sync.cleanSync.', 'sync.switch.'] as const;
+
+function deriveLifecycleGroupKey(key: string | undefined): string | undefined {
+  if (!key) return undefined;
+  for (const prefix of LIFECYCLE_KEY_PREFIXES) {
+    if (key.startsWith(prefix)) return prefix.slice(0, -1);
+  }
+  return undefined;
+}
 
 /**
  * State interface for the Toast notification store.
@@ -65,7 +82,7 @@ interface ToastState {
    * @param action - Optional action button (label resolves like content).
    */
   showToast: (
-    content: MessageInput | string,
+    content: (MessageInput & { groupKey?: string }) | MessageInput | string,
     type?: ToastType,
     duration?: number,
     action?: ToastAction,
@@ -87,6 +104,9 @@ export const useToastStore = create<ToastState>((set) => ({
       typeof content === 'object' ? content.key
       : isMessageKey(content) ? content
       : undefined;
+    const explicitGroupKey =
+      typeof content === 'object' && 'groupKey' in content ? content.groupKey : undefined;
+    const groupKey = explicitGroupKey ?? deriveLifecycleGroupKey(key);
     const effectiveDuration = duration ?? (type === 'error' ? 5000 : 3000);
     const resolvedAction = action
       ? { label: resolveMessage(action.label), onAction: action.onAction }
@@ -94,11 +114,24 @@ export const useToastStore = create<ToastState>((set) => ({
     set((state) => {
       // Dedupe: an identical visible toast refreshes instead of
       // stacking — replace it with a fresh entry (new id restarts the
-      // timer and re-announces).
-      const kept = state.toasts.filter((t) => !(t.message === message && t.type === type));
+      // timer and re-announces). Lifecycle group matches (e.g. cleanSync
+      // started → applied) also replace the earlier phase in place.
+      const kept = state.toasts.filter(
+        (t) =>
+          !(t.message === message && t.type === type) &&
+          !(groupKey !== undefined && t.groupKey === groupKey),
+      );
       const next = [
         ...kept,
-        { id: nextToastId++, message, key, type, duration: effectiveDuration, action: resolvedAction },
+        {
+          id: nextToastId++,
+          message,
+          key,
+          groupKey,
+          type,
+          duration: effectiveDuration,
+          action: resolvedAction,
+        },
       ];
       // Cap: drop the oldest beyond the limit.
       return { toasts: next.slice(-MAX_TOASTS) };

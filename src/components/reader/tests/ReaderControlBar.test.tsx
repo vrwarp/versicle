@@ -487,4 +487,101 @@ describe('ReaderControlBar', () => {
       expect(mockUseBookJoin).not.toHaveBeenCalled();
     });
   });
+
+  describe('regression: annotation delete Undo action, SummaryPill restore gate, and pillVisible sync', () => {
+    it('attaches an Undo action on annotation delete that re-adds the deleted annotation', () => {
+      const mockAdd = vi.fn();
+      const mockRemove = vi.fn();
+      const mockShowToast = vi.fn();
+      const targetAnnotation = {
+        id: 'ann-1',
+        bookId: '123',
+        cfiRange: 'epubcfi(/6/4!/4/2)',
+        text: 'highlighted quote',
+        type: 'note' as const,
+        color: 'blue',
+        note: 'important thought',
+        created: 1700000000000,
+      };
+
+      mockUseAnnotationStore.mockImplementation((selector: any) =>
+        selector({
+          annotations: { 'ann-1': targetAnnotation },
+          add: mockAdd,
+          update: vi.fn(),
+          remove: mockRemove,
+        }),
+      );
+      mockUseToastStore.mockImplementation((selector: any) => selector({ showToast: mockShowToast }));
+      mockUseReaderUIStore.mockImplementation((selector: any) =>
+        selector(
+          readerUIState({
+            currentBookId: '123',
+            compass: {
+              mode: 'annotation',
+              selection: { x: 0, y: 0, cfiRange: targetAnnotation.cfiRange, text: targetAnnotation.text, annotationId: 'ann-1' },
+            },
+          }),
+        ),
+      );
+
+      render(<ReaderControlBar />);
+      fireEvent.click(screen.getByTestId('popover-delete-button'));
+
+      expect(mockRemove).toHaveBeenCalledWith('ann-1');
+      expect(mockShowToast).toHaveBeenCalledWith(
+        'Annotation deleted',
+        'success',
+        5000,
+        { label: 'common.undo', onAction: expect.any(Function) },
+      );
+
+      const undoAction = mockShowToast.mock.calls[0][3].onAction as () => void;
+      undoAction();
+      expect(mockAdd).toHaveBeenCalledWith({
+        bookId: '123',
+        cfiRange: targetAnnotation.cfiRange,
+        text: 'highlighted quote',
+        type: 'note',
+        color: 'blue',
+        note: 'important thought',
+        created: 1700000000000,
+      });
+    });
+
+    it('routes SummaryPill click to restoreBookId when last-read book is offloaded or ghost', () => {
+      mockUseLastReadBook.mockReturnValue({
+        bookId: 'offloaded-1',
+        id: 'offloaded-1',
+        title: 'Offloaded Book',
+        isOffloaded: true,
+        isGhost: false,
+      });
+      mockUsePercentage.mockReturnValue(0.4);
+
+      render(<ReaderControlBar />);
+      fireEvent.click(screen.getByTestId('compass-pill-summary'));
+
+      expect(mockUseNavigate).toHaveBeenCalledWith('/', { state: { restoreBookId: 'offloaded-1' } });
+    });
+
+    it('reports pillVisible=true when rendering a pill and false when idle/unmounted', () => {
+      const setPillVisible = vi.fn();
+      mockUseReaderUIStore.mockImplementation((selector: any) =>
+        selector(readerUIState({ setPillVisible })),
+      );
+
+      const idleView = render(<ReaderControlBar />);
+      expect(setPillVisible).toHaveBeenCalledWith(false);
+      idleView.unmount();
+
+      setPillVisible.mockClear();
+      mockUseLastReadBook.mockReturnValue({ bookId: '123', id: '123', title: 'Book 123' });
+      const activeView = render(<ReaderControlBar />);
+      expect(setPillVisible).toHaveBeenCalledWith(true);
+
+      activeView.unmount();
+      expect(setPillVisible).toHaveBeenLastCalledWith(false);
+    });
+  });
 });

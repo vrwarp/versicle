@@ -379,12 +379,18 @@ export interface BookChrome {
   title: string;
   syntheticToc?: NavigationItem[];
   useSyntheticToc?: boolean;
+  isOffloaded?: boolean;
+  isGhost?: boolean;
+  version?: number;
 }
 
 export const useBookChrome = (id: string | null): BookChrome | null => {
   const book = useBookStore(state => (id && state.books ? state.books[id] : null));
   const staticMeta = useLibraryStore(state =>
     id && state.staticMetadata ? state.staticMetadata[id] : null,
+  );
+  const isOffloaded = useLibraryStore(state =>
+    id && state.offloadedBookIds ? state.offloadedBookIds.has(id) : false,
   );
 
   return useMemo(() => {
@@ -396,8 +402,11 @@ export const useBookChrome = (id: string | null): BookChrome | null => {
       title: book.customTitle || staticMeta?.title || book.title,
       syntheticToc: staticMeta?.syntheticToc,
       useSyntheticToc: book.useSyntheticToc,
+      isOffloaded,
+      isGhost: !staticMeta && !isOffloaded,
+      version: staticMeta?.version,
     };
-  }, [book, staticMeta]);
+  }, [book, staticMeta, isOffloaded]);
 };
 
 /**

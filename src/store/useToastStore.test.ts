@@ -77,4 +77,29 @@ describe('useToastStore (queue, Phase 8 §D)', () => {
       expect(useToastStore.getState().toasts.at(-1)?.message).toBe('import error 9');
     });
   });
+
+  describe('regression: multi-phase sync lifecycle toasts replace in place', () => {
+    it('replaces sync.cleanSync.started with sync.cleanSync.applied instead of stacking', () => {
+      useToastStore.getState().showToast('sync.cleanSync.started', 'info');
+      expect(useToastStore.getState().toasts.map((t) => t.key)).toEqual(['sync.cleanSync.started']);
+
+      useToastStore.getState().showToast('sync.cleanSync.applied', 'success');
+      const toasts = useToastStore.getState().toasts;
+      expect(toasts).toHaveLength(1);
+      expect(toasts[0].key).toBe('sync.cleanSync.applied');
+      expect(toasts[0].message).toBe('Sync complete!');
+    });
+
+    it('replaces sync.switch.downloading with sync.switch.failedAborted while leaving unrelated toasts intact', () => {
+      useToastStore.getState().showToast('Imported "Dune"', 'success');
+      useToastStore.getState().showToast('sync.switch.downloading', 'info');
+      useToastStore.getState().showToast('sync.switch.failedAborted', 'error');
+
+      const toasts = useToastStore.getState().toasts;
+      expect(toasts.map((t) => t.message)).toEqual([
+        'Imported "Dune"',
+        'Workspace switch failed. Please try again.',
+      ]);
+    });
+  });
 });

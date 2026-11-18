@@ -323,4 +323,15 @@ describe('wireSyncEvents (single SyncEvent subscriber)', () => {
       expect(() => getSyncEventBus().emit({ type: 'obsolete', incomingVersion: 9 })).not.toThrow();
     });
   });
+
+  describe('regression: epoch-changed includes Reload toast action', () => {
+    it.each([false, true])('attaches common.reload action when self=%s', (self) => {
+      getSyncEventBus().emit({ type: 'epoch-changed', epoch: 3, previousEpoch: 2, self });
+      const lastCall = showToast.mock.calls.at(-1);
+      expect(lastCall?.[3]).toEqual({
+        label: 'common.reload',
+        onAction: expect.any(Function),
+      });
+    });
+  });
 });

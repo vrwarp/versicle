@@ -1,8 +1,9 @@
 import React, { useCallback, useState } from 'react';
 import { useLibraryStore } from '@store/useLibraryStore';
+import { useBookStore } from '@store/useBookStore';
 import { useToastStore } from '@store/useToastStore';
 import { UploadCloud } from 'lucide-react';
-import { cn } from '@lib/utils';
+import { cn, formatToastBookTitle } from '@lib/utils';
 import { validateZipSignature } from '@lib/ingestion';
 import { DuplicateBookError } from '~types/errors';
 import { ImportProgressUI } from './ImportProgressUI';
@@ -46,8 +47,10 @@ export const FileUploader: React.FC = () => {
         try {
           const result = await controller.importFile(file);
           const bookId = 'bookId' in result ? result.bookId : undefined;
+          const storedBook = bookId ? useBookStore.getState()?.books?.[bookId] : undefined;
+          const label = formatToastBookTitle(file.name, storedBook?.customTitle || storedBook?.title);
           showToast(
-            'Book imported successfully',
+            `Imported "${label}"`,
             'success',
             bookId ? 5000 : undefined,
             bookId ? { label: 'common.open', onAction: () => navigate(`/read/${bookId}`) } : undefined,
@@ -70,7 +73,7 @@ export const FileUploader: React.FC = () => {
     } else {
       showToast(`Unsupported file type: ${file.name}`, 'error');
     }
-  }, [controller, showToast]);
+  }, [controller, navigate, showToast]);
 
   /**
    * Processes a list of files (batch import).
@@ -285,8 +288,13 @@ export const FileUploader: React.FC = () => {
           try {
             const result = await controller.replaceFile(currentDuplicate);
             const bookId = 'bookId' in result ? result.bookId : undefined;
+            const storedBook = bookId ? useBookStore.getState()?.books?.[bookId] : undefined;
+            const label = formatToastBookTitle(
+              currentDuplicate.name,
+              storedBook?.customTitle || storedBook?.title,
+            );
             showToast(
-              "Book replaced successfully",
+              `Replaced "${label}"`,
               "success",
               bookId ? 5000 : undefined,
               bookId ? { label: 'common.open', onAction: () => navigate(`/read/${bookId}`) } : undefined,

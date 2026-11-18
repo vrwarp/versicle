@@ -1,7 +1,6 @@
 import React from 'react';
 import type { BookMetadata } from '~types/book';
 import { BookOpen, Cloud, MoreVertical, CloudDownload } from 'lucide-react';
-import { useToastStore } from '@store/useToastStore';
 import { cn } from '@lib/utils';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { Progress } from '../ui/Progress';
@@ -39,7 +38,6 @@ interface BookListItemProps {
  * @returns The rendered list item.
  */
 export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, onOffload, onRestore }: BookListItemProps) => {
-    const showToast = useToastStore(state => state.showToast);
     const setBookId = useReaderUIStore(state => state.setCurrentBookId);
 
     // OPTIMIZATION: Use book.progress passed from parent (computed by useAllBooks selector)
@@ -72,12 +70,7 @@ export const BookListItem = React.memo(({ book, isGhostBook, onOpen, onDelete, o
     }, [book.coverPalette]);
 
     const handleOpen = () => {
-        if (book.isOffloaded) {
-            showToast("Book is offloaded. Please restore it to read.", "error");
-            return;
-        }
-        if (isGhostBook) {
-            // Trigger restore flow for Ghost Books too
+        if (book.isOffloaded || isGhostBook) {
             onRestore(book);
             return;
         }
