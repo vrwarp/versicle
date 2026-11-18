@@ -9,6 +9,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { BookMetadata } from '~types/book';
 import type { UserInventoryItem } from '~types/user-data';
 import type { UserProgress } from '~types/user-data';
+import { AppError } from '~types/errors';
 
 // Mock zustand/middleware to disable persistence
 vi.mock('zustand/middleware', () => ({
@@ -23,9 +24,12 @@ vi.mock('zustand/middleware', () => ({
 // Mock BookCard
 interface BookCardProps {
     book: BookMetadata;
+    onRestore?: (book: BookMetadata) => void;
 }
 vi.mock('./BookCard', () => ({
-    BookCard: ({ book }: BookCardProps) => <div data-testid="book-card">{book.title}</div>
+    BookCard: ({ book, onRestore }: BookCardProps) => (
+        <button type="button" data-testid="book-card" onClick={() => onRestore?.(book)}>{book.title}</button>
+    )
 }));
 
 // Mock EmptyLibrary
@@ -52,15 +56,16 @@ vi.mock('@store/useToastStore', () => ({
 }));
 
 // Import/restore/offload workflows live on the shared controller — mock it.
-const { mockImportFile } = vi.hoisted(() => ({
+const { mockImportFile, mockRestoreBook } = vi.hoisted(() => ({
     mockImportFile: vi.fn().mockResolvedValue({ status: 'imported', bookId: 'x' }),
+    mockRestoreBook: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('@app/library/useImportController', () => {
     const controller = {
         importFile: mockImportFile,
         replaceFile: vi.fn(),
         importFiles: vi.fn(),
-        restoreBook: vi.fn(),
+        restoreBook: mockRestoreBook,
         removeBook: vi.fn(),
         offloadBook: vi.fn(),
         reprocessBook: vi.fn(),
@@ -507,3 +512,121 @@ describe('regression: does not build book items outside the library context', ()
         expect(probe.reads()).toBeGreaterThanOrEqual(BOOK_COUNT * 2);
     });
 });
+
+describe('regression: single import/restore progress indicators and non-overlapping dialogs', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        useBookStore.setState({ books: {} });
+        useLibraryStore.setState({
+            isLoading: false,
+            error: null,
+            isImporting: false,
+            importProgress: 0,
+            importStatus: '',
+            uploadProgress: 0,
+            uploadStatus: '',
+            batchImportSummary: null,
+            staticMetadata: {},
+            offloadedBookIds: new Set<string>(),
+        });
+        usePreferencesStore.setState({ libraryFilterMode: 'all', librarySortOrder: 'recent' });
+    });
+
+    it('keeps header-add-button non-icon-sized and suppresses its spinner when EmptyLibrary owns the view', () => {
+        useLibraryStore.setState({ isImporting: true });
+
+        render(
+            <MemoryRouter>
+                <LibraryView context="library" />
+            </MemoryRouter>,
+        );
+
+        const headerBtn = screen.getByTestId('header-add-button');
+        expect(headerBtn).toBeDisabled();
+        // Must not switch to 40x40 icon sizing (w-10) when "Importing..." label is shown on sm+
+        expect(headerBtn).not.toHaveClass('w-10');
+        // EmptyLibrary owns the active import feedback when books.length === 0
+        expect(headerBtn.querySelectorAll('.animate-spin')).toHaveLength(0);
+    });
+
+    it('spins header-add-button and renders ImportProgressUI on non-empty libraries without extra spinners', () => {
+        useBookStore.setState({
+            books: {
+                b1: {
+                    bookId: 'b1',
+                    title: 'Existing Book',
+                    author: 'Author',
+                    addedAt: 100,
+                    lastInteraction: 100,
+                    tags: [],
+                    status: 'unread' as const,
+                },
+            },
+        });
+        useLibraryStore.setState({
+            isImporting: true,
+            importProgress: 50,
+            importStatus: 'Importing 2 of 4...',
+        });
+
+        const { container } = render(
+            <MemoryRouter>
+                <LibraryView context="library" />
+            </MemoryRouter>,
+        );
+
+        const headerBtn = screen.getByTestId('header-add-button');
+        expect(headerBtn.querySelectorAll('.animate-spin')).toHaveLength(1);
+        expect(screen.getByRole('progressbar', { name: 'Import progress' })).toBeInTheDocument();
+        expect(screen.getByText('Importing 2 of 4...')).toBeInTheDocument();
+        // Only the single header button spinner is present across the entire view
+        expect(container.querySelectorAll('.animate-spin')).toHaveLength(1);
+    });
+
+    it('hides ContentMissingDialog while RestoreMismatchDialog is open and restores it on Cancel', async () => {
+        useBookStore.setState({
+            books: {
+                b1: {
+                    bookId: 'b1',
+                    title: 'Offloaded Book',
+                    author: 'Author',
+                    addedAt: 100,
+                    lastInteraction: 100,
+                    tags: [],
+                    status: 'unread' as const,
+                },
+            },
+        });
+        useLibraryStore.setState({
+            offloadedBookIds: new Set(['b1']),
+        });
+        mockRestoreBook.mockRejectedValueOnce(
+            new AppError('Hash mismatch', { code: 'INGEST_FILE_MISMATCH' }),
+        );
+
+        render(
+            <MemoryRouter>
+                <LibraryView context="library" />
+            </MemoryRouter>,
+        );
+
+        // Open ContentMissingDialog via BookCard.onRestore
+        fireEvent.click(screen.getByTestId('book-card'));
+        expect(await screen.findByText('Content Missing')).toBeInTheDocument();
+
+        // Pick a mismatched local EPUB file
+        const restoreInput = screen.getByTestId('restore-file-input');
+        const badFile = new File(['different'], 'updated.epub', { type: 'application/epub+zip' });
+        fireEvent.change(restoreInput, { target: { files: [badFile] } });
+
+        // RestoreMismatchDialog opens AND ContentMissingDialog unmounts so modals never stack
+        expect(await screen.findByText("Content Doesn't Match")).toBeInTheDocument();
+        expect(screen.queryByText('Content Missing')).not.toBeInTheDocument();
+
+        // Cancelling RestoreMismatchDialog returns cleanly to ContentMissingDialog
+        fireEvent.click(screen.getByTestId('restore-mismatch-cancel'));
+        expect(await screen.findByText('Content Missing')).toBeInTheDocument();
+        expect(screen.queryByText("Content Doesn't Match")).not.toBeInTheDocument();
+    });
+});
+

@@ -44,11 +44,14 @@ export const DriveBookListItem: React.FC<DriveShelfItemProps> = React.memo(({
         tabIndex={0}
       >
         {/* Thumbnail */}
-        <div className="flex-none w-10 h-14 bg-muted rounded overflow-hidden shadow-sm relative flex items-center justify-center">
+        <div
+          className={cn(
+            "flex-none w-10 h-14 bg-muted rounded overflow-hidden shadow-sm relative flex items-center justify-center",
+            !preview.coverUrl && preview.loading && "animate-pulse"
+          )}
+        >
           {preview.coverUrl ? (
             <img src={preview.coverUrl} alt="" className="w-full h-full object-cover" />
-          ) : preview.loading ? (
-            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/60" aria-hidden="true" />
           ) : (
             <Book className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
           )}

@@ -446,8 +446,7 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
               role="status"
               aria-live="polite"
             >
-              <Loader2 className="w-4 h-4 animate-spin mr-2" aria-hidden="true" />
-              Loading more files ({visibleCount} of {total})
+              Showing {visibleCount} of {total} files
             </div>
           )}
 

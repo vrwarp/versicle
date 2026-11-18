@@ -164,10 +164,7 @@ export const DataManagementTab: React.FC<DataManagementTabProps> = ({
                     )}
                     <Button onClick={onRegenerateMetadata} variant="outline" disabled={isRegenerating} className="gap-2">
                         {isRegenerating && (
-                            <>
-                                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                                <span className="sr-only" aria-live="polite">Regenerating...</span>
-                            </>
+                            <span className="sr-only" aria-live="polite">Regenerating...</span>
                         )}
                         <span aria-hidden={isRegenerating}>{isRegenerating ? "Regenerating..." : "Regenerate All Metadata"}</span>
                     </Button>

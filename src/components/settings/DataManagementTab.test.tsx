@@ -149,4 +149,21 @@ describe('DataManagementTab', () => {
 
         expect(onImportReadingList).toHaveBeenCalledWith(file);
     });
+
+    describe('regression: metadata regeneration uses progress bar without button spinner', () => {
+        it('renders zero spinners alongside the determinate regeneration progress bar', () => {
+            const { container } = render(
+                <DataManagementTab
+                    {...defaultProps}
+                    isRegenerating={true}
+                    regenerationProgress="Processing book 2 of 5..."
+                    regenerationPercent={40}
+                />,
+            );
+
+            expect(screen.getByRole('progressbar', { name: 'Regeneration progress' })).toBeInTheDocument();
+            expect(container.querySelectorAll('.animate-spin')).toHaveLength(0);
+        });
+    });
 });
+

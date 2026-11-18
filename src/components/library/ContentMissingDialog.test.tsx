@@ -199,4 +199,114 @@ describe('ContentMissingDialog', () => {
       expect(screen.getByText('Ghost Book')).toBeInTheDocument();
     });
   });
+
+  describe('regression: single active spinner and disabled Cancel while restoring', () => {
+    it('spins only the cloud button through download and restore while preview is still loading', async () => {
+      let resolveDownload!: (file: File) => void;
+      let resolveRestore!: () => void;
+
+      const downloadAsFile = vi.fn(
+        () =>
+          new Promise<File>((resolve) => {
+            resolveDownload = resolve;
+          }),
+      );
+      (getDriveLibrarySync as Mock).mockReturnValue({ downloadAsFile });
+      (useDriveStore as unknown as Mock).mockReturnValue({
+        findFile: vi.fn().mockReturnValue({
+          id: 'cloud-id',
+          name: 'cloud-file.epub',
+          size: 1024,
+        }),
+      });
+      (useGoogleServicesStore as unknown as Mock).mockReturnValue(true);
+
+      const onRestore = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveRestore = resolve;
+          }),
+      );
+
+      const { container, rerender } = render(
+        <ContentMissingDialog
+          open
+          onOpenChange={vi.fn()}
+          book={mockBook}
+          onRestore={onRestore}
+          isRestoring={false}
+        />,
+      );
+
+      // Preview is pending (never-settling mock): skeleton pulses without any spinner.
+      expect(screen.getByTestId('cloud-preview-skeleton')).toBeInTheDocument();
+      expect(container.querySelectorAll('.animate-spin')).toHaveLength(0);
+
+      fireEvent.click(screen.getByText('Restore from Cloud'));
+
+      // Phase 1 (download): only the cloud button spins; Select File stays idle; Cancel is disabled.
+      expect(container.querySelectorAll('.animate-spin')).toHaveLength(1);
+      expect(screen.getAllByText('Downloading...')[0]).toBeInTheDocument();
+      expect(screen.getByText('Select File')).toBeInTheDocument();
+      expect(screen.getByText('Cancel').closest('button')).toBeDisabled();
+
+      // Phase 2 (restore): parent flips isRestoring=true; cloud button switches to Restoring...,
+      // Select File STILL does not spin.
+      const file = new File(['epub'], 'cloud-file.epub', { type: 'application/epub+zip' });
+      resolveDownload(file);
+      await waitFor(() => expect(onRestore).toHaveBeenCalledWith(file));
+
+      rerender(
+        <ContentMissingDialog
+          open
+          onOpenChange={vi.fn()}
+          book={mockBook}
+          onRestore={onRestore}
+          isRestoring={true}
+        />,
+      );
+
+      expect(container.querySelectorAll('.animate-spin')).toHaveLength(1);
+      expect(screen.getByText('Select File')).toBeInTheDocument();
+      expect(screen.getByText('Cancel').closest('button')).toBeDisabled();
+
+      resolveRestore();
+      await waitFor(() => expect(screen.getByText('Restore from Cloud')).toBeInTheDocument());
+    });
+
+    it('spins only Select File during a local file restore', async () => {
+      let resolveRestore!: () => void;
+      (useDriveStore as unknown as Mock).mockReturnValue({
+        findFile: vi.fn().mockReturnValue({
+          id: 'cloud-id',
+          name: 'cloud-file.epub',
+          size: 1024,
+        }),
+      });
+      (useGoogleServicesStore as unknown as Mock).mockReturnValue(true);
+
+      const onRestore = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveRestore = resolve;
+          }),
+      );
+
+      const { container } = render(
+        <ContentMissingDialog open onOpenChange={vi.fn()} book={mockBook} onRestore={onRestore} />,
+      );
+
+      const input = container.querySelector('input[type="file"]')!;
+      const localFile = new File(['epub'], 'local.epub', { type: 'application/epub+zip' });
+      fireEvent.change(input, { target: { files: [localFile] } });
+
+      await waitFor(() => expect(onRestore).toHaveBeenCalledWith(localFile));
+      expect(container.querySelectorAll('.animate-spin')).toHaveLength(1);
+      expect(screen.getByText('Restore from Cloud')).toBeInTheDocument();
+      expect(screen.getByText('Cancel').closest('button')).toBeDisabled();
+
+      resolveRestore();
+      await waitFor(() => expect(screen.getByText('Select File')).toBeInTheDocument());
+    });
+  });
 });

@@ -108,18 +108,63 @@ describe('EmptyLibrary', () => {
     consoleSpy.mockRestore();
   });
 
-  it('displays loading spinner when importing', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (useLibraryStore as any).mockImplementation((selector: any) => {
-      const state = { isImporting: true };
-      return selector ? selector(state) : state;
+  describe('regression: single CTA spinner during import vs demo load', () => {
+    it('spins only Browse Files when an external import is running', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (useLibraryStore as any).mockImplementation((selector: any) => {
+        const state = { isImporting: true };
+        return selector ? selector(state) : state;
+      });
+
+      const { container } = render(<EmptyLibrary onImport={vi.fn()} />, { wrapper: MemoryRouter });
+      const browseBtn = screen.getByRole('button', { name: 'Importing book...' });
+      const demoBtn = screen.getByRole('button', { name: 'Load Demo Book (Alice in Wonderland)' });
+
+      expect(browseBtn).toBeDisabled();
+      expect(demoBtn).toBeDisabled();
+      expect(browseBtn.querySelector('.animate-spin')).toBeInTheDocument();
+      expect(demoBtn.querySelector('.animate-spin')).not.toBeInTheDocument();
+      expect(container.querySelectorAll('.animate-spin')).toHaveLength(1);
     });
 
-    render(<EmptyLibrary onImport={vi.fn()} />, { wrapper: MemoryRouter });
-    expect(screen.getAllByText('Loading...')[0]).toBeInTheDocument();
-    // Verify spinner is present (Loader2 usually renders an svg with specific class)
-    const button = screen.getAllByText('Loading...')[0].closest('button');
-    expect(button).toBeDisabled();
-    expect(button?.querySelector('.animate-spin')).toBeInTheDocument();
+    it('spins only Load Demo Book while demo import is in flight', async () => {
+      let resolveImport!: (res: { status: string; bookId: string }) => void;
+      mockAddBook.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveImport = resolve;
+          }),
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        blob: () => Promise.resolve(new Blob(['dummy'], { type: 'application/epub+zip' })),
+      });
+
+      const { container, rerender } = render(<EmptyLibrary onImport={vi.fn()} />, { wrapper: MemoryRouter });
+      fireEvent.click(screen.getByText(/Load Demo Book/));
+
+      await waitFor(() => expect(mockAddBook).toHaveBeenCalled());
+
+      // Simulate store flipping isImporting=true while demo import runs.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (useLibraryStore as any).mockImplementation((selector: any) => {
+        const state = { isImporting: true };
+        return selector ? selector(state) : state;
+      });
+      rerender(<EmptyLibrary onImport={vi.fn()} />);
+
+      const browseBtn = screen.getByRole('button', { name: 'Browse files to import' });
+      const demoBtn = screen.getByRole('button', { name: 'Loading demo book...' });
+
+      expect(browseBtn).toBeDisabled();
+      expect(demoBtn).toBeDisabled();
+      expect(browseBtn.querySelector('.animate-spin')).not.toBeInTheDocument();
+      expect(demoBtn.querySelector('.animate-spin')).toBeInTheDocument();
+      expect(container.querySelectorAll('.animate-spin')).toHaveLength(1);
+
+      resolveImport({ status: 'imported', bookId: 'demo-id' });
+      await waitFor(() => expect(mockShowToast).toHaveBeenCalled());
+    });
   });
 });

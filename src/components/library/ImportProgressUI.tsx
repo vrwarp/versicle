@@ -1,5 +1,4 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
 import { Progress } from '../ui/Progress';
 import { Button } from '../ui/Button';
 import { useLibraryStore } from '@store/useLibraryStore';
@@ -78,11 +77,6 @@ export const ImportProgressUI: React.FC = () => {
 
   return (
     <div className="flex flex-col items-center justify-center space-y-3 mt-4 w-full p-4">
-      <div role="status" aria-label="Loading">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
-        <span className="sr-only" aria-live="polite">Processing files...</span>
-      </div>
-
       {/* Upload/Processing Progress */}
       <div className="w-full flex flex-col items-center space-y-1">
         <p className="text-sm text-muted-foreground" role="status" aria-live="polite">

@@ -31,8 +31,13 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
   const isImporting = useLibraryStore((state) => state.isImporting);
   const controller = useImportController();
   const showToast = useToastStore((state) => state.showToast);
+  const [isLoadingDemo, setIsLoadingDemo] = React.useState(false);
+
+  const isBrowseImporting = isImporting && !isLoadingDemo;
+  const isBusy = isImporting || isLoadingDemo;
 
   const handleLoadDemo = async () => {
+    setIsLoadingDemo(true);
     try {
       const response = await localFetch('/books/alice.epub');
       if (!response.ok) throw new Error('Failed to load demo book');
@@ -49,6 +54,8 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
     } catch (error) {
       logger.error('Error loading demo book:', error);
       showToast('Failed to load demo book', 'error');
+    } finally {
+      setIsLoadingDemo(false);
     }
   };
 
@@ -70,16 +77,16 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
       <div
         className="flex flex-col sm:flex-row gap-4 w-full max-w-md justify-center"
         aria-live="polite"
-        aria-busy={isImporting}
+        aria-busy={isBusy}
       >
         <Button
           variant="default"
           onClick={onImport}
-          disabled={isImporting}
+          disabled={isBusy}
           className="font-medium gap-2 h-12 px-6 transition-all touch-manipulation w-full sm:w-auto"
-          aria-label={isImporting ? "Importing book..." : "Browse files to import"}
+          aria-label={isBrowseImporting ? "Importing book..." : "Browse files to import"}
         >
-          {isImporting ? (
+          {isBrowseImporting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               <span className="sr-only" aria-live="polite">Importing...</span>
@@ -87,16 +94,16 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
           ) : (
             <Upload className="h-4 w-4" aria-hidden="true" />
           )}
-          <span aria-hidden={isImporting}>{isImporting ? "Importing..." : "Browse Files"}</span>
+          <span aria-hidden={isBrowseImporting}>{isBrowseImporting ? "Importing..." : "Browse Files"}</span>
         </Button>
         <Button
           variant="outline"
           onClick={handleLoadDemo}
-          disabled={isImporting}
+          disabled={isBusy}
           className="text-primary font-medium gap-2 h-12 px-6 border-primary/20 hover:bg-primary/5 hover:text-primary transition-all touch-manipulation w-full sm:w-auto"
-          aria-label={isImporting ? "Loading demo book..." : "Load Demo Book (Alice in Wonderland)"}
+          aria-label={isLoadingDemo ? "Loading demo book..." : "Load Demo Book (Alice in Wonderland)"}
         >
-          {isImporting ? (
+          {isLoadingDemo ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               <span className="sr-only" aria-live="polite">Loading...</span>
@@ -104,7 +111,7 @@ export const EmptyLibrary: React.FC<EmptyLibraryProps> = ({ onImport }) => {
           ) : (
             <BookOpen className="h-4 w-4" aria-hidden="true" />
           )}
-          <span aria-hidden={isImporting}>{isImporting ? "Loading..." : "Load Demo Book (Alice in Wonderland)"}</span>
+          <span aria-hidden={isLoadingDemo}>{isLoadingDemo ? "Loading..." : "Load Demo Book (Alice in Wonderland)"}</span>
         </Button>
       </div>
     </div>

@@ -16,6 +16,7 @@ import React, { useMemo } from 'react';
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Book, BookOpen, Download, Loader2 } from 'lucide-react';
+import { cn } from '@lib/utils';
 import type { DriveFileIndex } from '@store/useDriveStore';
 import { useBookStore } from '@store/useBookStore';
 import { formatBytes, formatDate } from '@kernel/locale/format';
@@ -101,15 +102,18 @@ export const DrivePreviewSheet: React.FC<DrivePreviewSheetProps> = ({
         </ModalHeader>
 
         <div className="flex gap-4 py-2">
-          <div className="w-24 h-36 shrink-0 rounded-md overflow-hidden bg-muted flex items-center justify-center border">
+          <div
+            className={cn(
+              "w-24 h-36 shrink-0 rounded-md overflow-hidden bg-muted flex items-center justify-center border",
+              !preview.coverUrl && preview.loading && "animate-pulse"
+            )}
+          >
             {preview.coverUrl ? (
               <img
                 src={preview.coverUrl}
                 alt={`Cover of ${displayTitle}`}
                 className="w-full h-full object-cover"
               />
-            ) : preview.loading ? (
-              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" aria-hidden="true" />
             ) : (
               <Book className="w-8 h-8 text-muted-foreground" aria-hidden="true" />
             )}

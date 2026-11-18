@@ -297,4 +297,52 @@ describe('SearchPanel', () => {
         await screen.findByText('Semantic Search Ready');
         expect(screen.getByText('100% of book text indexed by meaning.')).toBeInTheDocument();
     });
+
+    describe('regression: avoids stacked button spinner while book indexing bar is visible', () => {
+        it('suppresses the Search button spinner while indexing and shows it once indexing finishes', async () => {
+            let resolveRow: (row: CacheSearchTextRow) => void = () => {};
+            let resolveSearch: (value: { results: never[]; truncated: boolean }) => void = () => {};
+
+            const engine: SearchEngineProtocol = {
+                initIndex: () => {},
+                addDocuments: () => {},
+                rankInt8: () => [],
+                findBestSentences: () => [],
+                searchDetailed: () =>
+                    new Promise((resolve) => {
+                        resolveSearch = resolve;
+                    }),
+            };
+            const session = makeSession({
+                engine,
+                getRow: () =>
+                    new Promise((resolve) => {
+                        resolveRow = resolve;
+                    }),
+            });
+
+            const { container } = renderPanel({ session });
+            await screen.findByText('Indexing book...');
+
+            await runSearch('whale', 'enter');
+
+            // While indexing is active, the indeterminate Indexing progress bar owns feedback.
+            expect(screen.getByRole('progressbar', { name: 'Indexing progress' })).toBeInTheDocument();
+            expect(container.querySelectorAll('.animate-spin')).toHaveLength(0);
+
+            // Once indexing completes and searchDetailed is in flight, the Search button spins.
+            await act(async () => {
+                resolveRow(corpusRow);
+            });
+            await waitFor(() => {
+                expect(screen.queryByText('Indexing book...')).not.toBeInTheDocument();
+                expect(container.querySelectorAll('.animate-spin')).toHaveLength(1);
+            });
+
+            await act(async () => {
+                resolveSearch({ results: [], truncated: false });
+            });
+        });
+    });
 });
+
