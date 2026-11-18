@@ -285,7 +285,7 @@ describe('LibraryView', () => {
         await waitFor(() => {
             expect(mockImportFile).toHaveBeenCalledWith(file);
             expect(mockShowToast).toHaveBeenCalledWith(
-                expect.stringContaining('imported successfully'),
+                'Imported "test"',
                 'success',
                 5000,
                 { label: 'common.open', onAction: expect.any(Function) },
@@ -338,6 +338,75 @@ describe('LibraryView', () => {
 
         await waitFor(() => {
             expect(replaceStateSpy).toHaveBeenCalledWith({}, expect.any(String));
+        });
+    });
+
+    describe('regression: transitional library states (batch summary on populated shelf & restoreBookId redirect)', () => {
+        it('renders BatchImportSummary on a populated library shelf when batchImportSummary is set', () => {
+            useBookStore.setState({
+                books: {
+                    b1: {
+                        bookId: 'b1',
+                        title: 'Existing Book',
+                        author: 'Author',
+                        addedAt: 1,
+                        lastInteraction: 1,
+                        tags: [],
+                        status: 'unread',
+                    },
+                },
+            });
+            useLibraryStore.setState({
+                isLoading: false,
+                isImporting: false,
+                batchImportSummary: {
+                    imported: 3,
+                    skipped: ['dup.epub'],
+                    failed: [],
+                },
+            });
+
+            render(
+                <MemoryRouter>
+                    <LibraryView />
+                </MemoryRouter>
+            );
+
+            expect(screen.getByTestId('batch-import-summary')).toHaveTextContent(
+                'Import complete: 3 imported, 1 duplicates skipped, 0 failed',
+            );
+            useLibraryStore.setState({ batchImportSummary: null });
+        });
+
+        it('opens ContentMissingDialog when navigated with state.restoreBookId', async () => {
+            useBookStore.setState({
+                books: {
+                    'ghost-1': {
+                        bookId: 'ghost-1',
+                        title: 'Lost Manuscript',
+                        author: 'Ancient Author',
+                        addedAt: 1,
+                        lastInteraction: 1,
+                        tags: [],
+                        status: 'unread',
+                    },
+                },
+            });
+            useLibraryStore.setState({
+                isLoading: false,
+                staticMetadata: {},
+                offloadedBookIds: new Set(['ghost-1']),
+            });
+
+            render(
+                <MemoryRouter initialEntries={[{ pathname: '/', state: { restoreBookId: 'ghost-1' } }]}>
+                    <LibraryView />
+                </MemoryRouter>
+            );
+
+            await waitFor(() => {
+                expect(screen.getByText('Offloaded Book')).toBeInTheDocument();
+            });
         });
     });
 });

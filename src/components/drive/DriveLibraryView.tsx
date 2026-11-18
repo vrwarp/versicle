@@ -36,11 +36,12 @@ import { useBookStore } from '@store/useBookStore';
 import { useToastStore } from '@store/useToastStore';
 import { BackButtonPriority } from '@store/useBackNavigationStore';
 import { useNavigationGuard } from '@hooks/useNavigationGuard';
-import { getDriveLibrarySync, GoogleAuthRequiredError } from '@domains/google';
+import { getDriveLibrarySync, getGoogleAuthClient, GoogleAuthRequiredError } from '@domains/google';
 import { DuplicateBookError } from '~types/errors';
 import { presentError } from '@app/errors/presentError';
 import { compareTitles, formatRelativeTime } from '@kernel/locale/format';
 import { createLogger } from '@lib/logger';
+import { formatToastBookTitle } from '@lib/utils';
 import { DriveBookCard } from './DriveBookCard';
 import { DriveBookListItem } from './DriveBookListItem';
 import { DrivePreviewSheet } from './DrivePreviewSheet';
@@ -151,8 +152,10 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
     try {
       // User gesture: interactive token acquisition.
       const bookId = await getDriveLibrarySync().importFile(file.id, file.name, options, { interactive: true });
+      const storedBook = bookId ? (useBookStore.getState?.()?.books?.[bookId] ?? books[bookId]) : undefined;
+      const label = formatToastBookTitle(file.name, storedBook?.customTitle || storedBook?.title);
       showToast(
-        options?.overwrite ? `Replaced "${file.name}"` : `Imported "${file.name}"`,
+        options?.overwrite ? `Replaced "${label}"` : `Imported "${label}"`,
         'success',
         bookId ? 5000 : undefined,
         bookId ? { label: 'common.open', onAction: () => navigate(`/read/${bookId}`) } : undefined,
@@ -160,13 +163,18 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
     } finally {
       setImportingId(null);
     }
-  }, [navigate, showToast]);
+  }, [books, navigate, showToast]);
 
   /** Toast for a genuinely failed import/replace (never for a duplicate). */
   const reportFailure = useCallback((verb: 'import' | 'replace', file: DriveFileIndex, error: unknown) => {
     logger.error(`Drive ${verb} failed`, error);
     if (error instanceof GoogleAuthRequiredError) {
-      showToast('Google Drive needs to be reconnected. Sign in and try again.', 'error');
+      showToast(
+        'Google Drive needs to be reconnected. Sign in and try again.',
+        'error',
+        5000,
+        { label: 'common.reconnect', onAction: () => { void getGoogleAuthClient().connect('drive'); } },
+      );
     } else {
       // presentError maps error.code — the UI never relays raw service prose.
       showToast(`Failed to ${verb} "${file.name}": ${presentError(error)}`, 'error');
@@ -181,18 +189,21 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
     // just reached without first pulling the whole EPUB over the wire only to
     // hand back a question the user may answer with "cancel".
     if (libraryFilenames.has(file.name)) {
+      setPreviewFile(null);
       setDuplicateFile(file);
       return;
     }
 
     try {
       await runImport(file);
+      setPreviewFile((cur) => (cur?.id === file.id ? null : cur));
     } catch (error) {
       // Backstop for the gate's other half: the orchestrator also consults the
       // DB filename index, which can hold a book the inventory projection has
       // not caught up with. A duplicate is a PROMPT, not a failure — the
       // Replace path preserves the existing book's progress, notes and tags.
       if (error instanceof DuplicateBookError) {
+        setPreviewFile(null);
         setDuplicateFile(file);
         return;
       }
@@ -204,7 +215,10 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
   // than leaving /drive under them — the same MODAL-priority contract the
   // library's own dialogs register (LibraryView).
   useNavigationGuard(
-    useCallback(() => setPreviewFile(null), []),
+    useCallback(() => {
+      if (importingId) return;
+      setPreviewFile(null);
+    }, [importingId]),
     BackButtonPriority.MODAL,
     !!previewFile,
   );
@@ -241,7 +255,12 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
     } catch (error) {
       logger.error('Drive index refresh failed', error);
       if (error instanceof GoogleAuthRequiredError) {
-        showToast('Google Drive needs to be reconnected. Sign in and try again.', 'error');
+        showToast(
+          'Google Drive needs to be reconnected. Sign in and try again.',
+          'error',
+          5000,
+          { label: 'common.reconnect', onAction: () => { void getGoogleAuthClient().connect('drive'); } },
+        );
       } else {
         showToast('Failed to refresh index', 'error');
       }
@@ -441,7 +460,11 @@ export const DriveLibraryView: React.FC<DriveLibraryViewProps> = ({ viewMode }) 
         file={previewFile}
         importing={!!previewFile && importingId === previewFile.id}
         onClose={() => setPreviewFile(null)}
-        onImport={(file) => { setPreviewFile(null); handleImport(file); }}
+        onImport={(file) => { void handleImport(file); }}
+        onOpenBook={(bookId) => {
+          setPreviewFile(null);
+          navigate(`/read/${bookId}`);
+        }}
       />
 
       <ReplaceBookDialog

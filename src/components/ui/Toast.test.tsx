@@ -156,4 +156,25 @@ describe('ToastHost (queue stack above the router gate)', () => {
             expect(screen.getByText('boot warning')).toBeInTheDocument();
         });
     });
+
+    describe('regression: ToastHost offsets above active ReaderControlBar pill', () => {
+        it('raises bottom offset when pillVisible is true and restores baseline when false', async () => {
+            const { useReaderUIStore } = await import('@store/useReaderUIStore');
+            useReaderUIStore.setState({ pillVisible: false });
+
+            render(<ToastHost />);
+            const container = screen.getByTestId('toast-host');
+            expect(container.className).toContain('bottom-[calc(1.5rem+var(--safe-area-inset-bottom))]');
+
+            act(() => {
+                useReaderUIStore.getState().setPillVisible(true);
+            });
+            expect(container.className).toContain('bottom-[calc(7.25rem+var(--safe-area-inset-bottom))]');
+
+            act(() => {
+                useReaderUIStore.getState().setPillVisible(false);
+            });
+            expect(container.className).toContain('bottom-[calc(1.5rem+var(--safe-area-inset-bottom))]');
+        });
+    });
 });

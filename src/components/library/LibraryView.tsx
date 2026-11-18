@@ -1,14 +1,17 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo, Suspense } from 'react';
 import { useLibraryStore } from '@store/useLibraryStore';
+import { useBookStore } from '@store/useBookStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
 import { useAllBooks } from '@store/libraryViewStore';
 import { createLogger } from '@lib/logger';
 import { measureSince } from '@lib/perf';
 import { importWithChunkReload } from '@lib/chunkReload';
+import { formatToastBookTitle } from '@lib/utils';
 import { useToastStore } from '@store/useToastStore';
 import { BookCard } from './BookCard';
 import { BookListItem } from './BookListItem';
 import { EmptyLibrary } from './EmptyLibrary';
+import { ImportProgressUI } from './ImportProgressUI';
 import { SyncPulseIndicator } from '../sync/SyncPulseIndicator';
 import { Upload, Settings, LayoutGrid, List as ListIcon, FilePlus, Loader2 } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -152,18 +155,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
     measureLibraryMountedOnce();
   }, []);
 
-  // Check for reprocessing request from navigation state
-  useEffect(() => {
-    const state = location.state as { reprocessBookId?: string } | null;
-    const reprocessBookId = state?.reprocessBookId;
-    if (reprocessBookId) {
-      // Clear state to prevent reopening on reload/navigation
-      window.history.replaceState({}, document.title);
-      // Defer state update to avoid triggering cascading renders
-      setTimeout(() => setReprocessingBookId(reprocessBookId), 0);
-    }
-  }, [location.state]);
-
   const { staticMetadata, offloadedBookIds } = useLibraryStore(useShallow(state => ({
     staticMetadata: state.staticMetadata,
     offloadedBookIds: state.offloadedBookIds
@@ -200,13 +191,50 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
     setIsContentMissingOpen(true);
   }, []);
 
+  const handledLocationStateRef = useRef<unknown>(null);
+
+  // Check for reprocessing or missing-file restore request from navigation state
+  useEffect(() => {
+    const state = location.state as { reprocessBookId?: string; restoreBookId?: string } | null;
+    if (!state || handledLocationStateRef.current === state) return;
+    const { reprocessBookId, restoreBookId } = state;
+    if (!reprocessBookId && !restoreBookId) return;
+    if (restoreBookId && isLoading) return;
+
+    handledLocationStateRef.current = state;
+    // Clear state to prevent reopening on reload/navigation
+    window.history.replaceState({}, document.title);
+    // Defer state update to avoid triggering cascading renders
+    setTimeout(() => {
+      if (reprocessBookId) {
+        setReprocessingBookId(reprocessBookId);
+      }
+      if (restoreBookId) {
+        const targetBook = books.find((b) => b.id === restoreBookId);
+        if (targetBook) {
+          handleRestore(targetBook);
+        } else {
+          showToast('Book not found in library', 'error');
+        }
+      }
+    }, 0);
+  }, [location.state, isLoading, books, handleRestore, showToast]);
+
   const handlePerformRestore = async (file: File, allowContentMismatch = false) => {
     if (!bookToRestore) return;
 
+    const restoredId = bookToRestore.id;
+    const restoredTitle = bookToRestore.title;
+
     setIsRestoring(true);
     try {
-      await controller.restoreBook(bookToRestore.id, file, { allowContentMismatch });
-      showToast(`Restored "${bookToRestore.title}"`, 'success');
+      await controller.restoreBook(restoredId, file, { allowContentMismatch });
+      showToast(
+        `Restored "${restoredTitle}"`,
+        'success',
+        5000,
+        { label: 'common.open', onAction: () => navigate(`/read/${restoredId}`) },
+      );
       setRestoreMismatchFile(null);
       setIsContentMissingOpen(false);
       setBookToRestore(null);
@@ -254,8 +282,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
       const file = e.target.files[0];
       controller.importFile(file).then((result) => {
         const bookId = 'bookId' in result ? result.bookId : undefined;
+        const storedBook = bookId ? useBookStore.getState()?.books?.[bookId] : undefined;
+        const label = formatToastBookTitle(file.name, storedBook?.customTitle || storedBook?.title);
         showToast(
-          "Book imported successfully",
+          `Imported "${label}"`,
           "success",
           bookId ? 5000 : undefined,
           bookId ? { label: 'common.open', onAction: () => navigate(`/read/${bookId}`) } : undefined,
@@ -279,8 +309,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
     try {
       const result = await controller.replaceFile(currentDuplicate);
       const bookId = 'bookId' in result ? result.bookId : undefined;
+      const storedBook = bookId ? useBookStore.getState()?.books?.[bookId] : undefined;
+      const label = formatToastBookTitle(currentDuplicate.name, storedBook?.customTitle || storedBook?.title);
       showToast(
-        "Book replaced successfully",
+        `Replaced "${label}"`,
         "success",
         bookId ? 5000 : undefined,
         bookId ? { label: 'common.open', onAction: () => navigate(`/read/${bookId}`) } : undefined,
@@ -325,8 +357,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
 
       controller.importFile(file).then((result) => {
         const bookId = 'bookId' in result ? result.bookId : undefined;
+        const storedBook = bookId ? useBookStore.getState()?.books?.[bookId] : undefined;
+        const label = formatToastBookTitle(file.name, storedBook?.customTitle || storedBook?.title);
         showToast(
-          "Book imported successfully",
+          `Imported "${label}"`,
           "success",
           5000,
           bookId ? { label: 'common.open', onAction: () => navigate(`/read/${bookId}`) } : undefined,
@@ -737,30 +771,37 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ context = 'library' })
         <section className="flex-1 w-full">
           {books.length === 0 ? (
             <EmptyLibrary onImport={triggerFileUpload} />
-          ) : filteredAndSortedBooks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <p className="text-lg">No books found matching "{debouncedSearchQuery}"</p>
-              <Button
-                variant="link"
-                onClick={() => searchBarRef.current?.clearSearch()}
-                className="mt-2"
-              >
-                Clear search
-              </Button>
-            </div>
           ) : (
             <>
-              {viewMode === 'grid' ? (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-6 w-full">
-                  {renderedGridItems}
+              <div className="mb-6 empty:mb-0">
+                <ImportProgressUI />
+              </div>
+              {filteredAndSortedBooks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                  <p className="text-lg">No books found matching "{debouncedSearchQuery}"</p>
+                  <Button
+                    variant="link"
+                    onClick={() => searchBarRef.current?.clearSearch()}
+                    className="mt-2"
+                  >
+                    Clear search
+                  </Button>
                 </div>
               ) : (
-                <div className="flex flex-col gap-2 w-full">
-                  {renderedListItems}
-                </div>
+                <>
+                  {viewMode === 'grid' ? (
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-6 w-full">
+                      {renderedGridItems}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2 w-full">
+                      {renderedListItems}
+                    </div>
+                  )}
+                  {/* Spacer for bottom navigation or just breathing room */}
+                  <div className="h-24" />
+                </>
               )}
-              {/* Spacer for bottom navigation or just breathing room */}
-              <div className="h-24" />
             </>
           )}
         </section>

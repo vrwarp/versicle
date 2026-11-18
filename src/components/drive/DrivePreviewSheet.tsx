@@ -15,7 +15,7 @@
 import React, { useMemo } from 'react';
 import { Modal, ModalContent, ModalHeader, ModalTitle, ModalDescription } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { Book, Download, Loader2 } from 'lucide-react';
+import { Book, BookOpen, Download, Loader2 } from 'lucide-react';
 import type { DriveFileIndex } from '@store/useDriveStore';
 import { useBookStore } from '@store/useBookStore';
 import { formatBytes, formatDate } from '@kernel/locale/format';
@@ -25,10 +25,13 @@ interface DrivePreviewSheetProps {
   file: DriveFileIndex | null;
   onClose: () => void;
   onImport: (file: DriveFileIndex) => void;
+  onOpenBook?: (bookId: string) => void;
   importing?: boolean;
 }
 
 interface LibraryMatch {
+  /** ID of the matched book in the library. */
+  bookId: string;
   /** "Title — Author" of the book already held. */
   label: string;
   /**
@@ -61,7 +64,7 @@ function useLibraryMatch(filename?: string, title?: string): LibraryMatch | unde
     if (filename) {
       for (const book of Object.values(books)) {
         if (book.sourceFilename === filename) {
-          return { label: describe(book.title, book.author), byFilename: true };
+          return { bookId: book.bookId, label: describe(book.title, book.author), byFilename: true };
         }
       }
     }
@@ -70,7 +73,7 @@ function useLibraryMatch(filename?: string, title?: string): LibraryMatch | unde
     const normalized = title.trim().toLowerCase();
     for (const book of Object.values(books)) {
       if (book.title?.trim().toLowerCase() === normalized) {
-        return { label: describe(book.title, book.author), byFilename: false };
+        return { bookId: book.bookId, label: describe(book.title, book.author), byFilename: false };
       }
     }
     return undefined;
@@ -81,6 +84,7 @@ export const DrivePreviewSheet: React.FC<DrivePreviewSheetProps> = ({
   file,
   onClose,
   onImport,
+  onOpenBook,
   importing = false,
 }) => {
   const preview = useDrivePreview(file?.id, { priority: 'interactive', interactive: true });
@@ -89,7 +93,7 @@ export const DrivePreviewSheet: React.FC<DrivePreviewSheetProps> = ({
   const displayTitle = preview.title || file?.name || 'Untitled';
 
   return (
-    <Modal open={!!file} onOpenChange={(open) => !open && onClose()}>
+    <Modal open={!!file} onOpenChange={(open) => { if (!open && !importing) onClose(); }}>
       <ModalContent className="sm:max-w-md">
         <ModalHeader>
           <ModalTitle>Preview</ModalTitle>
@@ -146,14 +150,44 @@ export const DrivePreviewSheet: React.FC<DrivePreviewSheetProps> = ({
           <Button variant="outline" onClick={onClose} disabled={importing}>
             Cancel
           </Button>
-          <Button onClick={() => file && onImport(file)} disabled={importing || !file}>
-            {importing ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
-            ) : (
-              <Download className="w-4 h-4 mr-2" aria-hidden="true" />
-            )}
-            Import
-          </Button>
+          {match?.byFilename ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => file && onImport(file)}
+                disabled={importing || !file}
+                data-testid="drive-preview-replace"
+              >
+                {importing ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Download className="w-4 h-4 mr-2" aria-hidden="true" />
+                )}
+                {importing ? 'Replacing...' : 'Replace'}
+              </Button>
+              <Button
+                onClick={() => onOpenBook?.(match.bookId)}
+                disabled={importing || !onOpenBook}
+                data-testid="drive-preview-open"
+              >
+                <BookOpen className="w-4 h-4 mr-2" aria-hidden="true" />
+                Open Book
+              </Button>
+            </>
+          ) : (
+            <Button
+              onClick={() => file && onImport(file)}
+              disabled={importing || !file}
+              data-testid="drive-preview-import"
+            >
+              {importing ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
+              ) : (
+                <Download className="w-4 h-4 mr-2" aria-hidden="true" />
+              )}
+              {importing ? 'Importing...' : 'Import'}
+            </Button>
+          )}
         </div>
 
         <p className="sr-only" aria-live="polite">

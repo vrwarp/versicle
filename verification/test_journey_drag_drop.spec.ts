@@ -47,7 +47,7 @@ test('Drag and Drop Import Journey', async ({ page }) => {
   }, [fileBuffer, 'alice.epub'] as [number[], string]);
 
   // 3. Verify Success Toast
-  await expect(page.getByText('Book imported successfully')).toBeVisible({ timeout: 30000 });
+  await expect(page.getByText(/Imported "Alice's Adventures in Wonderland"/)).toBeVisible({ timeout: 30000 });
 
   // 4. Verify Book Appears
   await expect(page.locator("[data-testid^='book-card-']").first()).toBeVisible();

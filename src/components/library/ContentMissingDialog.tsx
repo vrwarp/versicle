@@ -104,21 +104,30 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
         }
     };
 
+    const isBusy = isRestoring || isCloudRestoring;
+
     return (
         <Dialog
             isOpen={open}
-            onClose={() => onOpenChange(false)}
+            onClose={() => {
+                if (!isBusy) onOpenChange(false);
+            }}
             title="Content Missing"
             description={`The content for "${book.title}" is not on your device.`}
             footer={
                 <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-2 w-full">
-                    <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
+                    <Button
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                        disabled={isBusy}
+                        className="w-full sm:w-auto"
+                    >
                         Cancel
                     </Button>
                     <Button 
                         variant={cloudMatch ? "outline" : "default"} 
                         onClick={handleRestoreClick} 
-                        disabled={isRestoring || isCloudRestoring || isReconnecting} 
+                        disabled={isBusy || isReconnecting} 
                         className="w-full sm:w-auto"
                     >
                         {isRestoring ? (
@@ -138,7 +147,7 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                         <Button
                             variant="default"
                             onClick={isDriveConnected ? handleCloudRestore : handleReconnect}
-                            disabled={isRestoring || isCloudRestoring || isReconnecting}
+                            disabled={isBusy || isReconnecting}
                             className="w-full sm:w-auto"
                         >
                             {isCloudRestoring ? (
@@ -172,9 +181,13 @@ export const ContentMissingDialog: React.FC<ContentMissingDialogProps> = ({
                 <div className="p-4 bg-muted/20 border rounded-lg flex items-start gap-3">
                     <CloudOff className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
                     <div className="space-y-1">
-                        <p className="text-sm font-medium">Ghost Book</p>
+                        <p className="text-sm font-medium">
+                            {book.isOffloaded ? 'Offloaded Book' : 'Ghost Book'}
+                        </p>
                         <p className="text-xs text-muted-foreground">
-                            Reading progress and metadata are synced, but the book file (EPUB) is missing locally.
+                            {book.isOffloaded
+                                ? 'You offloaded this book file to save space on this device. Your reading progress, highlights, and notes are preserved.'
+                                : 'Reading progress and metadata are synced, but the book file (EPUB) is missing locally.'}
                         </p>
                     </div>
                 </div>

@@ -123,10 +123,15 @@ function setDriveState(overrides: Partial<DriveStoreState> = {}): void {
   );
 }
 
-function setLibraryBooks(books: Record<string, { sourceFilename?: string }>): void {
+function setLibraryBooks(
+  books: Record<string, { bookId?: string; title?: string; sourceFilename?: string }>,
+): void {
   (useBookStore as unknown as Mock).mockImplementation(
-    (selector: (s: { books: Record<string, { sourceFilename?: string }> }) => unknown) =>
-      selector({ books }),
+    (
+      selector: (s: {
+        books: Record<string, { bookId?: string; title?: string; sourceFilename?: string }>;
+      }) => unknown,
+    ) => selector({ books }),
   );
 }
 
@@ -181,6 +186,8 @@ describe('DriveLibraryView', () => {
         expect(mockShowToast).toHaveBeenCalledWith(
           'Google Drive needs to be reconnected. Sign in and try again.',
           'error',
+          5000,
+          { label: 'common.reconnect', onAction: expect.any(Function) },
         );
       });
     });
@@ -311,7 +318,7 @@ describe('DriveLibraryView', () => {
       });
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
-          'Imported "Book 000.epub"',
+          'Imported "Book 000"',
           'success',
           5000,
           { label: 'common.open', onAction: expect.any(Function) },
@@ -398,7 +405,7 @@ describe('DriveLibraryView', () => {
 
       it('re-imports with overwrite when the replace is confirmed', async () => {
         setDriveState({ index: makeFiles(1) });
-        setLibraryBooks({ b1: { sourceFilename: 'Book 000.epub' } });
+        setLibraryBooks({ b1: { bookId: 'b1', title: 'Canonical Book', sourceFilename: 'Book 000.epub' } });
         renderShelf('list');
 
         fireEvent.click(screen.getByTestId('drive-import-file-0'));
@@ -417,7 +424,7 @@ describe('DriveLibraryView', () => {
         });
         await waitFor(() => {
           expect(mockShowToast).toHaveBeenCalledWith(
-            'Replaced "Book 000.epub"',
+            'Replaced "Canonical Book"',
             'success',
             5000,
             { label: 'common.open', onAction: expect.any(Function) },
@@ -490,6 +497,40 @@ describe('DriveLibraryView', () => {
         });
       });
 
+      it('regression: holds the preview sheet open while a Drive import is in flight, then closes on success', async () => {
+        setDriveState({ index: makeFiles(1) });
+        let resolveImport!: (id: string) => void;
+        driveSync.importFile.mockReturnValue(
+          new Promise<string>((resolve) => {
+            resolveImport = resolve;
+          }),
+        );
+        renderShelf('grid');
+
+        fireEvent.click(screen.getByTestId('drive-card-file-0'));
+        await screen.findByText('Review this book before importing it.');
+
+        fireEvent.click(screen.getByTestId('drive-preview-import'));
+        await waitFor(() => {
+          expect(screen.getByTestId('drive-preview-import')).toHaveTextContent('Importing...');
+        });
+
+        // Back button must not undercut the in-flight import sheet either.
+        await act(async () => {
+          await topBackHandler()!();
+        });
+        expect(screen.getByText('Review this book before importing it.')).toBeInTheDocument();
+
+        await act(async () => {
+          resolveImport('book-000');
+        });
+        await waitFor(() => {
+          expect(
+            screen.queryByText('Review this book before importing it.'),
+          ).not.toBeInTheDocument();
+        });
+      });
+
       it('dismisses the replace prompt instead of leaving the shelf', async () => {
         setDriveState({ index: makeFiles(1) });
         setLibraryBooks({ b1: { sourceFilename: 'Book 000.epub' } });
@@ -544,6 +585,8 @@ describe('DriveLibraryView', () => {
         expect(mockShowToast).toHaveBeenCalledWith(
           'Google Drive needs to be reconnected. Sign in and try again.',
           'error',
+          5000,
+          { label: 'common.reconnect', onAction: expect.any(Function) },
         );
       });
     });

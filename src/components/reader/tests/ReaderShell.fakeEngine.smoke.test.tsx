@@ -20,13 +20,17 @@ import { useAnnotationStore } from '@store/useAnnotationStore';
 const fakeEngine = new FakeReaderEngine();
 const displaySpy = vi.spyOn(fakeEngine, 'display');
 
+const { epubReaderState } = vi.hoisted(() => ({
+  epubReaderState: { isReady: true, isLoading: false, areLocationsReady: true },
+}));
+
 vi.mock('@hooks/useEpubReader', () => ({
   useEpubReader: () => ({
     engine: fakeEngine,
     book: null,
-    isReady: true,
-    areLocationsReady: true,
-    isLoading: false,
+    isReady: epubReaderState.isReady,
+    areLocationsReady: epubReaderState.areLocationsReady ?? true,
+    isLoading: epubReaderState.isLoading,
     metadata: null,
     toc: fakeEngine.getToc(),
     error: null,
@@ -36,6 +40,8 @@ vi.mock('@hooks/useEpubReader', () => ({
 describe('renderer-swap smoke: ReaderView boots on FakeReaderEngine', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    epubReaderState.isReady = true;
+    epubReaderState.isLoading = false;
     useReaderUIStore.getState().reset();
     useAnnotationStore.setState({ annotations: {} });
     useReadingStateStore.setState({
@@ -73,6 +79,7 @@ describe('renderer-swap smoke: ReaderView boots on FakeReaderEngine', () => {
       expect(screen.getByTestId('reader-header')).toBeInTheDocument();
       expect(screen.getByTestId('reader-iframe-container')).toBeInTheDocument();
     });
+    expect(screen.queryByTestId('reader-loading-overlay')).not.toBeInTheDocument();
 
     // a11y landmarks: the content area is a real <main>, the header a banner.
     expect(screen.getByRole('main', { name: 'Book' })).toBeInTheDocument();
@@ -135,6 +142,20 @@ describe('renderer-swap smoke: ReaderView boots on FakeReaderEngine', () => {
       // ...and a LIVE session exists for book B — the unmount retires it too.
       view.unmount();
       expect(dispose).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('regression: reader-loading-overlay covers blank viewport while epub.js initializes', () => {
+    it('renders reader-loading-overlay while isLoading && !isReady without unmounting ReaderViewport', () => {
+      epubReaderState.isReady = false;
+      epubReaderState.isLoading = true;
+      useReaderUIStore.setState({ isLoading: true });
+
+      renderShell();
+
+      expect(screen.getByTestId('reader-loading-overlay')).toHaveTextContent('Opening book…');
+      // ReaderViewport MUST remain mounted so epub.js can attach to viewerRef.
+      expect(screen.getByTestId('reader-iframe-container')).toBeInTheDocument();
     });
   });
 });

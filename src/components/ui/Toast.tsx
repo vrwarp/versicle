@@ -78,7 +78,7 @@ export const Toast: React.FC<ToastProps> = ({
       data-testid="toast"
       data-toast-type={type}
       className={cn(
-        "px-4 py-3 rounded-lg shadow-lg text-sm font-medium border animate-in fade-in slide-in-from-bottom-5 flex items-center gap-3 min-w-[300px] max-w-md pointer-events-auto",
+        "px-4 py-3 rounded-lg shadow-lg text-sm font-medium border animate-in fade-in slide-in-from-bottom-5 flex items-center gap-3 w-[calc(100vw-2rem)] sm:w-auto sm:min-w-[300px] max-w-md pointer-events-auto",
         getStyles()
       )}
       onMouseEnter={() => setIsPaused(true)}
@@ -94,7 +94,7 @@ export const Toast: React.FC<ToastProps> = ({
       <div className="shrink-0">
         {getIcon()}
       </div>
-      <div className="flex-1 mr-2">
+      <div className="flex-1 min-w-0 mr-2 line-clamp-2 break-words">
         {message}
       </div>
       {action && (

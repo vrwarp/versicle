@@ -16,6 +16,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { Outlet, useParams } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useReaderUIStore } from '@store/useReaderUIStore';
 import { usePreferencesStore } from '@store/usePreferencesStore';
@@ -42,8 +43,9 @@ export const ReaderShell: React.FC = () => {
     const { id: bookId } = useParams<{ id: string }>();
     const { activeSidebar } = useSidebarState();
 
-    const { currentSectionTitle, immersiveMode, dispatchCompass } =
+    const { isLoading, currentSectionTitle, immersiveMode, dispatchCompass } =
         useReaderUIStore(useShallow(state => ({
+            isLoading: state.isLoading,
             currentSectionTitle: state.currentSectionTitle,
             immersiveMode: state.immersiveMode,
             dispatchCompass: state.dispatchCompass,
@@ -142,6 +144,22 @@ export const ReaderShell: React.FC = () => {
                         readerViewMode={controller.readerViewMode}
                         direction={isRtlLanguage(controller.bookMetadata?.language) ? 'rtl' : 'ltr'}
                     />
+
+                    {isLoading && !controller.isReady && (
+                        <div
+                            data-testid="reader-loading-overlay"
+                            role="status"
+                            aria-live="polite"
+                            className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/80 backdrop-blur-[1px] pointer-events-none"
+                        >
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
+                            <p className="text-sm font-medium text-muted-foreground px-6 text-center max-w-sm truncate">
+                                {controller.bookMetadata?.title
+                                    ? `Opening “${controller.bookMetadata.title}”…`
+                                    : 'Opening book…'}
+                            </p>
+                        </div>
+                    )}
                 </main>
 
                 <DebugHighlightLayer

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cn } from './utils';
+import { cn, formatToastBookTitle } from './utils';
 
 describe('utils', () => {
   it('should merge class names', () => {
@@ -27,5 +27,18 @@ describe('utils', () => {
 
   it('should handle mixed inputs', () => {
       expect(cn('c1', undefined, null, 'c2')).toBe('c1 c2');
+  });
+
+  describe('formatToastBookTitle', () => {
+    it('prefers a resolved book title over the raw filename', () => {
+      expect(formatToastBookTitle('pg11-images-3.epub', "Alice's Adventures in Wonderland")).toBe(
+        "Alice's Adventures in Wonderland",
+      );
+    });
+
+    it('falls back to the filename stripped of .epub when title is blank or missing', () => {
+      expect(formatToastBookTitle('my-book.EPUB', '   ')).toBe('my-book');
+      expect(formatToastBookTitle('plain-name', undefined)).toBe('plain-name');
+    });
   });
 });

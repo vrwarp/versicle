@@ -1,5 +1,7 @@
 import React from 'react';
 import { useToastStore } from '@store/useToastStore';
+import { useReaderUIStore } from '@store/useReaderUIStore';
+import { cn } from '@lib/utils';
 import { Toast } from './ui/Toast';
 
 /**
@@ -23,6 +25,7 @@ import { Toast } from './ui/Toast';
 export const ToastHost: React.FC = () => {
   const toasts = useToastStore((state) => state.toasts);
   const dismissToast = useToastStore((state) => state.dismissToast);
+  const pillVisible = useReaderUIStore((state) => state.pillVisible);
 
   const errors = toasts.filter((t) => t.type === 'error');
   const others = toasts.filter((t) => t.type !== 'error');
@@ -30,7 +33,12 @@ export const ToastHost: React.FC = () => {
   return (
     <div
       data-testid="toast-host"
-      className="fixed bottom-[calc(5rem+var(--safe-area-inset-bottom))] left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 pointer-events-none"
+      className={cn(
+        'fixed left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 pointer-events-none transition-[bottom] duration-200',
+        pillVisible
+          ? 'bottom-[calc(7.25rem+var(--safe-area-inset-bottom))]'
+          : 'bottom-[calc(1.5rem+var(--safe-area-inset-bottom))]',
+      )}
     >
       <div role="status" aria-live="polite" className="flex flex-col items-center gap-2 empty:hidden">
         {others.map((toast) => (

@@ -214,10 +214,44 @@ describe('FileUploader', () => {
 
     // 6. Expect toast success
     expect(mockShowToast).toHaveBeenCalledWith(
-      "Book replaced successfully",
+      'Replaced "test"',
       "success",
       5000,
       { label: 'common.open', onAction: expect.any(Function) },
     );
+  });
+
+  describe('regression: single-file import toast surfaces resolved book title', () => {
+    it('uses the stored book title instead of a generic label', async () => {
+      const { useBookStore } = await import('@store/useBookStore');
+      useBookStore.setState({
+        books: {
+          x: {
+            bookId: 'x',
+            title: 'The Pilgrim’s Progress',
+            author: 'John Bunyan',
+            addedAt: 1,
+            lastInteraction: 1,
+            tags: [],
+            status: 'unread',
+          },
+        },
+      });
+
+      const { container } = render(<FileUploader />, { wrapper: MemoryRouter });
+      const input = container.querySelector('input[type="file"]');
+      const file = new File(['dummy'], 'pg131.epub', { type: 'application/epub+zip' });
+
+      fireEvent.change(input!, { target: { files: [file] } });
+
+      await waitFor(() => {
+        expect(mockShowToast).toHaveBeenCalledWith(
+          'Imported "The Pilgrim’s Progress"',
+          'success',
+          5000,
+          { label: 'common.open', onAction: expect.any(Function) },
+        );
+      });
+    });
   });
 });

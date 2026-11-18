@@ -90,6 +90,8 @@ export const messages = {
   'common.continue': 'Continue',
   'common.reload': 'Reload',
   'common.open': 'Open',
+  'common.undo': 'Undo',
+  'common.reconnect': 'Reconnect',
 
   // --- settings shell (registry labels) ---------------------------------
   'settings.tab.general': 'General',

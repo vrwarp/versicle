@@ -107,4 +107,57 @@ describe('DrivePreviewSheet', () => {
       '“A Heart Aflame for God” is already in your library',
     );
   });
+
+  describe('regression: Open Book primary + Replace secondary for filename match, and Importing... state', () => {
+    it('renders Open Book primary and Replace secondary when matched by filename', async () => {
+      const { fireEvent } = await import('@testing-library/react');
+      setLibraryBooks({
+        b1: {
+          bookId: 'b1',
+          title: 'A Heart Aflame for God',
+          author: 'Matthew C. Bingham',
+          sourceFilename: FILE.name,
+        },
+      });
+      setPreview({ title: 'A Heart Aflame for God', author: 'Matthew C. Bingham' });
+
+      const onOpenBook = vi.fn();
+      const onImport = vi.fn();
+      render(
+        <DrivePreviewSheet
+          file={FILE}
+          onClose={vi.fn()}
+          onImport={onImport}
+          onOpenBook={onOpenBook}
+        />,
+      );
+
+      const openBtn = screen.getByTestId('drive-preview-open');
+      const replaceBtn = screen.getByTestId('drive-preview-replace');
+      expect(openBtn).toHaveTextContent('Open Book');
+      expect(replaceBtn).toHaveTextContent('Replace');
+
+      fireEvent.click(openBtn);
+      expect(onOpenBook).toHaveBeenCalledWith('b1');
+
+      fireEvent.click(replaceBtn);
+      expect(onImport).toHaveBeenCalledWith(FILE);
+    });
+
+    it('renders Importing... and disables Cancel while importing is true', () => {
+      setPreview({ title: 'A Heart Aflame for God' });
+      render(
+        <DrivePreviewSheet
+          file={FILE}
+          importing={true}
+          onClose={vi.fn()}
+          onImport={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByTestId('drive-preview-import')).toHaveTextContent('Importing...');
+      expect(screen.getByTestId('drive-preview-import')).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    });
+  });
 });

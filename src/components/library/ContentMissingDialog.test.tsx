@@ -156,4 +156,47 @@ describe('ContentMissingDialog', () => {
     // ...and the generic, book-agnostic importer is NOT used.
     expect(importFile).not.toHaveBeenCalled();
   });
+
+  describe('regression: busy lock and Offloaded vs Ghost copy', () => {
+    it('disables Cancel while isRestoring is true and shows Offloaded Book copy when isOffloaded', () => {
+      (useDriveStore as unknown as Mock).mockReturnValue({
+        findFile: vi.fn().mockReturnValue(undefined),
+      });
+      (useGoogleServicesStore as unknown as Mock).mockReturnValue(false);
+
+      const onOpenChange = vi.fn();
+      render(
+        <ContentMissingDialog
+          open
+          onOpenChange={onOpenChange}
+          book={{ ...mockBook, isOffloaded: true }}
+          onRestore={vi.fn()}
+          isRestoring={true}
+        />,
+      );
+
+      expect(screen.getByText('Offloaded Book')).toBeInTheDocument();
+      expect(screen.getByText(/You offloaded this book file to save space on this device/)).toBeInTheDocument();
+      const cancelBtn = screen.getByText('Cancel').closest('button');
+      expect(cancelBtn).toBeDisabled();
+    });
+
+    it('shows Ghost Book copy when book is not offloaded', () => {
+      (useDriveStore as unknown as Mock).mockReturnValue({
+        findFile: vi.fn().mockReturnValue(undefined),
+      });
+      (useGoogleServicesStore as unknown as Mock).mockReturnValue(false);
+
+      render(
+        <ContentMissingDialog
+          open
+          onOpenChange={vi.fn()}
+          book={{ ...mockBook, isOffloaded: false }}
+          onRestore={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Ghost Book')).toBeInTheDocument();
+    });
+  });
 });

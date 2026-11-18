@@ -737,12 +737,16 @@ export function useReaderController(
   // Handle errors
   useEffect(() => {
     if (hookError) {
+      if (hookError === 'Book file not found' && bookId) {
+        navigate('/', { state: { restoreBookId: bookId } });
+        return;
+      }
       useToastStore.getState().showToast(hookError, 'error');
       if (hookError === 'Book file not found') {
         navigate('/');
       }
     }
-  }, [hookError, navigate]);
+  }, [hookError, bookId, navigate]);
 
   // Set Book ID and Audio Service context
   useEffect(() => {
@@ -799,7 +803,14 @@ export function useReaderController(
     // The queue is engine state replicated into the store via the engine subscription.
     const queue = useTTSPlaybackStore.getState().queue;
     const currentEngine = engineRef.current;
-    if (!queue || queue.length === 0 || !currentEngine) return;
+    if (!currentEngine) return;
+    if (!queue || queue.length === 0) {
+      useToastStore.getState().showToast(
+        'Preparing audio for this chapter — try again in a moment.',
+        'info',
+      );
+      return;
+    }
 
     try {
       // Get range for selection (sync, rendered-content range — the
